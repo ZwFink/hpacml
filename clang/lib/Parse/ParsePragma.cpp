@@ -20,6 +20,8 @@
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/Scope.h"
 #include "llvm/ADT/StringSwitch.h"
+#include <iostream>
+#include <sstream> 
 using namespace clang;
 
 namespace {
@@ -163,6 +165,13 @@ struct PragmaOpenMPHandler : public PragmaHandler {
   void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
                     Token &FirstToken) override;
 };
+
+struct PragmaApproxHandler: public PragmaHandler {
+  PragmaApproxHandler() : PragmaHandler("approx") { }
+  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
+                    Token &FirstToken) override;
+};
+
 
 /// PragmaCommentHandler - "\#pragma comment ...".
 struct PragmaCommentHandler : public PragmaHandler {
@@ -336,6 +345,11 @@ void Parser::initializePragmaHandlers() {
     OpenMPHandler = std::make_unique<PragmaNoOpenMPHandler>();
   PP.AddPragmaHandler(OpenMPHandler.get());
 
+  std::cout<<"Registering my pragma handler to clang"<<std::endl;
+  //Creating approx Pragma Handler
+  ApproxHandler= std::make_unique<PragmaApproxHandler>();
+  PP.AddPragmaHandler(ApproxHandler.get());
+
   if (getLangOpts().MicrosoftExt ||
       getTargetInfo().getTriple().isOSBinFormatELF()) {
     MSCommentHandler = std::make_unique<PragmaCommentHandler>(Actions);
@@ -438,6 +452,9 @@ void Parser::resetPragmaHandlers() {
   }
   PP.RemovePragmaHandler(OpenMPHandler.get());
   OpenMPHandler.reset();
+  //Removing handler from handlers
+  PP.RemovePragmaHandler(ApproxHandler.get());
+  ApproxHandler.reset();
 
   if (getLangOpts().MicrosoftExt ||
       getTargetInfo().getTriple().isOSBinFormatELF()) {
@@ -696,7 +713,6 @@ void Parser::HandlePragmaFEnvAccess() {
   SourceLocation PragmaLoc = ConsumeAnnotationToken();
   Actions.ActOnPragmaFEnvAccess(PragmaLoc, IsEnabled);
 }
-
 
 StmtResult Parser::HandlePragmaCaptured()
 {
@@ -2258,6 +2274,32 @@ void PragmaNoOpenMPHandler::HandlePragma(Preprocessor &PP,
                                     diag::Severity::Ignored, SourceLocation());
   }
   PP.DiscardUntilEndOfDirective();
+}
+
+void PragmaApproxHandler::HandlePragma(Preprocessor &PP,
+                                        PragmaIntroducer Introducer, 
+                                        Token &FirstTok){
+    std::cout<<"I found an approximate pragma"<< std::endl;
+    /************** This part will need to be replaced ******/
+    Token Tok;
+    std::ostringstream myApproximateDirective;
+    while (Tok.isNot(tok::eod) ){
+        PP.Lex(Tok);
+        std::cout<<"I am analyzing tokens " << std::endl;
+        if ( Tok.isNot(tok::eod) ){
+            myApproximateDirective << PP.getSpelling(Tok); 
+            std::cout<<"Directive was: " << PP.getSpelling(Tok) << std::endl;
+        }
+    }
+    /*********************************************/
+    Tok.startToken();
+    Tok.setKind(tok::annot_pragma_approx);
+    Tok.setLocation(FirstTok.getLocation());
+    Tok.setAnnotationEndLoc(FirstTok.getLocation());
+    Tok.setAnnotationValue(strdup(myApproximateDirective.str().c_str()));
+    // I am not sure atm whether I need to reinject or not.
+    // I need to check the semantics of this flag
+    PP.EnterToken(Tok, /* IsReinject */ true);
 }
 
 /// Handle '#pragma omp ...' when OpenMP is enabled.

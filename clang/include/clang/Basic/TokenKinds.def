@@ -854,6 +854,11 @@ PRAGMA_ANNOTATION(pragma_ms_pragma)
 // handles them.
 PRAGMA_ANNOTATION(pragma_opencl_extension)
 
+// Annotation for #pragma approx
+// The lexer produces these so that they only take effect when the parser
+// handles them.
+PRAGMA_ANNOTATION(pragma_approx)
+
 // Annotations for OpenMP pragma directives - #pragma omp ...
 // The lexer produces these so that they only take effect when the parser
 // handles #pragma omp ... directives.

@@ -179,6 +179,7 @@ class Parser : public CodeCompletionHandler {
   std::unique_ptr<PragmaHandler> FPContractHandler;
   std::unique_ptr<PragmaHandler> OpenCLExtensionHandler;
   std::unique_ptr<PragmaHandler> OpenMPHandler;
+  std::unique_ptr<PragmaHandler> ApproxHandler;
   std::unique_ptr<PragmaHandler> PCSectionHandler;
   std::unique_ptr<PragmaHandler> MSCommentHandler;
   std::unique_ptr<PragmaHandler> MSDetectMismatchHandler;
@@ -757,6 +758,7 @@ private:
   /// Handle the annotation token produced for
   /// #pragma clang __debug captured
   StmtResult HandlePragmaCaptured();
+
 
   /// Handle the annotation token produced for
   /// #pragma clang loop and #pragma unroll.
@@ -2085,6 +2087,12 @@ private:
                                  ParsedStmtContext StmtCtx,
                                  SourceLocation *TrailingElseLoc,
                                  ParsedAttributesWithRange &Attrs);
+
+  // Handle the annothation token produced for
+  // #pragma approx
+  StmtResult HandlePragmaApproximate(StmtVector &Stmts); 
+
+
 
   /// Describes the behavior that should be taken for an __if_exists
   /// block.
