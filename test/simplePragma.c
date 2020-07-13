@@ -7,6 +7,6 @@ int printHello(){
 }
 
 int main(int argc, char *argv[]){
-#pragma approx 
+#pragma approx dinos 
     printHello();
 }

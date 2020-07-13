@@ -2758,6 +2758,7 @@ class CallExpr : public Expr {
 
   /// The number of arguments in the call expression.
   unsigned NumArgs;
+  bool isApprox;
 
   /// The location of the right parenthese. This has a different meaning for
   /// the derived classes of CallExpr.
@@ -2922,6 +2923,15 @@ public:
     getArgs()[Arg] = ArgExpr;
   }
 
+  //Approximate Extensions
+
+  void setApprox(bool val=false){
+      isApprox = val;
+  }
+
+  bool getApprox () const {
+      return isApprox;
+  }
   /// Reduce the number of arguments in this call expression. This is used for
   /// example during error recovery to drop extra arguments. There is no way
   /// to perform the opposite because: 1.) We don't track how much storage

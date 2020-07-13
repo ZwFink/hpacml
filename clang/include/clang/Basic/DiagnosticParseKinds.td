@@ -1190,6 +1190,19 @@ def note_pragma_attribute_namespace_on_attribute : Note<
   "omit the namespace to add attributes to the most-recently"
   " pushed attribute group">;
 
+def note_pragma_found_approx_clause : Note<
+    "found valid approx clause">;
+
+def note_pragma_found_approx_directive: Note<
+    "found valid approx directive">;
+
+def error_pragma_approx: Error<
+    "$0">;
+
+def warn_pragma_found_approx: Warning<
+    "$0">;
+
+
 def err_opencl_unroll_hint_on_non_loop : Error<
   "OpenCL only supports 'opencl_unroll_hint' attribute on for, while, and do statements">;
 

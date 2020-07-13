@@ -48,6 +48,7 @@
 #include "clang/Sema/Template.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/SaveAndRestore.h"
+#include <iostream>
 using namespace clang;
 using namespace sema;
 using llvm::RoundingMode;
@@ -6613,7 +6614,14 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
     ExprResult Result = CorrectDelayedTyposInExpr(TheCall);
     if (!Result.isUsable()) return ExprError();
     CallExpr *TheOldCall = TheCall;
+
     TheCall = dyn_cast<CallExpr>(Result.get());
+    std::cout<<"Checking if I am an approximate Call " <<std::endl;
+    if ( getApprox() ){
+        std::cout<<"Setting the call to true" << std::endl;
+        TheCall->setApprox(true);
+    }
+
     bool CorrectedTypos = TheCall != TheOldCall;
     if (!TheCall) return Result;
     Args = llvm::makeArrayRef(TheCall->getArgs(), TheCall->getNumArgs());

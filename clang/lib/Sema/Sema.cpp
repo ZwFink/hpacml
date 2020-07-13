@@ -44,6 +44,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/TimeProfiler.h"
+#include <iostream>
 
 using namespace clang;
 using namespace sema;
@@ -2471,3 +2472,10 @@ bool Sema::checkOpenCLDisabledDecl(const NamedDecl &D, const Expr &E) {
   return checkOpenCLDisabledTypeOrDecl(&D, E.getBeginLoc(), FnName,
                                        OpenCLDeclExtMap, 1, D.getSourceRange());
 }
+
+// This is a place holder
+void Sema::ActOnApprox(){
+   setApprox(true);
+   std::cout<<"I have setted an approximate region as approximate"<<std::endl;
+}
+
