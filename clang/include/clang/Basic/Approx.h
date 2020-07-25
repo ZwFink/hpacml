@@ -46,6 +46,14 @@ enum PerfoType : uint {
 const unsigned PT_START = PT_SMALL;
 const unsigned PT_END = PT_SFINAL +1;
 
+enum MemoType : uint {
+  MT_IN = 0,
+  MT_OUT
+};
+
+const unsigned MT_START = MT_IN;
+const unsigned MT_END= MT_OUT+1;
+
 struct ApproxVarListLocTy {
   SourceLocation StartLoc;
   SourceLocation LParenLoc;
