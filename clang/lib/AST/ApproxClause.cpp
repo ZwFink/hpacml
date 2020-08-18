@@ -24,6 +24,9 @@ using namespace llvm;
 const std::string ApproxClause::Name[approx::CK_END] = {
     "perfo", "memo", "dt", "nn", "user", "if", "in", "out", "inout"};
 
+const std::string ApproxPerfoClause::PerfoName[approx::PT_END] = {
+    "small", "large", "rand", "init", "final"};
+
 ApproxInClause *ApproxInClause::Create(const ASTContext &C,
                                        SourceLocation StartLoc,
                                        SourceLocation LParenLoc,
@@ -97,7 +100,9 @@ void ApproxClausePrinter::VisitApproxUserClause(ApproxUserClause *Node) {
 }
 
 void ApproxClausePrinter::VisitApproxIfClause(ApproxIfClause *Node) {
-  OS << Node->getAsString() << " ";
+  OS << Node->getAsString() << "(";
+  Node->getCondition()->printPretty(OS,nullptr, Policy, 0);
+  OS << ")";
 }
 
 template<typename T>
