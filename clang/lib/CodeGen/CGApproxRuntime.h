@@ -30,11 +30,20 @@ enum ApproxRTArgsIndex : uint {
   PerfoFn,
   CapDataPtr,
   Cond,
-  PerfoDesc
+  PerfoDesc,
+  DataDesc,
+  DataSize,
+  LAST
+};
+
+enum Directionality : int {
+  Input = 1,
+  Output = 2,
+  InputOuput = 4
 };
 
 const unsigned ARG_START = AccurateFn;
-const unsigned ARG_END = PerfoDesc + 1;
+const unsigned ARG_END = LAST;
 
 class CGApproxRuntime {
 private:
@@ -47,10 +56,24 @@ private:
   ///    float rate;
   /// } approx_perfo_info_t;
   QualType PerfoInfoTy;
+
+  /// VarInfoTy is a struct containing info about the in/out/inout variables
+  /// of this region.
+  ///  typedef struct approx_var_info_t{
+  ///    int_ptr_t ptr; /// pointer pointing to data
+  ///    int direction; /// in:0, out:1, inout:2
+  ///    int data_type; /// unique id per type
+  ///    long num_elements; /// number of elements in the vector
+  ///    int opaque; /// place holder for scalar in/out/inout values
+  /// } approx_var_info_t;
+  QualType VarInfoTy;
   bool hasPerfo;
   llvm::SmallVector<llvm::Value *, ARG_END> approxRTParams;
   llvm::SmallVector<llvm::Type *, ARG_END> approxRTTypes;
+  llvm::SmallVector<std::pair<Expr *, Directionality>, 16> Data;
   int approxRegions;
+  SourceLocation StartLoc;
+  SourceLocation EndLoc;
 
 public:
   CGApproxRuntime(CodeGenModule &CGM);
@@ -61,6 +84,10 @@ public:
                                  ApproxIfClause &IfClause);
   void CGApproxRuntimeEmitPerfoFn(CapturedStmt &CS);
   void CGApproxRuntimeExitRegion(CodeGenFunction &CGF);
+  void CGApproxRuntimeRegisterInputs(ApproxInClause &InClause);
+  void CGApproxRuntimeRegisterOutputs(ApproxOutClause &OutClause);
+  void CGApproxRuntimeRegisterInputsOutputs(ApproxInOutClause &InOutClause);
+  void CGApproxRuntimeEmitDataValues(CodeGenFunction &CG);
 };
 
 } // namespace CodeGen

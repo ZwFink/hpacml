@@ -1069,6 +1069,12 @@ public:
       /// \brief The '__bf16' type
       PREDEF_TYPE_BFLOAT16_ID = 73,
 
+      PREDEF_TYPE_APPROX_ARRAY_SECTION = 74,
+
+      PREDEF_TYPE_APPROX_ARRAY_SHAPING = 75,
+
+      PREDEF_TYPE_APPROX_ITERATOR = 76,
+
       /// OpenCL image types with auto numeration
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
       PREDEF_TYPE_##Id##_ID,
@@ -1941,6 +1947,10 @@ public:
       EXPR_OMP_ARRAY_SECTION,
       EXPR_OMP_ARRAY_SHAPING,
       EXPR_OMP_ITERATOR,
+      EXPR_APPROX_ARRAY_SECTION,
+      EXPR_APPROX_ARRAY_SHAPING,
+      EXPR_APPROX_ITERATOR,
+
 
       // ARC
       EXPR_OBJC_BRIDGED_CAST,     // ObjCBridgedCastExpr

@@ -243,6 +243,15 @@ serialization::TypeIdxFromBuiltin(const BuiltinType *BT) {
   case BuiltinType::IncompleteMatrixIdx:
     ID = PREDEF_TYPE_INCOMPLETE_MATRIX_IDX;
     break;
+  case BuiltinType::ApproxArraySection:
+    ID = PREDEF_TYPE_APPROX_ARRAY_SECTION;
+    break;
+  case BuiltinType::ApproxArrayShaping:
+    ID = PREDEF_TYPE_APPROX_ARRAY_SHAPING;
+    break;
+  case BuiltinType::ApproxIterator:
+    ID = PREDEF_TYPE_APPROX_ITERATOR;
+    break;
   case BuiltinType::OMPArraySection:
     ID = PREDEF_TYPE_OMP_ARRAY_SECTION;
     break;
@@ -401,6 +410,7 @@ bool serialization::isRedeclarableDeclKind(unsigned Kind) {
   case Decl::FriendTemplate:
   case Decl::StaticAssert:
   case Decl::Block:
+  case Decl::ApproxCapturedExpr:
   case Decl::Captured:
   case Decl::ClassScopeFunctionSpecialization:
   case Decl::Import:

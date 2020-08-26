@@ -12,6 +12,7 @@
 #include "clang/AST/DeclarationName.h"
 #include "clang/AST/DependenceFlags.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/ExprApprox.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprConcepts.h"
 #include "clang/AST/ExprObjC.h"
@@ -364,6 +365,40 @@ ExprDependence clang::computeDependence(ObjCIsaExpr *E) {
 
 ExprDependence clang::computeDependence(ObjCIndirectCopyRestoreExpr *E) {
   return E->getSubExpr()->getDependence();
+}
+
+ExprDependence clang::computeDependence(ApproxArraySectionExpr *E) {
+  auto D = E->getBase()->getDependence();
+  if (auto *LB = E->getLowerBound())
+    D |= LB->getDependence();
+  if (auto *Len = E->getLength())
+    D |= Len->getDependence();
+  return D;
+}
+
+ExprDependence clang::computeDependence(ApproxArrayShapingExpr *E) {
+  auto D = E->getBase()->getDependence() |
+           toExprDependence(E->getType()->getDependence());
+  for (Expr *Dim: E->getDimensions())
+    if (Dim)
+      D |= Dim->getDependence();
+  return D;
+}
+
+ExprDependence clang::computeDependence(ApproxIteratorExpr *E) {
+  auto D = toExprDependence(E->getType()->getDependence());
+  for (unsigned I = 0, End = E->numOfIterators(); I < End; ++I) {
+    if (auto *VD = cast_or_null<ValueDecl>(E->getIteratorDecl(I)))
+      D |= toExprDependence(VD->getType()->getDependence());
+    ApproxIteratorExpr::IteratorRange IR = E->getIteratorRange(I);
+    if (Expr *BE = IR.Begin)
+      D |= BE->getDependence();
+    if (Expr *EE = IR.End)
+      D |= EE->getDependence();
+    if (Expr *SE = IR.Step)
+      D |= SE->getDependence();
+  }
+  return D;
 }
 
 ExprDependence clang::computeDependence(OMPArraySectionExpr *E) {

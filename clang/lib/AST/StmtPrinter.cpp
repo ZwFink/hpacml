@@ -22,6 +22,7 @@
 #include "clang/AST/DeclOpenMP.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/ExprApprox.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
@@ -1358,6 +1359,50 @@ void StmtPrinter::VisitMatrixSubscriptExpr(MatrixSubscriptExpr *Node) {
   OS << "[";
   PrintExpr(Node->getColumnIdx());
   OS << "]";
+}
+
+void StmtPrinter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *Node) {
+  PrintExpr(Node->getBase());
+  OS << "[";
+  if (Node->getLowerBound())
+    PrintExpr(Node->getLowerBound());
+  if (Node->getColonLoc().isValid()) {
+    OS << ":";
+    if (Node->getLength())
+      PrintExpr(Node->getLength());
+  }
+  OS << "]";
+}
+
+void StmtPrinter::VisitApproxArrayShapingExpr(ApproxArrayShapingExpr *Node) {
+  OS << "(";
+  for (Expr *E : Node->getDimensions()) {
+    OS << "[";
+    PrintExpr(E);
+    OS << "]";
+  }
+  OS << ")";
+  PrintExpr(Node->getBase());
+}
+
+void StmtPrinter::VisitApproxIteratorExpr(ApproxIteratorExpr *Node) {
+  OS << "iterator(";
+  for (unsigned I = 0, E = Node->numOfIterators(); I < E; ++I) {
+    auto *VD = cast<ValueDecl>(Node->getIteratorDecl(I));
+    VD->getType().print(OS, Policy);
+    const ApproxIteratorExpr::IteratorRange Range = Node->getIteratorRange(I);
+    OS << " " << VD->getName() << " = ";
+    PrintExpr(Range.Begin);
+    OS << ":";
+    PrintExpr(Range.End);
+    if (Range.Step) {
+      OS << ":";
+      PrintExpr(Range.Step);
+    }
+    if (I < E - 1)
+      OS << ", ";
+  }
+  OS << ")";
 }
 
 void StmtPrinter::VisitOMPArraySectionExpr(OMPArraySectionExpr *Node) {

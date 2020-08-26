@@ -1391,6 +1391,10 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
   if (LangOpts.MatrixTypes)
     InitBuiltinType(IncompleteMatrixIdxTy, BuiltinType::IncompleteMatrixIdx);
 
+  InitBuiltinType(ApproxArraySectionTy, BuiltinType::ApproxArraySection);
+  InitBuiltinType(ApproxArrayShapingTy, BuiltinType::ApproxArrayShaping);
+  InitBuiltinType(ApproxIteratorTy, BuiltinType::ApproxIterator);
+
   // C99 6.2.5p11.
   FloatComplexTy      = getComplexType(FloatTy);
   DoubleComplexTy     = getComplexType(DoubleTy);

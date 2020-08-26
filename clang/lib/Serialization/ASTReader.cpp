@@ -7029,6 +7029,15 @@ QualType ASTReader::GetType(TypeID ID) {
     case PREDEF_TYPE_INCOMPLETE_MATRIX_IDX:
       T = Context.IncompleteMatrixIdxTy;
       break;
+    case PREDEF_TYPE_APPROX_ARRAY_SECTION:
+      T = Context.ApproxArraySectionTy;
+      break;
+    case PREDEF_TYPE_APPROX_ARRAY_SHAPING:
+      T = Context.ApproxArraySectionTy;
+      break;
+    case PREDEF_TYPE_APPROX_ITERATOR:
+      T = Context.ApproxIteratorTy;
+      break;
     case PREDEF_TYPE_OMP_ARRAY_SECTION:
       T = Context.OMPArraySectionTy;
       break;

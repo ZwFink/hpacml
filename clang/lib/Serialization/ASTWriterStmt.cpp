@@ -11,6 +11,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/ExprApprox.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/Serialization/ASTRecordWriter.h"
 #include "clang/Sema/DeclSpec.h"
@@ -790,6 +791,55 @@ void ASTStmtWriter::VisitMatrixSubscriptExpr(MatrixSubscriptExpr *E) {
   Record.AddStmt(E->getColumnIdx());
   Record.AddSourceLocation(E->getRBracketLoc());
   Code = serialization::EXPR_ARRAY_SUBSCRIPT;
+}
+
+void ASTStmtWriter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *E) {
+  VisitExpr(E);
+  Record.AddStmt(E->getBase());
+  Record.AddStmt(E->getLowerBound());
+  Record.AddStmt(E->getLength());
+  Record.AddSourceLocation(E->getColonLoc());
+  Record.AddSourceLocation(E->getRBracketLoc());
+  Code = serialization::EXPR_APPROX_ARRAY_SECTION;
+}
+
+void ASTStmtWriter::VisitApproxArrayShapingExpr(ApproxArrayShapingExpr *E) {
+  VisitExpr(E);
+  Record.push_back(E->getDimensions().size());
+  Record.AddStmt(E->getBase());
+  for (Expr *Dim : E->getDimensions())
+    Record.AddStmt(Dim);
+  for (SourceRange SR : E->getBracketsRanges())
+    Record.AddSourceRange(SR);
+  Record.AddSourceLocation(E->getLParenLoc());
+  Record.AddSourceLocation(E->getRParenLoc());
+  Code = serialization::EXPR_APPROX_ARRAY_SHAPING;
+}
+
+void ASTStmtWriter::VisitApproxIteratorExpr(ApproxIteratorExpr *E) {
+  VisitExpr(E);
+  Record.push_back(E->numOfIterators());
+  Record.AddSourceLocation(E->getIteratorKwLoc());
+  Record.AddSourceLocation(E->getLParenLoc());
+  Record.AddSourceLocation(E->getRParenLoc());
+  for (unsigned I = 0, End = E->numOfIterators(); I < End; ++I) {
+    Record.AddDeclRef(E->getIteratorDecl(I));
+    Record.AddSourceLocation(E->getAssignLoc(I));
+    ApproxIteratorExpr::IteratorRange Range = E->getIteratorRange(I);
+    Record.AddStmt(Range.Begin);
+    Record.AddStmt(Range.End);
+    Record.AddStmt(Range.Step);
+    Record.AddSourceLocation(E->getColonLoc(I));
+    if (Range.Step)
+      Record.AddSourceLocation(E->getSecondColonLoc(I));
+    // Serialize helpers
+    ApproxIteratorHelperData &HD = E->getHelper(I);
+    Record.AddDeclRef(HD.CounterVD);
+    Record.AddStmt(HD.Upper);
+    Record.AddStmt(HD.Update);
+    Record.AddStmt(HD.CounterUpdate);
+  }
+  Code = serialization::EXPR_APPROX_ITERATOR;
 }
 
 void ASTStmtWriter::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {

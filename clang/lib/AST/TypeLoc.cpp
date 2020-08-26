@@ -405,6 +405,9 @@ TypeSpecifierType BuiltinTypeLoc::getWrittenTypeSpec() const {
 #include "clang/Basic/AArch64SVEACLETypes.def"
   case BuiltinType::BuiltinFn:
   case BuiltinType::IncompleteMatrixIdx:
+  case BuiltinType::ApproxArraySection:
+  case BuiltinType::ApproxArrayShaping:
+  case BuiltinType::ApproxIterator:
   case BuiltinType::OMPArraySection:
   case BuiltinType::OMPArrayShaping:
   case BuiltinType::OMPIterator:

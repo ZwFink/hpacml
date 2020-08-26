@@ -87,6 +87,9 @@ class DesignatedInitExpr;
 class ParenListExpr;
 class PseudoObjectExpr;
 class AtomicExpr;
+class ApproxArraySectionExpr;
+class ApproxArrayShapingExpr;
+class ApproxIteratorExpr;
 class OMPArraySectionExpr;
 class OMPArrayShapingExpr;
 class OMPIteratorExpr;
@@ -174,6 +177,10 @@ ExprDependence computeDependence(DesignatedInitExpr *E);
 ExprDependence computeDependence(ParenListExpr *E);
 ExprDependence computeDependence(PseudoObjectExpr *E);
 ExprDependence computeDependence(AtomicExpr *E);
+
+ExprDependence computeDependence(ApproxArraySectionExpr *E);
+ExprDependence computeDependence(ApproxArrayShapingExpr *E);
+ExprDependence computeDependence(ApproxIteratorExpr *E);
 
 ExprDependence computeDependence(OMPArraySectionExpr *E);
 ExprDependence computeDependence(OMPArrayShapingExpr *E);

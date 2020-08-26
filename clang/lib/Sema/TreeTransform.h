@@ -19,6 +19,7 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/ExprApprox.h"
 #include "clang/AST/ExprConcepts.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
@@ -2429,6 +2430,28 @@ public:
                                         SourceLocation RBracketLoc) {
     return getSema().CreateBuiltinMatrixSubscriptExpr(Base, RowIdx, ColumnIdx,
                                                       RBracketLoc);
+  }
+
+  ExprResult RebuildApproxArraySectionExpr(Expr *Base, SourceLocation LBracketLoc,
+                                        Expr *LowerBound,
+                                        SourceLocation ColonLoc, Expr *Length,
+                                        SourceLocation RBracketLoc) {
+    return getSema().ActOnApproxArraySectionExpr(Base, LBracketLoc, LowerBound,
+                                              ColonLoc, Length, RBracketLoc);
+  }
+
+  ExprResult RebuildApproxArrayShapingExpr(Expr *Base, SourceLocation LParenLoc,
+                                        SourceLocation RParenLoc,
+                                        ArrayRef<Expr *> Dims,
+                                        ArrayRef<SourceRange> BracketsRanges) {
+    return getSema().ActOnApproxArrayShapingExpr(Base, LParenLoc, RParenLoc, Dims,
+                                              BracketsRanges);
+  }
+
+  ExprResult RebuildApproxIteratorExpr(SourceLocation IteratorKwLoc, SourceLocation LLoc,
+                                       SourceLocation RLoc, ArrayRef<Sema::ApproxIteratorData> Data) {
+    return getSema().ActOnApproxIteratorExpr(/*Scope=*/nullptr, IteratorKwLoc,
+                                          LLoc, RLoc, Data);
   }
 
   /// Build a new array section expression.
@@ -10321,6 +10344,120 @@ TreeTransform<Derived>::TransformMatrixSubscriptExpr(MatrixSubscriptExpr *E) {
 
   return getDerived().RebuildMatrixSubscriptExpr(
       Base.get(), RowIdx.get(), ColumnIdx.get(), E->getRBracketLoc());
+}
+
+template <typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformApproxArraySectionExpr(ApproxArraySectionExpr *E) {
+  ExprResult Base = getDerived().TransformExpr(E->getBase());
+  if (Base.isInvalid())
+    return ExprError();
+
+  ExprResult LowerBound;
+  if (E->getLowerBound()) {
+    LowerBound = getDerived().TransformExpr(E->getLowerBound());
+    if (LowerBound.isInvalid())
+      return ExprError();
+  }
+
+  ExprResult Length;
+  if (E->getLength()) {
+    Length = getDerived().TransformExpr(E->getLength());
+    if (Length.isInvalid())
+      return ExprError();
+  }
+
+  if (!getDerived().AlwaysRebuild() && Base.get() == E->getBase() &&
+      LowerBound.get() == E->getLowerBound() && Length.get() == E->getLength())
+    return E;
+
+  return getDerived().RebuildApproxArraySectionExpr(
+      Base.get(), E->getBase()->getEndLoc(), LowerBound.get(), E->getColonLoc(),
+      Length.get(), E->getRBracketLoc());
+}
+
+template <typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformApproxArrayShapingExpr(ApproxArrayShapingExpr *E) {
+  ExprResult Base = getDerived().TransformExpr(E->getBase());
+  if (Base.isInvalid())
+    return ExprError();
+
+  SmallVector<Expr *, 4> Dims;
+  bool ErrorFound = false;
+  for (Expr *Dim : E->getDimensions()) {
+    ExprResult DimRes = getDerived().TransformExpr(Dim);
+    if (DimRes.isInvalid()) {
+      ErrorFound = true;
+      continue;
+    }
+    Dims.push_back(DimRes.get());
+  }
+
+  if (ErrorFound)
+    return ExprError();
+  return getDerived().RebuildApproxArrayShapingExpr(Base.get(), E->getLParenLoc(),
+                                                 E->getRParenLoc(), Dims,
+                                                 E->getBracketsRanges());
+}
+
+template <typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformApproxIteratorExpr(ApproxIteratorExpr *E) {
+  unsigned NumIterators = E->numOfIterators();
+  SmallVector<Sema::ApproxIteratorData, 4> Data(NumIterators);
+
+  bool ErrorFound = false;
+  bool NeedToRebuild = getDerived().AlwaysRebuild();
+  for (unsigned I = 0; I < NumIterators; ++I) {
+    auto *D = cast<VarDecl>(E->getIteratorDecl(I));
+    Data[I].DeclIdent = D->getIdentifier();
+    Data[I].DeclIdentLoc = D->getLocation();
+    if (D->getLocation() == D->getBeginLoc()) {
+      assert(SemaRef.Context.hasSameType(D->getType(), SemaRef.Context.IntTy) &&
+             "Implicit type must be int.");
+    } else {
+      TypeSourceInfo *TSI = getDerived().TransformType(D->getTypeSourceInfo());
+      QualType DeclTy = getDerived().TransformType(D->getType());
+      Data[I].Type = SemaRef.CreateParsedType(DeclTy, TSI);
+    }
+    ApproxIteratorExpr::IteratorRange Range = E->getIteratorRange(I);
+    ExprResult Begin = getDerived().TransformExpr(Range.Begin);
+    ExprResult End = getDerived().TransformExpr(Range.End);
+    ExprResult Step = getDerived().TransformExpr(Range.Step);
+    ErrorFound = ErrorFound ||
+                 !(!D->getTypeSourceInfo() || (Data[I].Type.getAsOpaquePtr() &&
+                                               !Data[I].Type.get().isNull())) ||
+                 Begin.isInvalid() || End.isInvalid() || Step.isInvalid();
+    if (ErrorFound)
+      continue;
+    Data[I].Range.Begin = Begin.get();
+    Data[I].Range.End = End.get();
+    Data[I].Range.Step = Step.get();
+    Data[I].AssignLoc = E->getAssignLoc(I);
+    Data[I].ColonLoc = E->getColonLoc(I);
+    Data[I].SecColonLoc = E->getSecondColonLoc(I);
+    NeedToRebuild =
+        NeedToRebuild ||
+        (D->getTypeSourceInfo() && Data[I].Type.get().getTypePtrOrNull() !=
+                                       D->getType().getTypePtrOrNull()) ||
+        Range.Begin != Data[I].Range.Begin || Range.End != Data[I].Range.End ||
+        Range.Step != Data[I].Range.Step;
+  }
+  if (ErrorFound)
+    return ExprError();
+  if (!NeedToRebuild)
+    return E;
+
+  ExprResult Res = getDerived().RebuildApproxIteratorExpr(
+      E->getIteratorKwLoc(), E->getLParenLoc(), E->getRParenLoc(), Data);
+  if (!Res.isUsable())
+    return Res;
+  auto *IE = cast<ApproxIteratorExpr>(Res.get());
+  for (unsigned I = 0; I < NumIterators; ++I)
+    getDerived().transformedLocalDecl(E->getIteratorDecl(I),
+                                      IE->getIteratorDecl(I));
+  return Res;
 }
 
 template <typename Derived>

@@ -199,6 +199,8 @@ bool isApproxClause(Token &Tok, ClauseKind &Kind) {
 
 StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_approx_start));
+  /// This should be a function call;
+  inApproxScope = true;
 
 #define PARSER_CALL(method) ((*this).*(method))
 
@@ -218,6 +220,7 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   if (Tok.is(tok::eod) || Tok.is(tok::eof)) {
     PP.Diag(Tok, diag::err_pragma_approx_expected_directive);
     ConsumeAnyToken();
+    inApproxScope = false;
     return Directive;
   }
 
@@ -227,12 +230,14 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
       ApproxClause *Clause = PARSER_CALL(ParseApproxClause[CK])(CK);
       if (!Clause) {
         SkipUntil(tok::annot_pragma_approx_end);
+        inApproxScope = false;
         return Directive;
       }
       Clauses.push_back(Clause);
     } else {
       PP.Diag(Tok, diag::err_pragma_approx_unrecognized_directive);
       SkipUntil(tok::annot_pragma_approx_end);
+      inApproxScope = false;
       return Directive;
     }
   }
@@ -246,5 +251,6 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   StmtResult AssociatedStmt = (Sema::CompoundScopeRAII(Actions), ParseStatement());
   AssociatedStmt = Actions.ActOnCapturedRegionEnd(AssociatedStmt.get());
   Directive = Actions.ActOnApproxDirective(AssociatedStmt.get(), Clauses, Locs);
+  inApproxScope = false;
   return Directive;
 }

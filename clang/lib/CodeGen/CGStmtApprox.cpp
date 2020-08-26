@@ -21,8 +21,6 @@ using namespace clang;
 using namespace CodeGen;
 using namespace llvm;
 
-
-
 void CodeGenFunction::EmitApproxDirective(const ApproxDirective &AD) {
   CGApproxRuntime &RT = CGM.getApproxRuntime();
   CapturedStmt *CStmt = cast<CapturedStmt>(AD.getAssociatedStmt());
@@ -35,8 +33,20 @@ void CodeGenFunction::EmitApproxDirective(const ApproxDirective &AD) {
     else if (ApproxPerfoClause *PerfoClause = dyn_cast_or_null<ApproxPerfoClause>(C)){
       RT.CGApproxRuntimeEmitPerfoInit(*this, *PerfoClause);
     }
+    else if (ApproxInClause *InClause = dyn_cast_or_null<ApproxInClause>(C)){
+      dbgs() << "Processing InClause\n";
+      RT.CGApproxRuntimeRegisterInputs(*InClause);
+    }
+    else if (ApproxOutClause *OutClause = dyn_cast_or_null<ApproxOutClause>(C)){
+      dbgs() << "Processing OutClause\n";
+      RT.CGApproxRuntimeRegisterOutputs(*OutClause);
+    }
+    else if (ApproxInOutClause *InOutClause = dyn_cast_or_null<ApproxInOutClause>(C)){
+      dbgs() << "Processing InOutClause\n";
+      RT.CGApproxRuntimeRegisterInputsOutputs(*InOutClause);
+    }
   }
-
+  RT.CGApproxRuntimeEmitDataValues(*this);
   RT.CGApproxRuntimeEmitPerfoFn(*CStmt);
   RT.CGApproxRuntimeExitRegion(*this);
 }

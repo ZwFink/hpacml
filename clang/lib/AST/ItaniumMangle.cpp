@@ -3796,6 +3796,9 @@ recurse:
   case Expr::MSPropertySubscriptExprClass:
   case Expr::TypoExprClass: // This should no longer exist in the AST by now.
   case Expr::RecoveryExprClass:
+  case Expr::ApproxArraySectionExprClass:
+  case Expr::ApproxArrayShapingExprClass:
+  case Expr::ApproxIteratorExprClass:
   case Expr::OMPArraySectionExprClass:
   case Expr::OMPArrayShapingExprClass:
   case Expr::OMPIteratorExprClass:
