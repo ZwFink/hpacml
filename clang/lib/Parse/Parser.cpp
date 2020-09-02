@@ -15,6 +15,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/ASTLambda.h"
+#include "clang/Basic/Approx.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
@@ -492,6 +493,18 @@ void Parser::Initialize() {
     ObjCTypeQuals[objc_nullable] = &PP.getIdentifierTable().get("nullable");
     ObjCTypeQuals[objc_null_unspecified]
       = &PP.getIdentifierTable().get("null_unspecified");
+  }
+  {
+    using namespace approx;
+    ParseApproxClause[CK_PERFO] = &Parser::ParseApproxPerfoClause;
+    ParseApproxClause[CK_MEMO] = &Parser::ParseApproxMemoClause;
+    ParseApproxClause[CK_DT] = &Parser::ParseApproxDTClause;
+    ParseApproxClause[CK_NN] = &Parser::ParseApproxNNClause;
+    ParseApproxClause[CK_USER] = &Parser::ParseApproxUserClause;
+    ParseApproxClause[CK_IF] = &Parser::ParseApproxIfClause;
+    ParseApproxClause[CK_IN] = &Parser::ParseApproxInClause;
+    ParseApproxClause[CK_OUT] = &Parser::ParseApproxOutClause;
+    ParseApproxClause[CK_INOUT] = &Parser::ParseApproxInOutClause;
   }
 
   Ident_instancetype = nullptr;
