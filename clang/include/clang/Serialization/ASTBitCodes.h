@@ -1583,6 +1583,12 @@ enum StmtCode {
   /// A GotoStmt record.
   STMT_GOTO,
 
+  /// An ApproxDecl record.
+  DECL_APPROX_CAPTUREDEXPR,
+
+  /// An OMPCapturedExprDecl record.
+  DECL_OMP_CAPTUREDEXPR,
+
   /// An IndirectGotoStmt record.
   STMT_INDIRECT_GOTO,
 

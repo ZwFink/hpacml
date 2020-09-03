@@ -1939,6 +1939,11 @@ void TextNodeDumper::VisitOMPCapturedExprDecl(const OMPCapturedExprDecl *D) {
   dumpType(D->getType());
 }
 
+void TextNodeDumper::VisitApproxCapturedExprDecl(const ApproxCapturedExprDecl *D) {
+  dumpName(D);
+  dumpType(D->getType());
+}
+
 void TextNodeDumper::VisitNamespaceDecl(const NamespaceDecl *D) {
   dumpName(D);
   if (D->isInline())

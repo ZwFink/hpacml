@@ -15,6 +15,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/DeclApprox.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
@@ -1163,6 +1164,9 @@ void StmtPrinter::VisitDeclRefExpr(DeclRefExpr *Node) {
   }
   if (const auto *TPOD = dyn_cast<TemplateParamObjectDecl>(Node->getDecl())) {
     TPOD->printAsExpr(OS, Policy);
+    return;
+  if (const auto *OCED = dyn_cast<ApproxCapturedExprDecl>(Node->getDecl())) {
+    OCED->getInit()->IgnoreImpCasts()->printPretty(OS, nullptr, Policy);
     return;
   }
   if (NestedNameSpecifier *Qualifier = Node->getQualifier())

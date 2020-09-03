@@ -468,6 +468,7 @@ namespace clang {
     void VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D);
     void VisitOMPRequiresDecl(OMPRequiresDecl *D);
     void VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D);
+    void VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D);
   };
 
 } // namespace clang
@@ -3027,6 +3028,11 @@ void ASTDeclReader::VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D) {
 void ASTDeclReader::VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D) {
   VisitVarDecl(D);
 }
+
+void ASTDeclReader::VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D){
+  VisitVarDecl(D);
+}
+
 
 //===----------------------------------------------------------------------===//
 // Attribute Reading
