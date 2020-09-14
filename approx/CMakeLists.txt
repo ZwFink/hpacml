@@ -9,8 +9,6 @@ set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-
-
 set(APPROX_INSTALL_LIBDIR "lib${LLVM_LIBDIR_SUFFIX}")
 set(APPROX_LIBDIR_SUFFIX "" CACHE STRING
 "Suffix of lib installation directory, e.g. 64 => lib64")
