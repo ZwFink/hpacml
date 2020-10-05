@@ -4007,6 +4007,9 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
     D = OMPThreadPrivateDecl::CreateDeserialized(Context, ID, NumChildren);
     break;
   }
+  case DECL_APPROX_CAPTUREDEXPR:
+    D = ApproxCapturedExprDecl::CreateDeserialized(Context, ID);
+    break;
   case DECL_OMP_ALLOCATE: {
     unsigned NumClauses = Record.readInt();
     unsigned NumVars = Record.readInt();

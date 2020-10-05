@@ -32,6 +32,7 @@
 #include "clang/Sema/TypoCorrection.h"
 #include "llvm/ADT/SmallVector.h"
 #include <optional>
+#include "llvm/Support/Debug.h"
 using namespace clang;
 
 /// Simple precedence-based parser for binary/ternary operators.
@@ -1945,6 +1946,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       ExprVector ArgExprs;
       bool HasError = false;
       PreferredType.enterSubscript(Actions, Tok.getLocation(), LHS.get());
+<<<<<<< HEAD
 
       // We try to parse a list of indexes in all language mode first
       // and, in we find 0 or one index, we try to parse an OpenMP array
@@ -1971,6 +1973,17 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             LHS = Actions.CorrectDelayedTyposInExpr(LHS);
             HasError = true;
           }
+=======
+      if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {
+        Diag(Tok, diag::warn_cxx98_compat_generalized_initializer_lists);
+        Idx = ParseBraceInitializer();
+      } else if (getLangOpts().OpenMP || inApproxScope ) {
+        ColonProtectionRAIIObject RAII(*this);
+        // Parse [: or [ expr or [ expr :
+        if (!Tok.is(tok::colon)) {
+          // [ expr
+          Idx = ParseExpression();
+>>>>>>> c289206fd97f (Add support for memoization and in/out/inout clause)
         }
       }
 
@@ -2000,6 +2013,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
 
       SourceLocation RLoc = Tok.getLocation();
       LHS = Actions.CorrectDelayedTyposInExpr(LHS);
+<<<<<<< HEAD
 
       if (!LHS.isInvalid() && !HasError && !Length.isInvalid() &&
           !Stride.isInvalid() && Tok.is(tok::r_square)) {
@@ -2007,6 +2021,20 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
           LHS = Actions.ActOnOMPArraySectionExpr(
               LHS.get(), Loc, ArgExprs.empty() ? nullptr : ArgExprs[0],
               ColonLocFirst, ColonLocSecond, Length.get(), Stride.get(), RLoc);
+=======
+      Idx = Actions.CorrectDelayedTyposInExpr(Idx);
+      Length = Actions.CorrectDelayedTyposInExpr(Length);
+      if (!LHS.isInvalid() && !Idx.isInvalid() && !Length.isInvalid() &&
+          Tok.is(tok::r_square)) {
+        if (ColonLoc.isValid()) {
+          if (inApproxScope){
+            LHS = Actions.ActOnApproxArraySectionExpr(LHS.get(), Loc, Idx.get(),
+                                                   ColonLoc, Length.get(), RLoc);
+          }else{
+            LHS = Actions.ActOnOMPArraySectionExpr(LHS.get(), Loc, Idx.get(),
+                                                   ColonLoc, Length.get(), RLoc);
+          }
+>>>>>>> c289206fd97f (Add support for memoization and in/out/inout clause)
         } else {
           LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
                                                 ArgExprs, RLoc);

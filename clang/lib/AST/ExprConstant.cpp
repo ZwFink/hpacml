@@ -15627,6 +15627,7 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::StringLiteralClass:
   case Expr::ArraySubscriptExprClass:
   case Expr::MatrixSubscriptExprClass:
+  case Expr::ApproxArraySectionExprClass:
   case Expr::OMPArraySectionExprClass:
   case Expr::OMPArrayShapingExprClass:
   case Expr::OMPIteratorExprClass:
