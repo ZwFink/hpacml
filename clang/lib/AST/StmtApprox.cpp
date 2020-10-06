@@ -19,7 +19,6 @@
 using namespace clang;
 using namespace llvm;
 
-
 void ApproxDirective::setClauses(ArrayRef<ApproxClause *> Clauses) {
   assert(
       Clauses.size() == getNumClauses() &&

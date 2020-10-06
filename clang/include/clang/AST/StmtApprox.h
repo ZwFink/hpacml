@@ -68,11 +68,9 @@ public:
   ///
   void setLocEnd(SourceLocation Loc) { EndLoc = Loc; }
 
-
   unsigned getNumClauses() const { return NumClauses; }
 
   unsigned getClausesOffset() const { return ClausesOffset; }
-
 
   ApproxClause *getClause(unsigned i) const { return clauses()[i]; }
 

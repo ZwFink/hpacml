@@ -1227,7 +1227,6 @@ def err_pragma_approx_expected_punc : Error<
 def warn_pragma_approx_ignored : Warning<
   "unexpected '#pragma approx ...' in program">;
 
-
 // OpenMP support.
 def warn_pragma_omp_ignored : Warning<
   "unexpected '#pragma omp ...' in program">, InGroup<SourceUsesOpenMP>, DefaultIgnore;
