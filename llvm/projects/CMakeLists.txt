@@ -11,6 +11,7 @@ foreach(entry ${entries})
        (NOT ${entry} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR}/libunwind) AND
        (NOT ${entry} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR}/test-suite) AND
        (NOT ${entry} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR}/openmp) AND
+       (NOT ${entry} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR}/approx) AND
        (NOT ${entry} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR}/cross-project-tests))
       get_filename_component(entry_name "${entry}" NAME)
       add_llvm_external_project(${entry_name})
@@ -41,6 +42,7 @@ endif()
 
 add_llvm_external_project(dragonegg)
 add_llvm_external_project(openmp)
+add_llvm_external_project(approx)
 
 if(LLVM_INCLUDE_TESTS)
   add_llvm_external_project(cross-project-tests)
