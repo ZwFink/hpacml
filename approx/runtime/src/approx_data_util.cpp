@@ -1,7 +1,10 @@
 #include <iostream>
 #include <stdint.h>
+#include <cmath>
 
 #include <approx_internal.h>
+
+using namespace std;
 
 template <class T> void add(T *sum, T *augend, T *addend, size_t numElements) {
   for (size_t i = 0; i < numElements; i++) {
@@ -32,6 +35,17 @@ void divide(T *quotient, T *dividend, T *divisor, size_t numElements) {
   return;
 }
 
+template <class T>
+bool rel_error_larger(T* ground, T* test, size_t numElements, real_t threshold){
+  for (size_t i = 0 ; i < numElements; i++){
+    real_t temp = fabs((ground[i]-test[i])/(real_t)ground[i]);
+    if ( temp > threshold){
+      return true;
+    }
+  }
+  return false;
+}
+
 template <class T> double average(T *data, size_t numElements) {
   double sum = 0.0;
   for (size_t i = 0; i < numElements; i++) {
@@ -57,7 +71,7 @@ void add(void *sum, void *augend, void *addend, ApproxType Type,
     switch (Type) {
 #define APPROX_TYPE(Enum, CType, nameOfType)                                   \
   case Enum:                                                                   \
-    (*(CType *) sum) =  (*(CType *) augend ) + (*(CType *) addend );           \
+    (*(CType *)sum) = (*(CType *)augend) + (*(CType *)addend);                 \
     return;
 #include "clang/Basic/approxTypes.def"
     case INVALID:
@@ -93,7 +107,7 @@ void sub(void *difference, void *minuend, void *subtrahend, ApproxType Type,
     switch (Type) {
 #define APPROX_TYPE(Enum, CType, nameOfType)                                   \
   case Enum:                                                                   \
-    (*(CType *) difference) =  (*(CType *) minuend) - (*(CType *) subtrahend); \
+    (*(CType *)difference) = (*(CType *)minuend) - (*(CType *)subtrahend);     \
     return;
 #include "clang/Basic/approxTypes.def"
     case INVALID:
@@ -104,8 +118,8 @@ void sub(void *difference, void *minuend, void *subtrahend, ApproxType Type,
     switch (Type) {
 #define APPROX_TYPE(Enum, CType, nameOfType)                                   \
   case Enum:                                                                   \
-    return sub((CType *)difference, (CType *)minuend, (CType *)subtrahend,    \
-                numElements);
+    return sub((CType *)difference, (CType *)minuend, (CType *)subtrahend,     \
+               numElements);
 #include "clang/Basic/approxTypes.def"
     case INVALID:
       std::cout << "INVALID DATA TYPE passed in argument list\n";
@@ -113,7 +127,6 @@ void sub(void *difference, void *minuend, void *subtrahend, ApproxType Type,
     }
   }
 }
-
 
 /**
  * multiply vectors and store output to another vector.
@@ -131,7 +144,7 @@ void multiply(void *product, void *multiplier, void *multiplicand,
     switch (Type) {
 #define APPROX_TYPE(Enum, CType, nameOfType)                                   \
   case Enum:                                                                   \
-    (*(CType *) product) =  (*(CType *) multiplier) * (*(CType *) multiplicand);\
+    (*(CType *)product) = (*(CType *)multiplier) * (*(CType *)multiplicand);   \
     return;
 #include "clang/Basic/approxTypes.def"
     case INVALID:
@@ -142,8 +155,8 @@ void multiply(void *product, void *multiplier, void *multiplicand,
     switch (Type) {
 #define APPROX_TYPE(Enum, CType, nameOfType)                                   \
   case Enum:                                                                   \
-    return multiply((CType *)product, (CType *)multiplier,                    \
-                     (CType *)multiplicand, numElements);
+    return multiply((CType *)product, (CType *)multiplier,                     \
+                    (CType *)multiplicand, numElements);
 #include "clang/Basic/approxTypes.def"
     case INVALID:
       std::cout << "INVALID DATA TYPE passed in argument list\n";
@@ -168,7 +181,7 @@ void divide(void *quotient, void *dividend, void *divisor, ApproxType Type,
     switch (Type) {
 #define APPROX_TYPE(Enum, CType, nameOfType)                                   \
   case Enum:                                                                   \
-    (*(CType *) quotient) =  (*(CType *) dividend) / (*(CType *) divisor);     \
+    (*(CType *)quotient) = (*(CType *)dividend) / (*(CType *)divisor);         \
     return;
 #include "clang/Basic/approxTypes.def"
     case INVALID:
@@ -179,8 +192,8 @@ void divide(void *quotient, void *dividend, void *divisor, ApproxType Type,
     switch (Type) {
 #define APPROX_TYPE(Enum, CType, nameOfType)                                   \
   case Enum:                                                                   \
-    return divide((CType *)quotient, (CType *)dividend, (CType *)divisor,     \
-                   numElements);
+    return divide((CType *)quotient, (CType *)dividend, (CType *)divisor,      \
+                  numElements);
 #include "clang/Basic/approxTypes.def"
     case INVALID:
       std::cout << "INVALID DATA TYPE passed in argument list\n";
@@ -240,4 +253,34 @@ const char *getTypeName(ApproxType Type) {
   case INVALID:
     return "INVALID";
   }
+}
+
+bool rel_error_larger(void *ground, void *test, size_t numElements,
+                       ApproxType Type, real_t threshold) {
+  real_t temp;
+  if (numElements == 1) {
+    switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    temp = (real_t)((*(CType *)ground) - (*(CType *)test)) /                   \
+           (real_t(*(CType *)ground));                                         \
+    return fabs(temp) > threshold;
+#include "clang/Basic/approxTypes.def"
+    case INVALID:
+      std::cout << "INVALID DATA TYPE passed in argument list\n";
+      break;
+    }
+  } else {
+    switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    return rel_error_larger((CType *)ground, (CType *)test, numElements,      \
+                             threshold);
+#include "clang/Basic/approxTypes.def"
+    case INVALID:
+      std::cout << "INVALID DATA TYPE passed in argument list\n";
+      break;
+    }
+  }
+  return 0.0;
 }
