@@ -26,6 +26,7 @@ void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
   approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
   approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
   approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
+//  _printdeps(input_vars, num_inputs);
 
   if (cond) {
     if (memo_type == MEMO_IN) {

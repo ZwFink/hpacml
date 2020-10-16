@@ -8,42 +8,70 @@
 
 using namespace std;
 
+#define MEMORY_BLOCKS 1024
+
 #define MAX_REGIONS 20
 #define NOTFOUND -1
-
-struct KeyData {
-  uint8_t *ptr;
-  size_t *offsets;
-  ApproxType *types;
-  int *num_elements;
-  int num_vars;
-  real_t threshold;
-  size_t size;
-  bool operator==(const KeyData &other) const {
-    for (int i = 0; i < num_vars ; i++) {
-      if (rel_error_larger((void *)&ptr[offsets[i]],
-                           (void *)&other.ptr[offsets[i]], num_elements[i],
-                           types[i], threshold))
-        return false;
-    }
-    return true;
-  }
-};
-
-class KeyDataHasher {
-public:
-  std::size_t operator()(const KeyData &key) const {
-    size_t seed = 5381;
-    for (size_t i = 0; i < key.size; i++) {
-      seed = ((seed << 5) + seed) + key.ptr[i];
-    }
-    return seed;
-  }
-};
-
 class MemoizeInput {
-  typedef std::unordered_map<KeyData, uint8_t*, KeyDataHasher> KeyDataHashMap;
-  typedef std::unordered_map<KeyData, uint8_t*, KeyDataHasher>::iterator
+
+  typedef enum : uint8_t {
+    INIT,
+    CREATE,
+    COPY_IN,
+    COPY_OUT,
+    SEARCH,
+    INSERT,
+    ACCURATE,
+    APPROXIMATE,
+    END
+  } CODE_REGIONS;
+
+  struct KeyData {
+    MemoizeInput *parent;
+    mutable uint8_t *ptr;
+    mutable approx_var_info_t *inputs;
+    bool operator==(const KeyData &other) const {
+      const size_t *offsets = parent->input_offsets;
+      const ApproxType *types = parent->input_types;
+      const size_t *num_elements = parent->input_shape;
+      const real_t threshold = parent->threshold;
+      for (int i = 0; i < parent->num_inputs; i++) {
+        void *this_ptr =
+            (inputs == nullptr) ? (void *)&ptr[offsets[i]] : inputs[i].ptr;
+        void *other_ptr = (other.inputs == nullptr)
+                              ? (void *)&other.ptr[offsets[i]]
+                              : other.inputs[i].ptr;
+        if (rel_error_larger(this_ptr, other_ptr, num_elements[i], types[i],
+                             threshold))
+          return false;
+      }
+      return true;
+    }
+  };
+
+  class KeyDataHasher {
+  public:
+    std::size_t operator()(const KeyData &key) const {
+      size_t seed = 5381;
+      const size_t *offsets = key.parent->input_offsets;
+      const size_t *num_elements = key.parent->input_shape;
+      const size_t *sz_types = key.parent->input_sz_type;
+      const real_t threshold = key.parent->threshold;
+
+      for (int i = 0; i < key.parent->num_inputs; i++) {
+        size_t bytes = sz_types[i] * num_elements[i];
+        uint8_t *ptr = (key.inputs == nullptr) ? &key.ptr[offsets[i]]
+                                               : (uint8_t *)key.inputs[i].ptr;
+        for (size_t j = 0; j < bytes; j++) {
+          seed = ((seed << 5) + seed) + ptr[j];
+        }
+      }
+      return seed;
+    }
+  };
+
+  typedef std::unordered_map<KeyData, uint8_t *, KeyDataHasher> KeyDataHashMap;
+  typedef std::unordered_map<KeyData, uint8_t *, KeyDataHasher>::iterator
       KeyDataHashMapIterator;
 
 public:
@@ -52,29 +80,46 @@ public:
   int num_outputs;
   real_t threshold;
 
-  int *input_shape;
+  uint8_t *input_memory;
+  uint8_t *output_memory;
+  size_t input_index;
+  size_t output_index;
+
+  size_t *input_shape;
   ApproxType *input_types;
   size_t *input_offsets;
+  size_t *input_sz_type;
   size_t total_input_size;
   int *output_shape;
   ApproxType *output_types;
   size_t *output_offsets;
   size_t total_output_size;
   KeyDataHashMap storage;
+  std::chrono::duration<double> elapsed[END];
+
   /// Stat. Counts how many invocations where performed accurately.
   int accurately;
   /// Stat. Counts how many invocations where performed approximately.
   int approximately;
+  int counter;
 
 public:
   MemoizeInput(void (*acc)(void *), int num_inputs, int num_outputs,
                approx_var_info_t *inputs, approx_var_info_t *outputs)
       : accurate(acc), num_inputs(num_inputs), num_outputs(num_outputs),
-        accurately(0), approximately(0) {
+        input_index(0), output_index(0), accurately(0), approximately(0) {
+    std::chrono::time_point<std::chrono::steady_clock> start_time;
+    std::chrono::time_point<std::chrono::steady_clock> end_time;
+
+#ifdef __PROFILE__
+    start_time = std::chrono::steady_clock::now();
+#endif
+
     int i;
-    input_shape = new int[num_inputs];
+    input_shape = new size_t[num_inputs];
     input_types = new ApproxType[num_inputs];
     input_offsets = new size_t[num_inputs];
+    input_sz_type = new size_t[num_inputs];
 
     output_shape = new int[num_outputs];
     output_types = new ApproxType[num_outputs];
@@ -85,89 +130,180 @@ public:
     for (i = 0; i < num_inputs; i++) {
       input_shape[i] = inputs[i].num_elem;
       input_types[i] = (ApproxType)inputs[i].data_type;
+
+      input_sz_type[i] = inputs[i].sz_elem;
+
       size_t rem = curr_offset % inputs[i].sz_elem;
-      curr_offset += inputs[i].sz_elem - rem;
+      if (rem != 0)
+        curr_offset += inputs[i].sz_elem - rem;
 
       input_offsets[i] = curr_offset;
       curr_offset += input_shape[i] * inputs[i].sz_elem;
     }
 
+    size_t rem = curr_offset % sizeof(uint64_t);
+    if (rem != 0) {
+      curr_offset += sizeof(uint64_t) - rem;
+    }
     total_input_size = curr_offset;
+    size_t elements = total_input_size;
+    input_memory = new uint8_t[elements * MEMORY_BLOCKS]();
 
     curr_offset = 0;
     for (i = 0; i < num_outputs; i++) {
       output_shape[i] = outputs[i].num_elem;
       output_types[i] = (ApproxType)outputs[i].data_type;
       size_t rem = curr_offset % outputs[i].sz_elem;
-      curr_offset += outputs[i].sz_elem - rem;
+      if (rem != 0)
+        curr_offset += outputs[i].sz_elem - rem;
 
       output_offsets[i] = curr_offset;
       curr_offset += output_shape[i] * outputs[i].sz_elem;
     }
 
-    total_output_size = curr_offset;
-  };
-  ~MemoizeInput() {
-    for ( auto v : storage){
-      delete[] v.first.ptr;
-      delete[] v.second;
+    rem = curr_offset % sizeof(uint64_t);
+    if (rem != 0) {
+      curr_offset += sizeof(uint64_t) - rem;
     }
+    total_output_size = curr_offset;
+    elements = total_output_size;
+    output_memory = new uint8_t[elements * MEMORY_BLOCKS]();
 
-    delete [] input_shape;
-    delete [] input_types;
-    delete [] input_offsets;
+#ifdef __PROFILE__
+    end_time = std::chrono::steady_clock::now();
+    elapsed[INIT] = (end_time - start_time);
+#endif
+    counter = 0;
+  }
 
-    delete [] output_types;
-    delete [] output_shape;
-    delete [] output_offsets;
+  ~MemoizeInput() {
+    for (int i = 0; i < num_inputs; i++) {
+      cout << "Num Elements are :" << input_shape[i] << endl;
+    }
+    delete[] output_memory;
+    delete[] input_memory;
 
-    cout << "APPROX:"
-         << (double)approximately / (double)(accurately + approximately)
+    delete[] input_shape;
+    delete[] input_types;
+    delete[] input_offsets;
+    delete[] input_sz_type;
+
+    delete[] output_types;
+    delete[] output_shape;
+    delete[] output_offsets;
+
+    cout << "Num Inputs :" << num_inputs << "num outputs " << num_outputs
          << endl;
+    cout << "Total Input Size :" << total_input_size << "total_output_size "
+         << total_output_size << endl;
+    cout << "APPROX:"
+         << (double)approximately / (double)(accurately + approximately) << ":"
+         << approximately << ":" << accurately << endl;
+    cout << "Performance:";
+    for (int i = 0; i < END; i++)
+      cout << elapsed[i].count() << ":";
+    cout << endl;
+    cout << "Threshold:" << threshold << endl;
   };
 
-  uint8_t* copy_inputs(approx_var_info_t *inputs) {
-    uint8_t *ptr = new uint8_t[total_input_size]();
+  uint8_t *copy_inputs(approx_var_info_t *inputs) {
+    uint8_t *ptr = &input_memory[input_index];
+    input_index += total_input_size;
     for (int i = 0; i < num_inputs; i++) {
-      memcpy((void *)&ptr[input_offsets[i]], (void *)inputs[i].ptr,
-             inputs[i].sz_elem * inputs[i].num_elem);
+      copyData((void *)&ptr[input_offsets[i]], inputs[i].ptr, input_shape[i],
+               input_types[i]);
     }
     return ptr;
   }
 
   uint8_t *copy_outputs(approx_var_info_t *outputs) {
-    uint8_t *ptr = new uint8_t[total_output_size]();
+    uint8_t *ptr = &output_memory[output_index];
+    output_index += total_output_size;
     for (int i = 0; i < num_outputs; i++) {
-      memcpy((void *)&ptr[output_offsets[i]], (void *)outputs[i].ptr,
-             outputs[i].sz_elem * outputs[i].num_elem);
+      copyData((void *)&ptr[output_offsets[i]], (void *)outputs[i].ptr,
+               output_shape[i], output_types[i]);
     }
     return ptr;
   }
 
   void copy_results(uint8_t *values, approx_var_info_t *outputs) {
     for (int i = 0; i < num_outputs; i++) {
-      memcpy(outputs[i].ptr, (void *)&(values[output_offsets[i]]),
-             outputs[i].sz_elem * outputs[i].num_elem);
+      copyData(outputs[i].ptr, (void *)&(values[output_offsets[i]]),
+               output_shape[i], output_types[i]);
     }
   }
 
   void execute(void *args, approx_var_info_t *inputs,
                approx_var_info_t *outputs) {
-    uint8_t *ptr = copy_inputs(inputs);
-    KeyData new_values = {ptr, input_offsets, input_types,
-                          input_shape,          num_inputs,    threshold,
-                          total_input_size};
-    KeyDataHashMapIterator it = storage.find(new_values);
-    if (it != storage.end()) {
-      copy_results((uint8_t*) it->second, outputs);
-      delete[] ptr;
+#ifdef __PROFILE__
+    std::chrono::time_point<std::chrono::steady_clock> start_time;
+    std::chrono::time_point<std::chrono::steady_clock> end_time;
+
+    start_time = std::chrono::steady_clock::now();
+#endif
+    KeyData new_values = {this, nullptr, inputs};
+#ifdef __PROFILE__
+    end_time = std::chrono::steady_clock::now();
+    elapsed[CREATE] += (end_time - start_time);
+    start_time = std::chrono::steady_clock::now();
+#endif
+
+    auto ret = storage.insert({new_values, nullptr});
+
+    if (ret.second == false) {
+#ifdef __PROFILE__
+      end_time = std::chrono::steady_clock::now();
+      elapsed[SEARCH] += (end_time - start_time);
+      start_time = std::chrono::steady_clock::now();
+#endif
+
+      copy_results((uint8_t *)ret.first->second, outputs);
       approximately++;
+
+#ifdef __PROFILE__
+      end_time = std::chrono::steady_clock::now();
+      elapsed[APPROXIMATE] += (end_time - start_time);
+#endif
     } else {
+#ifdef __PROFILE__
+      end_time = std::chrono::steady_clock::now();
+      elapsed[INSERT] += (end_time - start_time);
+      start_time = std::chrono::steady_clock::now();
+#endif
+      (*ret.first).first.ptr = copy_inputs(inputs);
+      (*ret.first).first.inputs = nullptr;
+
+#ifdef __PROFILE__
+      end_time = std::chrono::steady_clock::now();
+      elapsed[COPY_IN] += (end_time - start_time);
+      start_time = std::chrono::steady_clock::now();
+#endif
+
       accurately++;
       accurate(args);
+
+#ifdef __PROFILE__
+      end_time = std::chrono::steady_clock::now();
+      elapsed[ACCURATE] += (end_time - start_time);
+      start_time = std::chrono::steady_clock::now();
+#endif
+
       uint8_t *output_ptr = copy_outputs(outputs);
-      storage.insert({new_values, output_ptr});
+
+#ifdef __PROFILE__
+      end_time = std::chrono::steady_clock::now();
+      elapsed[COPY_OUT] += (end_time - start_time);
+      start_time = std::chrono::steady_clock::now();
+#endif
+
+      (*ret.first).second = output_ptr;
+
+#ifdef __PROFILE__
+      end_time = std::chrono::steady_clock::now();
+      elapsed[INSERT] += (end_time - start_time);
+#endif
     }
+    counter++;
   }
 };
 
