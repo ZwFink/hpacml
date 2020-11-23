@@ -3104,6 +3104,10 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
 
   // Check if -fapprox is specified. If it has set to enabled.
   Opts.Approx = Args.hasArg(options::OPT_fapprox) ? 1: 0;
+  if ( Opts.Approx ){
+      int version = getLastArgIntValue(Args, OPT_fapprox_version_EQ, 1, Diags);
+      Opts.Approx = version;
+  }
 
   // Check if -fopenmp is specified and set default version to 5.0.
   Opts.OpenMP = Args.hasArg(options::OPT_fopenmp) ? 50 : 0;
