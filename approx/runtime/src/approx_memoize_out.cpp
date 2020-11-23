@@ -2,7 +2,9 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <cstring>
 #include <unordered_map>
+#include <cmath>
 
 #include <approx_data_util.h>
 #include <approx_internal.h>
@@ -119,9 +121,14 @@ public:
     // optimal. In essence we can exploit make allocation to depend on the type
     // of the outputs. and allocate large chunks of memory of the same type.
     // Then we can apply better simd operations on these large chunks of memory.
+
+    std::cout<<"NumOutputs :" << num_outputs <<std::endl;
     last_values = new uint8_t *[num_outputs];
     for (int i = 0; i < num_outputs; i++) {
       last_values[i] = new uint8_t[outputs[i].num_elem * outputs[i].sz_elem];
+      std::cout<<"NumElem:" << outputs[i].num_elem <<std::endl;
+      std::cout<<"SZ Elem:" << outputs[i].sz_elem <<std::endl;
+      std::cout<<"Ptr:" << outputs[i].ptr<<std::endl;
     }
     window = new real_t[history_size]();
   }
@@ -129,7 +136,7 @@ public:
   ~MemoizeOutput() {
     cout << "APPROX:"
          << (double)approximately / (double)(accurately + approximately)
-         << endl;
+         << ":" << approximately<< ":" << accurately << endl;
     for (int i = 0; i < num_outputs; i++) {
       delete[] last_values[i];
       last_values[i] = nullptr;

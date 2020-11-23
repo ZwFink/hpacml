@@ -2,10 +2,19 @@ configure_file(${LIBAPPROX_INC_DIR}/approx.h approx.h COPYONLY)
 
 set(CLANG_SOURCE_INCLUDE "${LLVM_EXTERNAL_CLANG_SOURCE_DIR}/include/")
 
+
+if (HDF5_FOUND)
+    add_definitions(-DENABLE_HDF5)
+else()
+    set(HDF5_INCLUDE_DIRS "")
+endif()
+
 include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}
     ${LIBAPPROX_INC_DIR}
     ${CLANG_SOURCE_INCLUDE}
+    ${CALIPER_INCLUDE_DIRS}
+    ${HDF5_INCLUDE_DIRS}
 )
 
 set(LIBAPPROX_SOURCE_FILES
@@ -24,7 +33,11 @@ set_target_properties(approx PROPERTIES
     LINK_FLAGS ""
     LINKER_LANGUAGE ${LIBAPPROX_LINKER_LANGUAGE})
 
-target_link_libraries(approx ${CMAKE_DL_LIBS})
+target_link_libraries(approx PRIVATE ${CMAKE_DL_LIBS})
+foreach (_extlib ${APPROX_EXTERNAL_LIBS})
+  target_link_libraries(approx PRIVATE ${_extlib})
+endforeach()
+
 string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION ${PACKAGE_VERSION})
 set(LIBAPPROX_HEADERS_INSTALL_PATH "${APPROX_INSTALL_LIBDIR}/clang/${CLANG_VERSION}/include")
 
