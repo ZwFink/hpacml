@@ -24,6 +24,7 @@ public:
 class HDF5RegionView {
   std::string region_name;
   hid_t file;
+  hid_t group;
   hid_t dset;
   hid_t mem_space;
   double *mem;
@@ -37,7 +38,7 @@ private:
   void allocate_buffers(size_t num_rows, size_t num_cols);
   void deallocate_buffers(size_t num_rows);
   void write_data_layout(approx_var_info_t *vers, int num_vars,
-                         std::string &prefix);
+                         const char *group_name);
   void create_data_set();
   void write_to_file();
 

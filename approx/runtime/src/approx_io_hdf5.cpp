@@ -26,7 +26,7 @@ void HDF5RegionView::deallocate_buffers(size_t num_rows) {
 }
 
 void HDF5RegionView::write_data_layout(approx_var_info_t *vars, int num_vars,
-                                       std::string &prefix) {
+                                       const char *group_name) {
   herr_t status;
   int *mem = new int [num_vars* 2];
   int **data_info = new int*[num_vars];
@@ -46,7 +46,7 @@ void HDF5RegionView::write_data_layout(approx_var_info_t *vars, int num_vars,
   hid_t tmpspace = H5Screate_simple(dims, dimensions, NULL);
   // Create the dataset creation property list, set the layout to
   // Create the dataset.  We will use all default properties for this
-  hid_t tmpdset = H5Dcreate1(file, prefix.c_str(), H5T_NATIVE_INT32, tmpspace, H5P_DEFAULT);
+  hid_t tmpdset = H5Dcreate1(group, group_name, H5T_NATIVE_INT32, tmpspace, H5P_DEFAULT);
   // Write the data to the dataset.
   status = H5Dwrite(tmpdset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
                     mem);
@@ -74,7 +74,7 @@ void HDF5RegionView::create_data_set() {
   H5Pset_chunk(plist, NUM_DIMS, chunk_dims);
   std::cout << "- Property list created" << std::endl;
   // Create Dataset
-  dset = H5Dcreate(file, region_name.c_str(), H5T_NATIVE_DOUBLE, file_space,
+  dset = H5Dcreate(group, "data", H5T_NATIVE_DOUBLE, file_space,
                    H5P_DEFAULT, plist, H5P_DEFAULT);
   std::cout << "- Dataset created" << std::endl;
 
@@ -121,6 +121,9 @@ HDF5RegionView::HDF5RegionView(const char *name, hid_t file,
                                approx_var_info_t *inputs, int num_inputs,
                                approx_var_info_t *outputs, int num_outputs)
     : region_name(name), file(file) {
+ // Create Group in the file to contain data about region
+  group = H5Gopen(file, name , H5P_DEFAULT);
+
   // Count Objects and allocate memory for this region.
   total_num_cols = 0;
   total_num_rows = 0;
@@ -138,10 +141,10 @@ HDF5RegionView::HDF5RegionView(const char *name, hid_t file,
   allocate_buffers(NUM_ROWS, total_num_cols);
   current_row = 0;
   // Create dataset that describes this region
-  std::string input_names = region_name + "_descr_input_";
-  write_data_layout(inputs, num_inputs, input_names);
-  std::string output_names = region_name + "_descr_output_";
-  write_data_layout(outputs, num_outputs, output_names);
+  const char *input_name  = "ishape";
+  write_data_layout(inputs, num_inputs, input_name);
+  const char *output_name  = "oshape";
+  write_data_layout(outputs, num_outputs, output_name);
   // Create dataset that holds the actual data
   create_data_set();
 }
@@ -153,6 +156,7 @@ HDF5RegionView::~HDF5RegionView() {
 
   H5Sclose(mem_space);
   H5Dclose(dset);
+  H5Gclose(group);
   deallocate_buffers(NUM_ROWS);
 }
 
