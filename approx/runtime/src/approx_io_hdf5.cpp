@@ -29,23 +29,24 @@ void HDF5RegionView::write_data_layout(approx_var_info_t *vars, int num_vars,
   hsize_t num_dims = 2;
   hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
   herr_t status;
+  int data_info[num_vars][2];
   for (int i = 0; i < num_vars; i++) {
-    long data_info[2] = {(long) vars[i].num_elem,(long) vars[i].data_type};
-    std::string dsetName = prefix + std::to_string(i);
-    //  Create dataspace.
-    int dims = 1;
-    hid_t tmpspace = H5Screate_simple(dims, &num_dims, NULL);
-    // Create the dataset creation property list, set the layout to
-    status = H5Pset_layout(dcpl, H5D_COMPACT);
-    // Create the dataset.  We will use all default properties for this
-    hid_t tmpdset = H5Dcreate(file, dsetName.c_str(), H5T_NATIVE_LONG, tmpspace,
-                              H5P_DEFAULT, dcpl, H5P_DEFAULT);
-    // Write the data to the dataset.
-    status = H5Dwrite(tmpdset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                      data_info);
-    status = H5Dclose(tmpdset);
-    status = H5Sclose(tmpspace);
+    data_info[i][0] = vars[i].num_elem;
+    data_info[i][1] = vars[i].data_type;
   }
+  //  Create dataspace.
+  int dimensions[2] = { num_vars, 2 } int dims = 2;
+  hid_t tmpspace = H5Screate_simple(dims, dimensions, NULL);
+  // Create the dataset creation property list, set the layout to
+  status = H5Pset_layout(dcpl, H5D_COMPACT);
+  // Create the dataset.  We will use all default properties for this
+  hid_t tmpdset = H5Dcreate(file, prefix.c_str(), H5T_NATIVE_INT32, tmpspace,
+                            H5P_DEFAULT, dcpl, H5P_DEFAULT);
+  // Write the data to the dataset.
+  status = H5Dwrite(tmpdset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                    data_info);
+  status = H5Dclose(tmpdset);
+  status = H5Sclose(tmpspace);
   status = H5Pclose(dcpl);
 }
 
@@ -174,16 +175,16 @@ HDF5DataWriter::HDF5DataWriter() {
   file = H5Fcreate("test.h5", H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 }
 
-HDF5DataWriter::~HDF5DataWriter(){
-    for (auto& it: code_regions){
-        std::cout<<"Writing last data of region:"<<it.first<<std::endl;
-        delete it.second;
-    }
+HDF5DataWriter::~HDF5DataWriter() {
+  for (auto &it : code_regions) {
+    std::cout << "Writing last data of region:" << it.first << std::endl;
+    delete it.second;
+  }
 }
 
 void HDF5DataWriter::record_start(const char *region_name,
-                              approx_var_info_t *inputs, int num_inputs,
-                              approx_var_info_t *outputs, int num_outputs) {
+                                  approx_var_info_t *inputs, int num_inputs,
+                                  approx_var_info_t *outputs, int num_outputs) {
   auto ret = code_regions.insert({std::string(region_name), nullptr});
   if (ret.second == false) {
     ret.first->second->record_start(inputs, num_inputs);
@@ -195,8 +196,8 @@ void HDF5DataWriter::record_start(const char *region_name,
   }
 }
 
-void HDF5DataWriter::record_end(const char *region_name, approx_var_info_t *outputs,
-                            int num_outputs) {
+void HDF5DataWriter::record_end(const char *region_name,
+                                approx_var_info_t *outputs, int num_outputs) {
   auto ret = code_regions.find(std::string(region_name));
   if (ret == code_regions.end()) {
     fprintf(stderr, "This should never happen (%s:%d)\n", __FILE__, __LINE__);
