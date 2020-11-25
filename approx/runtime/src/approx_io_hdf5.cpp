@@ -51,7 +51,7 @@ void HDF5RegionView::write_data_layout(approx_var_info_t *vars, int num_vars,
                             H5P_DEFAULT, dcpl, H5P_DEFAULT);
   // Write the data to the dataset.
   status = H5Dwrite(tmpdset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                    data_info);
+                    mem);
   status = H5Dclose(tmpdset);
   status = H5Sclose(tmpspace);
   status = H5Pclose(dcpl);
