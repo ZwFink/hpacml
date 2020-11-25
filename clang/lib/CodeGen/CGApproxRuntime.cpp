@@ -472,20 +472,25 @@ CGApproxRuntime::CGApproxRuntimeEmitData(
 
 void CGApproxRuntime::CGApproxRuntimeEmitDataValues(CodeGenFunction &CGF) {
   /// No Dependencies so exit.
+  static int input_arrays = 0;
+  static int output_arrays = 0;
+  char name[100];
   if (!requiresData)
     return;
 
   llvm::Value *NumOfElements, *ArrayAddress;
   if (requiresInputs && Inputs.size() > 0) {
+    sprintf(name, ".dep.approx_inputs.arr.addr_%d",input_arrays++);
     std::tie(NumOfElements, ArrayAddress) =
-        CGApproxRuntimeEmitData(CGF, Inputs, ".dep.approx_inputs.arr.addr");
+        CGApproxRuntimeEmitData(CGF, Inputs, name);
     approxRTParams[DataDescIn] = ArrayAddress;
     approxRTParams[DataSizeIn] = NumOfElements;
   }
 
   // All approximation techniques require the output
+  sprintf(name, ".dep.approx_outputs.arr.addr_%d",output_arrays++);
   std::tie(NumOfElements, ArrayAddress) =
-      CGApproxRuntimeEmitData(CGF, Outputs, ".dep.approx_outputs.arr.addr");
+      CGApproxRuntimeEmitData(CGF, Outputs, name);
   approxRTParams[DataDescOut] = ArrayAddress;
   approxRTParams[DataSizeOut] = NumOfElements;
 }
