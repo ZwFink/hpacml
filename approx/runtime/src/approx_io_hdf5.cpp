@@ -22,20 +22,27 @@ void HDF5RegionView::deallocate_buffers(size_t num_rows) {
   for (hsize_t i = 0; i < num_rows; i++) {
     ptrs[i] = nullptr;
   }
+  delete[] ptrs;
 }
 
 void HDF5RegionView::write_data_layout(approx_var_info_t *vars, int num_vars,
                                        std::string &prefix) {
-  hsize_t num_dims = 2;
   hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
   herr_t status;
-  int data_info[num_vars][2];
+  int *mem = new int [num_vars* 2];
+  int **data_info = new int*[num_vars];
+
+  for (int i = 0; i < num_vars; ++i) {
+    data_info[i] = &mem[i * 2];
+  }
+
   for (int i = 0; i < num_vars; i++) {
     data_info[i][0] = vars[i].num_elem;
     data_info[i][1] = vars[i].data_type;
   }
   //  Create dataspace.
-  int dimensions[2] = { num_vars, 2 } int dims = 2;
+  hsize_t dimensions[2] = { (hsize_t)num_vars, (hsize_t)2 };
+  int dims = 2;
   hid_t tmpspace = H5Screate_simple(dims, dimensions, NULL);
   // Create the dataset creation property list, set the layout to
   status = H5Pset_layout(dcpl, H5D_COMPACT);
@@ -48,6 +55,13 @@ void HDF5RegionView::write_data_layout(approx_var_info_t *vars, int num_vars,
   status = H5Dclose(tmpdset);
   status = H5Sclose(tmpspace);
   status = H5Pclose(dcpl);
+
+  for (int i = 0; i < num_vars; i++) {
+    data_info[i] = nullptr;
+  }
+  delete[] mem;
+  delete[] data_info;
+
 }
 
 void HDF5RegionView::create_data_set() {
