@@ -251,6 +251,8 @@ void CGApproxRuntime::CGApproxRuntimeEnterRegion(CodeGenFunction &CGF,
   CodeGen::CodeGenTypes &Types = CGM.getTypes();
   llvm::PointerType *CharPtrTy = llvm::PointerType::getUnqual(Types.ConvertType(C.CharTy));
   /// Reset All info of the Runtime "state machine"
+  Inputs.clear();
+  Outputs.clear();
   for (unsigned i = ARG_START; i < ARG_END; i++)
     approxRTParams[i] = nullptr;
 
