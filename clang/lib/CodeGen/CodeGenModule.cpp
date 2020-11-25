@@ -142,7 +142,7 @@ CodeGenModule::CodeGenModule(ASTContext &C, const HeaderSearchOptions &HSO,
   if (LangOpts.CUDA)
     createCUDARuntime();
 
-  if (LangOpts.Approx) 
+  if (LangOpts.Approx)
     createApproxRuntime();
 
   // Enable TBAA unless it's suppressed. ThreadSanitizer needs TBAA even at O0.
