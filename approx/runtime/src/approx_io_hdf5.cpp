@@ -176,6 +176,7 @@ HDF5DataWriter::HDF5DataWriter() {
 
 HDF5DataWriter::~HDF5DataWriter(){
     for (auto& it: code_regions){
+        std::cout<<"Writing last data of region:"<<it.first<<std::endl;
         delete it.second;
     }
 }
