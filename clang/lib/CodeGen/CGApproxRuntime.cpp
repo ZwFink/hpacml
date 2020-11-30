@@ -65,11 +65,11 @@ int8_t convertToApproxType(const BuiltinType *T) {
     approxType = LONGLONG;
     break;
   case BuiltinType::Kind::Float:
-    dbgs()<< "Found float Type\n";
+    dbgs() << "Found float Type\n";
     approxType = FLOAT;
     break;
   case BuiltinType::Kind::Double:
-    dbgs()<< "Found double Type\n";
+    dbgs() << "Found double Type\n";
     approxType = DOUBLE;
     break;
   case BuiltinType::Kind::LongDouble:
@@ -77,7 +77,7 @@ int8_t convertToApproxType(const BuiltinType *T) {
     break;
   default:
     approxType = ApproxType::INVALID;
-    dbgs()<< "Found INVALID Type\n";
+    dbgs() << "Found INVALID Type\n";
     break;
   }
   return approxType;
@@ -221,7 +221,8 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
       requiresInputs(false) {
   ASTContext &C = CGM.getContext();
   CodeGen::CodeGenTypes &Types = CGM.getTypes();
-  llvm::PointerType *CharPtrTy = llvm::PointerType::getUnqual(Types.ConvertType(C.CharTy));
+  llvm::PointerType *CharPtrTy =
+      llvm::PointerType::getUnqual(Types.ConvertType(C.CharTy));
   getPerfoInfoType(C, PerfoInfoTy);
   getVarInfoType(C, VarInfoTy);
 
@@ -230,26 +231,33 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
   // This is the runtime call function type information, which mirrors the
   // types provided in the argument parameters.
   RTFnTy = llvm::FunctionType::get(
-      CGM.VoidTy, {/* Orig. fn ptr*/ llvm::PointerType::getUnqual(CallbackFnTy),
-                   /* Perfo fn ptr*/ llvm::PointerType::getUnqual(CallbackFnTy),
-                   /* Captured data ptr*/ CGM.VoidPtrTy,
-                   /* Cond Value*/ llvm::Type::getInt1Ty(CGM.getLLVMContext()),
-                   /* Label Name */ CharPtrTy,
-                   /* Perfo Description */ CGM.VoidPtrTy,
-                   /* Memoization Type*/ CGM.Int32Ty,
-                   /* Input Data Descr*/ CGM.VoidPtrTy,
-                   /* Input Data Num Elements*/ CGM.Int32Ty,
-                   /* Ouput Data Descr. */ CGM.VoidPtrTy,
-                   /* Output Data Num Elements*/ CGM.Int32Ty},false);
+      CGM.VoidTy,
+      {/* Orig. fn ptr*/ llvm::PointerType::getUnqual(CallbackFnTy),
+       /* Perfo fn ptr*/ llvm::PointerType::getUnqual(CallbackFnTy),
+       /* Captured data ptr*/ CGM.VoidPtrTy,
+       /* Cond Value*/ llvm::Type::getInt1Ty(CGM.getLLVMContext()),
+       /* Label Name */ CharPtrTy,
+       /* Perfo Description */ CGM.VoidPtrTy,
+       /* Memoization Type*/ CGM.Int32Ty,
+       /* Input Data Descr*/ CGM.VoidPtrTy,
+       /* Input Data Num Elements*/ CGM.Int32Ty,
+       /* Ouput Data Descr. */ CGM.VoidPtrTy,
+       /* Output Data Num Elements*/ CGM.Int32Ty},
+      false);
 }
 
 void CGApproxRuntime::CGApproxRuntimeEnterRegion(CodeGenFunction &CGF,
                                                  CapturedStmt &CS) {
-  requiresInputs = false;
-  requiresData = false;
+  // This two values (requiresInputs, requiredData) should be false.
+  // currently though the compiler is forwarding everything to
+  // the runtime system
+  requiresInputs = true;
+  requiresData = true;
+
   ASTContext &C = CGM.getContext();
   CodeGen::CodeGenTypes &Types = CGM.getTypes();
-  llvm::PointerType *CharPtrTy = llvm::PointerType::getUnqual(Types.ConvertType(C.CharTy));
+  llvm::PointerType *CharPtrTy =
+      llvm::PointerType::getUnqual(Types.ConvertType(C.CharTy));
   /// Reset All info of the Runtime "state machine"
   Inputs.clear();
   Outputs.clear();
@@ -482,7 +490,7 @@ void CGApproxRuntime::CGApproxRuntimeEmitDataValues(CodeGenFunction &CGF) {
 
   llvm::Value *NumOfElements, *ArrayAddress;
   if (requiresInputs && Inputs.size() > 0) {
-    sprintf(name, ".dep.approx_inputs.arr.addr_%d",input_arrays++);
+    sprintf(name, ".dep.approx_inputs.arr.addr_%d", input_arrays++);
     std::tie(NumOfElements, ArrayAddress) =
         CGApproxRuntimeEmitData(CGF, Inputs, name);
     approxRTParams[DataDescIn] = ArrayAddress;
@@ -490,27 +498,30 @@ void CGApproxRuntime::CGApproxRuntimeEmitDataValues(CodeGenFunction &CGF) {
   }
 
   // All approximation techniques require the output
-  sprintf(name, ".dep.approx_outputs.arr.addr_%d",output_arrays++);
+  sprintf(name, ".dep.approx_outputs.arr.addr_%d", output_arrays++);
   std::tie(NumOfElements, ArrayAddress) =
       CGApproxRuntimeEmitData(CGF, Outputs, name);
   approxRTParams[DataDescOut] = ArrayAddress;
   approxRTParams[DataSizeOut] = NumOfElements;
 }
 
-void CGApproxRuntime::CGApproxRuntimeEmitLabelInit( CodeGenFunction &CGF, ApproxLabelClause &LabelClause){
+void CGApproxRuntime::CGApproxRuntimeEmitLabelInit(
+    CodeGenFunction &CGF, ApproxLabelClause &LabelClause) {
   ASTContext &C = CGM.getContext();
   CodeGen::CodeGenTypes &Types = CGM.getTypes();
-  llvm::PointerType *CharPtrTy = llvm::PointerType::getUnqual(Types.ConvertType(C.CharTy));
+  llvm::PointerType *CharPtrTy =
+      llvm::PointerType::getUnqual(Types.ConvertType(C.CharTy));
   if (const auto *PreInit = cast_or_null<DeclStmt>(LabelClause.getPreInit())) {
     for (const auto *D : PreInit->decls()) {
       CGF.EmitVarDecl(cast<VarDecl>(*D));
     }
   }
   LabelClause.getPreInit()->dump();
-  LValue label = CGF.EmitStringLiteralLValue(cast<StringLiteral>(LabelClause.getLabel()));
+  LValue label =
+      CGF.EmitStringLiteralLValue(cast<StringLiteral>(LabelClause.getLabel()));
   llvm::Value *Addr = label.getPointer(CGF);
 
   Addr = CGF.Builder.CreatePointerCast(Addr, CharPtrTy);
   dbgs() << "Type is " << *(Addr->getType()) << "\n";
-  approxRTParams[Label]  = Addr;
+  approxRTParams[Label] = Addr;
 }
