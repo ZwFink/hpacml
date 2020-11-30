@@ -122,7 +122,7 @@ HDF5RegionView::HDF5RegionView(const char *name, hid_t file,
                                approx_var_info_t *outputs, int num_outputs)
     : region_name(name), file(file) {
  // Create Group in the file to contain data about region
-  group = H5Gopen(file, name , H5P_DEFAULT);
+  group = H5Gcreate1(file, name , H5P_DEFAULT);
 
   // Count Objects and allocate memory for this region.
   total_num_cols = 0;
