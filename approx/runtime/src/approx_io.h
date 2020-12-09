@@ -10,8 +10,8 @@
 // function is invoced.
 class BaseDataWriter {
 public:
-  BaseDataWriter() {};
-  virtual ~BaseDataWriter(const char *file_name) = 0;
+  BaseDataWriter(const char *file_name) {};
+  virtual ~BaseDataWriter() = 0;
   virtual void record_start(const char *region_name, approx_var_info_t *inputs,
                             int num_inputs, approx_var_info_t *outputs,
                             int num_outputs) = 0;
