@@ -186,8 +186,8 @@ void HDF5RegionView::record_end(approx_var_info_t *outputs, int num_outputs) {
   current_col = 0;
 }
 
-HDF5DataWriter::HDF5DataWriter() {
-  file = H5Fcreate("test.h5", H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+HDF5DataWriter::HDF5DataWriter(const char *file_name) {
+  file = H5Fcreate(file_name, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
 }
 
 HDF5DataWriter::~HDF5DataWriter() {

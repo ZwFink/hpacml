@@ -78,7 +78,11 @@ class ApproxRuntimeConfiguration{
       }
       else if ( strcmp(env_p, "DATA_PROFILE") == 0 ){
         Mode = PROFILE_DATA;
-        data_profiler = new HDF5DataWriter();
+        env_p = std::getenv("DATA_FILE");
+        if (!env_p){
+         env_p = "test.h5";
+        }
+        data_profiler = new HDF5DataWriter(env_p);
       }
       else{
         Mode = EXECUTE;

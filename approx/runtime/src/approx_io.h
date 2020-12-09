@@ -11,7 +11,7 @@
 class BaseDataWriter {
 public:
   BaseDataWriter() {};
-  virtual ~BaseDataWriter() = 0;
+  virtual ~BaseDataWriter(const char *file_name) = 0;
   virtual void record_start(const char *region_name, approx_var_info_t *inputs,
                             int num_inputs, approx_var_info_t *outputs,
                             int num_outputs) = 0;
@@ -63,7 +63,7 @@ class HDF5DataWriter : public BaseDataWriter {
   hid_t file;
   std::unordered_map<std::string, HDF5RegionView *> code_regions;
 public:
-  HDF5DataWriter();
+  HDF5DataWriter(const char *file_name);
   ~HDF5DataWriter();
   void record_start(const char *region_name, approx_var_info_t *inputs,
                     int num_inputs, approx_var_info_t *outputs,
