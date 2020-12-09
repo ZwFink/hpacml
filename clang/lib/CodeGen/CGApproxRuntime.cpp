@@ -65,11 +65,11 @@ int8_t convertToApproxType(const BuiltinType *T) {
     approxType = LONGLONG;
     break;
   case BuiltinType::Kind::Float:
-    dbgs() << "Found float Type\n";
+//    dbgs() << "Found float Type\n";
     approxType = FLOAT;
     break;
   case BuiltinType::Kind::Double:
-    dbgs() << "Found double Type\n";
+//    dbgs() << "Found double Type\n";
     approxType = DOUBLE;
     break;
   case BuiltinType::Kind::LongDouble:
@@ -516,12 +516,10 @@ void CGApproxRuntime::CGApproxRuntimeEmitLabelInit(
       CGF.EmitVarDecl(cast<VarDecl>(*D));
     }
   }
-  LabelClause.getPreInit()->dump();
   LValue label =
       CGF.EmitStringLiteralLValue(cast<StringLiteral>(LabelClause.getLabel()));
   llvm::Value *Addr = label.getPointer(CGF);
 
   Addr = CGF.Builder.CreatePointerCast(Addr, CharPtrTy);
-  dbgs() << "Type is " << *(Addr->getType()) << "\n";
   approxRTParams[Label] = Addr;
 }
