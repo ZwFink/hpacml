@@ -5,7 +5,7 @@
 #include <hdf5.h>
 
 #define NUM_DIMS 2
-#define NUM_ROWS 1024
+#define NUM_ROWS 16 
 
 BaseDataWriter::~BaseDataWriter() {}
 

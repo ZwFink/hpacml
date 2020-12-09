@@ -103,10 +103,10 @@ void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
   approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
   approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
   approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
-  std::cout << "[" << region_name << "] Inputs are:" << std::endl;
-  _printdeps(input_vars, num_inputs);
-  std::cout << "[" << region_name << "] Outputs are:" << std::endl;
-  _printdeps(output_vars, num_outputs);
+//  std::cout << "[" << region_name << "] Inputs are:" << std::endl;
+//  _printdeps(input_vars, num_inputs);
+//  std::cout << "[" << region_name << "] Outputs are:" << std::endl;
+//  _printdeps(output_vars, num_outputs);
 
   if (RTEnv.getMode() == PROFILE_TIME){
     RTEnv.profiler.start_time(region_name);
