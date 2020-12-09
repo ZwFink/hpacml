@@ -5,7 +5,7 @@
 #include <hdf5.h>
 
 #define NUM_DIMS 2
-#define NUM_ROWS 16 
+#define NUM_ROWS 1
 
 BaseDataWriter::~BaseDataWriter() {}
 
@@ -72,11 +72,11 @@ void HDF5RegionView::create_data_set() {
   // CHUNK_DIMS impacts performance considerably.
   hsize_t chunk_dims[NUM_DIMS] = {NUM_ROWS, total_num_cols};
   H5Pset_chunk(plist, NUM_DIMS, chunk_dims);
-  std::cout << "- Property list created" << std::endl;
+  //std::cout << "- Property list created" << std::endl;
   // Create Dataset
   dset = H5Dcreate(group, "data", H5T_NATIVE_DOUBLE, file_space,
                    H5P_DEFAULT, plist, H5P_DEFAULT);
-  std::cout << "- Dataset created" << std::endl;
+  //std::cout << "- Dataset created" << std::endl;
 
   H5Sclose(file_space);
   H5Pclose(plist);
@@ -90,15 +90,15 @@ void HDF5RegionView::write_to_file() {
   hsize_t count[NUM_DIMS];
   if (total_num_rows == 0) {
     mem_space = H5Screate_simple(NUM_DIMS, dims, NULL);
-    std::cout << "- Memory dataspace created" << std::endl;
+//    std::cout << "- Memory dataspace created" << std::endl;
   } else {
     H5Sset_extent_simple(mem_space, NUM_DIMS, dims, NULL);
-    std::cout << "- Memory dataspace resized" << std::endl;
+//    std::cout << "- Memory dataspace resized" << std::endl;
   }
 
   dims[0] = total_num_rows + current_row;
   H5Dset_extent(dset, dims);
-  std::cout << "- Dataset extended" << std::endl;
+//  std::cout << "- Dataset extended" << std::endl;
 
   hid_t file_space = H5Dget_space(dset);
   start[0] = total_num_rows;
@@ -107,10 +107,10 @@ void HDF5RegionView::write_to_file() {
   count[1] = total_num_cols;
   // Select hyperslab
   H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start, NULL, count, NULL);
-  std::cout << "- Next hyperslab selected" << std::endl;
+//  std::cout << "- Next hyperslab selected" << std::endl;
   // Write hyperslab by extending it.
   H5Dwrite(dset, H5T_NATIVE_DOUBLE, mem_space, file_space, H5P_DEFAULT, mem);
-  std::cout << "- Next Buffer written" << std::endl;
+//  std::cout << "- Next Buffer written" << std::endl;
   // Update total number of rows written a.t.m
   total_num_rows += current_row;
 
@@ -192,7 +192,7 @@ HDF5DataWriter::HDF5DataWriter() {
 
 HDF5DataWriter::~HDF5DataWriter() {
   for (auto &it : code_regions) {
-    std::cout << "Writing last data of region:" << it.first << std::endl;
+//    std::cout << "Writing last data of region:" << it.first << std::endl;
     delete it.second;
   }
 }
