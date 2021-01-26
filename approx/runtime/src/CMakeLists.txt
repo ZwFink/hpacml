@@ -11,9 +11,16 @@ set(LIBAPPROX_SOURCE_FILES
 
 if (HDF5_FOUND)
     add_definitions(-DENABLE_HDF5)
-    set(LIBAPPROX_SOURCE_FILES ${LIBAPPROX_SOURCE_FILES} approx_io_hdf5.cpp)
+    set(LIBAPPROX_SOURCE_FILES ${LIBAPPROX_SOURCE_FILES} approx_io_hdf5.cpp io_helpers.cpp)
 else()
     set(HDF5_INCLUDE_DIRS "")
+endif()
+
+if (PAPI_FOUND)
+    add_definitions(-DENABLE_PAPI)
+    set(LIBAPPROX_SOURCE_FILES ${LIBAPPROX_SOURCE_FILES} approx_profile_papi.cpp)
+else()
+    set(PAPI_INCLUDE_DIRS "")
 endif()
 
 include_directories(
@@ -22,6 +29,7 @@ include_directories(
     ${CLANG_SOURCE_INCLUDE}
     ${CALIPER_INCLUDE_DIRS}
     ${HDF5_INCLUDE_DIRS}
+    ${PAPI_INCLUDE_DIRS}
 )
 
 

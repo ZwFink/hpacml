@@ -9,6 +9,7 @@
 #include <approx_data_util.h>
 #include <approx_internal.h>
 #include <approx_io.h>
+#include <approx_profile.h>
 
 using namespace std;
 #define ENABLE_HDF5 1
@@ -24,6 +25,7 @@ enum ExecuteMode: uint8_t{
   PROFILE_TIME,
   PROFILE_DATA
 };
+
 void _printdeps(approx_var_info_t *vars, int num_deps) {
   for (int i = 0; i < num_deps; i++) {
     printf("%p, NE:%ld, SE:%ld, DT:%s, DIR:%d\n", vars[i].ptr, vars[i].num_elem,
@@ -32,39 +34,11 @@ void _printdeps(approx_var_info_t *vars, int num_deps) {
   }
 }
 
-class Profiler{
-  std::unordered_map<const char *, std::pair<long, double>> profileData;
-  std::unordered_map<const char *, std::chrono::time_point<std::chrono::high_resolution_clock>> startTime;
-  public:
-    Profiler(){}
-    ~Profiler() {
-     for (auto p : profileData) {
-       std::string region_name = p.first;
-       double avg_time = p.second.second/ p.second.first;
-       std::cout<< region_name << ":" << avg_time << ":" << p.second.second << ":" << p.second.first <<"\n";
-     }
-    }
-    void start_time(const char *val){
-      startTime[val] = std::chrono::high_resolution_clock::now();
-    }
-    void stop_time (const char *val){
-      std::chrono::time_point<std::chrono::high_resolution_clock> end = std::chrono::high_resolution_clock::now();
-      std::chrono::duration<double> elapsed_time = (end - startTime[val]);
-      std::unordered_map<const char *, std::pair<long, double>>::iterator iter = profileData.find(val);
-      if (iter == profileData.end() )
-        profileData.insert(std::make_pair(val,std::make_pair(1,elapsed_time.count())));
-      else{
-        iter->second.second += elapsed_time.count();
-        iter->second.first++;
-      }
-    }
-};
-
 class ApproxRuntimeConfiguration{
   ExecuteMode Mode;
   public:
-  Profiler profiler;
-  BaseDataWriter *data_profiler;
+  BasePerfProfiler *TimeProfiler;
+  BaseDataWriter *DataProfiler;
 
     ApproxRuntimeConfiguration(){
       const char *env_p = std::getenv("EXECUTE_MODE");
@@ -82,7 +56,7 @@ class ApproxRuntimeConfiguration{
         if (!env_p){
          env_p = "test.h5";
         }
-        data_profiler = new HDF5DataWriter(env_p);
+        DataProfiler= getDataWriter(env_p);
       }
       else{
         Mode = EXECUTE;
@@ -90,7 +64,7 @@ class ApproxRuntimeConfiguration{
     }
 
     ~ApproxRuntimeConfiguration(){
-      delete data_profiler;
+      delete DataProfiler;
     }
 
     ExecuteMode getMode(){return Mode;}
@@ -118,20 +92,21 @@ void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
     RTEnv.profiler.stop_time(region_name);
     return;
   }
-#ifdef ENABLE_HDF5
   else if (RTEnv.getMode() == PROFILE_DATA){
-    RTEnv.data_profiler->record_start(region_name, input_vars, num_inputs, output_vars, num_outputs);
+    RTEnv.DataProfiler->record_start(region_name, input_vars, num_inputs, output_vars, num_outputs);
     accurate(arg);
-    RTEnv.data_profiler->record_end(region_name, output_vars, num_outputs);
+    RTEnv.DataProfiler->record_end(region_name, output_vars, num_outputs);
     return;
   }
-#endif
   else{
     if (cond) {
       if (memo_type == MEMO_IN) {
         memoize_in(accurate, arg, input_vars, num_inputs, output_vars, num_outputs);
       } else if (memo_type == MEMO_OUT) {
         memoize_out(accurate, arg, output_vars, num_outputs);
+      }
+      else{
+        accurate(arg);
       }
     } else {
       accurate(arg);

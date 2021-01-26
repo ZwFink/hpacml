@@ -12,13 +12,13 @@ class BaseDataWriter {
 public:
   BaseDataWriter() {};
   BaseDataWriter(const char *file_name) {};
-  virtual ~BaseDataWriter() = 0;
+  virtual ~BaseDataWriter() {};
   virtual void record_start(const char *region_name, approx_var_info_t *inputs,
                             int num_inputs, approx_var_info_t *outputs,
-                            int num_outputs) = 0;
+                            int num_outputs) {} ;
 
   virtual void record_end(const char *region_name, approx_var_info_t *outputs,
-                          int num_outputs) = 0;
+                          int num_outputs) {};
 };
 
 #ifdef ENABLE_HDF5
@@ -73,4 +73,13 @@ public:
                   int num_outputs);
 };
 #endif
+
+BaseDataWriter* getDataWriter(const char *Env){
+#ifdef ENABLE_HDF5
+    return new HDF5DataWriter(Env);
+#else
+    return new BaseDataWriter(Env);
+#endif
+}
+
 #endif
