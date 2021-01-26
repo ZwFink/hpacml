@@ -7,6 +7,7 @@ set(LIBAPPROX_SOURCE_FILES
     approx_data_util.cpp
     approx_memoize_out.cpp
     approx_memoize_iact_in.cpp
+    approx_io.cpp
 )
 
 if (HDF5_FOUND)
