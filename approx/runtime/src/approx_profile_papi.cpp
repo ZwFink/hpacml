@@ -28,8 +28,9 @@ PapiProfiler::PapiProfiler(const char *FName){
     /* Profiling will start and end when the code enters and  */
     /* exits a  code region respectively. So there is no need */
     /* for an event set for each code region                  */
-    if (PAPI_create_eventset(&ProfileEvents) != PAPI_OK){
-        fprintf(stderr, "Could not create Event Set");
+    int ErrorCode;
+    if ((ErrorCode = PAPI_create_eventset(&ProfileEvents) ) != PAPI_OK){
+        fprintf(stderr, "Could not create Event Set\n %s \n Exiting...\n", PAPI_strerror(ErrorCode));
         exit(-1);
     }
 
@@ -129,7 +130,7 @@ RegionProfiler::RegionProfiler(const char *Name, int NStats) : NStats(NStats) {
 RegionProfiler::~RegionProfiler(){
     delete [] Accum;
     delete [] RName;
-};
+}
 
 void RegionProfiler::increaseStats(long long *CStats){
     NInvocations +=1;
