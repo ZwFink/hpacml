@@ -78,16 +78,14 @@ void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
   //  _printdeps(output_vars, num_outputs);
 
   if (RTEnv.getMode() == PROFILE_TIME) {
-    RTEnv.TimeProfiler->startProfile(region_name);
+    RTEnv.TimeProfiler->startProfile(region_name, (uintptr_t) accurate);
     accurate(arg);
-    RTEnv.TimeProfiler->stopProfile(region_name);
-    return;
+    RTEnv.TimeProfiler->stopProfile(region_name, (uintptr_t) accurate);
   } else if (RTEnv.getMode() == PROFILE_DATA) {
     RTEnv.DataProfiler->record_start(region_name, input_vars, num_inputs,
                                      output_vars, num_outputs);
     accurate(arg);
     RTEnv.DataProfiler->record_end(region_name, output_vars, num_outputs);
-    return;
   } else {
     if (cond) {
       if (memo_type == MEMO_IN) {
@@ -102,4 +100,5 @@ void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
       accurate(arg);
     }
   }
+  return;
 }
