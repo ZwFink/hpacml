@@ -80,14 +80,14 @@ PapiProfiler::~PapiProfiler(){
     // I need to write all the data to the respective
     // group in the HDF5 file.
     for ( auto region : AddrToStats){
-        char *RName = region.second->getname();
+        char *RName = region.second->getName();
         long long *stats = region.second->getStats();
         unsigned int NInvocations = region.second->getInvocations();
         hid_t GId = createOrOpenGroup(RName, FileId);
         hid_t GProfile = createOrOpenGroup("ProfileData", GId);
 
         for (int i = 0; i < LEvents; i++){
-            WriteProfileData(EventNames[i],GProfile, stats[i]/(double) NInvocations);
+            writeProfileData(EventNames[i],GProfile, stats[i]/(double) NInvocations);
         }
 
         H5Gclose(GId);
