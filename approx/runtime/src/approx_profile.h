@@ -14,3 +14,4 @@ class BasePerfProfiler{
     virtual void stopProfile(const char *RName, uintptr_t FnAddr) {};
 };
 
+#endif

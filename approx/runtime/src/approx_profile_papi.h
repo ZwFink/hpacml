@@ -15,6 +15,7 @@ class RegionProfiler{
     unsigned int NInvocations;
     public:
     RegionProfiler(const char *RName, int NStats);
+    ~RegionProfiler();
     void increaseStats(long long *CStats);
     long long* getStats() {return Accum;}
     char* getName(){return RName;}
@@ -31,6 +32,7 @@ class PapiProfiler : public BasePerfProfiler{
     char *PapiNames;
     std::unordered_map<uintptr_t, RegionProfiler*> AddrToStats;
     PapiProfiler(const char *FName);
+    ~PapiProfiler();
     void startProfile(const char *RName, uintptr_t FnAddr);
     void stopProfile(const char *RName, uintptr_t FnAddr);
 };

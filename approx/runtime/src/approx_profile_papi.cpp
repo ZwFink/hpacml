@@ -1,6 +1,7 @@
 #include <approx_profile.h>
 #include <iostream>
 #include <cstring>
+#include <cstdlib>
 #include <string>
 #include <papi.h>
 #include <hdf5.h>
@@ -27,7 +28,7 @@ PapiProfiler::PapiProfiler(const char *FName){
     /* exits a  code region respectively. So there is no need */
     /* for an event set for each code region                  */
     if (PAPI_create_eventset(&ProfileEvents) != PAPI_OK){
-        fprintf(stderr, "Could not create Event Set")
+        fprintf(stderr, "Could not create Event Set");
         exit(-1);
     }
 

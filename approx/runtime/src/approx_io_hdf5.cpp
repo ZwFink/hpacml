@@ -9,8 +9,6 @@
 #define NUM_DIMS 2
 #define NUM_ROWS 1
 
-BaseDataWriter::~BaseDataWriter() {}
-
 void HDF5RegionView::allocate_buffers(size_t num_rows, size_t num_cols) {
   mem = new double[num_rows * num_cols];
   ptrs = new double *[num_rows];
