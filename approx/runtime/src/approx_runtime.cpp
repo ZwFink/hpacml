@@ -46,7 +46,11 @@ public:
 
     if (strcmp(env_p, "TIME_PROFILE") == 0) {
       Mode = PROFILE_TIME;
-      TimeProfiler = getProfiler();
+      env_p = std::getenv("DATA_FILE");
+      if (!env_p) {
+        env_p = "test.h5";
+      }
+      TimeProfiler = getProfiler(env_p);
     } else if (strcmp(env_p, "DATA_PROFILE") == 0) {
       Mode = PROFILE_DATA;
       env_p = std::getenv("DATA_FILE");
