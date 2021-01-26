@@ -8,6 +8,7 @@
 
 #include <approx_profile_papi.h>
 
+#include "H5Gpublic.h"
 #include "io_helpers.h"
 
 
@@ -34,9 +35,7 @@ PapiProfiler::PapiProfiler(const char *FName){
 
     HCounters = PAPI_num_counters();
     const char *EPAPI = std::getenv("PROFILE_EVENTS");
-    BIndex = std::atoi(std::getenv("PAPI_COLUMN"));
-    TEvents = std::atoi(std::getenv("PAPI_TOTAL_EVENTS"));
-    char *EventNames[HCounters];
+    EventNames = new char*[HCounters];
     PapiNames = new char[strlen(EPAPI)+1];
     memcpy(PapiNames, EPAPI, strlen(EPAPI)+1);
     int i = 0;
@@ -75,7 +74,26 @@ PapiProfiler::PapiProfiler(const char *FName){
     TStats = new long long [LEvents];
 }
 
+
+
 PapiProfiler::~PapiProfiler(){
+    // I need to write all the data to the respective
+    // group in the HDF5 file.
+    for ( auto region : AddrToStats){
+        char *RName = region.second->getname();
+        long long *stats = region.second->getStats();
+        unsigned int NInvocations = region.second->getInvocations();
+        hid_t GId = createOrOpenGroup(RName, FileId);
+        hid_t GProfile = createOrOpenGroup("ProfileData", GId);
+
+        for (int i = 0; i < LEvents; i++){
+            WriteProfileData(EventNames[i],GProfile, stats[i]/(double) NInvocations);
+        }
+
+        H5Gclose(GId);
+        H5Gclose(GProfile);
+    }
+    H5Fclose(FileId);
 }
 
 void PapiProfiler::startProfile(const char *RName, uintptr_t FnAddr){
@@ -114,6 +132,7 @@ RegionProfiler::~RegionProfiler(){
 };
 
 void RegionProfiler::increaseStats(long long *CStats){
+    NInvocations +=1;
     for (unsigned int i = 0; i < NStats; i++){
         Accum[i] += CStats[i];
     }

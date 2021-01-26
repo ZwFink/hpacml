@@ -18,12 +18,14 @@ class RegionProfiler{
     ~RegionProfiler();
     void increaseStats(long long *CStats);
     long long* getStats() {return Accum;}
+    unsigned int getInvocations() {return NInvocations;}
     char* getName(){return RName;}
 };
 
 class PapiProfiler : public BasePerfProfiler{
     hid_t FileId;
     long long *TStats;
+    char **EventNames;
     int ProfileEvents;
     int BIndex;
     int TEvents;
