@@ -65,7 +65,7 @@ void writeProfileData(char *Name, hid_t Root, double Value){
     hid_t FSpace = H5Dget_space(DSet);
     Status = H5Sselect_hyperslab(FSpace, H5S_SELECT_SET, &Dims, NULL, &Extend, NULL);
     hid_t MSpace = H5Screate_simple(NDims, &Extend, NULL);
-    Status = H5DWrite(DSet, H5T_NATIVE_DOUBLE, MSpace, FSpace, H5P_DEFAULT, (void *) &Value);
+    Status = H5Dwrite(DSet, H5T_NATIVE_DOUBLE, MSpace, FSpace, H5P_DEFAULT, (void *) &Value);
     Status = H5Sclose(DSpace);
     Status = H5Sclose(MSpace);
     Status = H5Sclose(FSpace);
