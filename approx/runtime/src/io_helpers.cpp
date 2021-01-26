@@ -34,7 +34,7 @@ hid_t createOrOpenGroup(char *RName, hid_t Root){
 }
 
 void writeProfileData(char *Name, hid_t Root, double Value){
-  hid_t DSet = H5Dopen(Root, Name);
+  hid_t DSet = H5Dopen2(Root, Name, H5P_DEFAULT);
   if (DSet < 0){
     const int NDims = 1;
     hsize_t Dims[NDims] = {1};
