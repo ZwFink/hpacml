@@ -46,6 +46,7 @@ public:
 
     if (strcmp(env_p, "TIME_PROFILE") == 0) {
       Mode = PROFILE_TIME;
+      TimeProfiler = getProfiler();
     } else if (strcmp(env_p, "DATA_PROFILE") == 0) {
       Mode = PROFILE_DATA;
       env_p = std::getenv("DATA_FILE");
@@ -72,10 +73,6 @@ void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
   approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
   approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
   approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
-  //  std::cout << "[" << region_name << "] Inputs are:" << std::endl;
-  //  _printdeps(input_vars, num_inputs);
-  //  std::cout << "[" << region_name << "] Outputs are:" << std::endl;
-  //  _printdeps(output_vars, num_outputs);
 
   if (RTEnv.getMode() == PROFILE_TIME) {
     RTEnv.TimeProfiler->startProfile(region_name, (uintptr_t) accurate);
