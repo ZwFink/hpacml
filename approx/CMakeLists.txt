@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.14 FATAL_ERROR)
+set( CMAKE_VERBOSE_MAKEFILE on )
 
 # CMAKE_BUILD_TYPE was not set, default to Release.
 if (NOT CMAKE_BUILD_TYPE)
@@ -6,28 +7,16 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_BUILD_TYPE Release)
-#set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/;${CMAKE_MODULE_PATH}")
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/;${CMAKE_MODULE_PATH}")
 
+set(PAPI_PREFIX "/g/g90/koparasy/spack/opt/spack/linux-rhel7-broadwell/gcc-4.9.3/papi-5.7.0-6c7tn4h5uvestxit2vdzpgnlqef44knq/")
 find_package(HDF5 REQUIRED COMPONENTS C CXX HL)
-#message(WARNING "PATH IS ${HDF5_INCLUDE_DIRS}")
-#message(WARNING "PATH IS ${HDF5_VERSION}")
-#message(WARNING "PATH IS ${HDF5_LIBRARIES}")
-#message(WARNING "PATH IS ${HDF5_C_LIBRARIES}")
-#message(WARNING "PATH IS ${HDF5_CXX_LIBRARIES}")
-#message(WARNING "PATH IS ${HDF5_HL_LIBRARIES}")
+find_package(PAPI REQUIRED)
 
 list(APPEND APPROX_EXTERNAL_LIBS ${HDF5_C_LIBRARIES})
 list(APPEND APPROX_EXTERNAL_LIBS ${HDF5_HL_LIBRARIES})
 list(APPEND APPROX_EXTERNAL_LIBS ${HDF5_CXX_LIBRARIES})
-
-#include(FindCaliper)
-#if (CALIPER_FOUND)
-#    set(APPROX_HAVE_CALIPER TRUE)
-#    list(APPEND APPROX_EXTERNAL_LIBS ${CALIPER_LIBRARIES})
-#else()
-#    message(FATAL_ERROR "Caliper Could not be found!\n")
-#endif()
-#
+list(APPEND APPROX_EXTERNAL_LIBS ${PAPI_LIBRARIES})
 
 set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
