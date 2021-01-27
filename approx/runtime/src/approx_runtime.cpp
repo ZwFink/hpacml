@@ -38,6 +38,8 @@ public:
   BaseDataWriter *DataProfiler;
 
   ApproxRuntimeConfiguration() {
+      TimeProfiler = nullptr;
+      DataProfiler = nullptr;
     const char *env_p = std::getenv("EXECUTE_MODE");
     if (!env_p) {
       Mode = EXECUTE;
@@ -63,7 +65,12 @@ public:
     }
   }
 
-  ~ApproxRuntimeConfiguration() { delete DataProfiler; }
+  ~ApproxRuntimeConfiguration() { 
+      if (DataProfiler)
+          delete DataProfiler; 
+      if (TimeProfiler)
+          delete TimeProfiler;
+  }
 
   ExecuteMode getMode() { return Mode; }
 };
