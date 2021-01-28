@@ -54,13 +54,13 @@ hid_t createOrOpenGroup(char *RName, hid_t Root) {
     return GId;
 }
 
-void writeProfileData(char *Name, hid_t Root, double Value) {
+void writeProfileData(char *Name, hid_t Root, double *Value, int NumStats) {
     if (!componentExist(Name, Root)) {
-        const int NDims = 1;
-        hsize_t Dims[NDims] = {1};
-        hsize_t MDims[NDims] = {H5S_UNLIMITED};
+        const int NDims = 2;
+        hsize_t Dims[NDims] = {1, (hsize_t) NumStats};
+        hsize_t MDims[NDims] = {H5S_UNLIMITED, (hsize_t) NumStats};
         herr_t Status;
-        hsize_t CDims[NDims] = {1};
+        hsize_t CDims[NDims] = {1, (hsize_t) NumStats};
 
         hid_t DSpace = H5Screate_simple(NDims, Dims, MDims);
         hid_t Prop = H5Pcreate(H5P_DATASET_CREATE);
@@ -68,7 +68,7 @@ void writeProfileData(char *Name, hid_t Root, double Value) {
         hid_t DSet = H5Dcreate(Root, Name, H5T_NATIVE_DOUBLE, DSpace, H5P_DEFAULT,
                 Prop, H5P_DEFAULT);
         Status = H5Dwrite(DSet, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                &Value);
+                Value);
         H5Pclose(Prop);
         H5Sclose(DSpace);
         Status = H5Dclose(DSet);
@@ -76,21 +76,25 @@ void writeProfileData(char *Name, hid_t Root, double Value) {
         hid_t DSet = H5Dopen2(Root, Name, H5P_DEFAULT);
         hid_t DSpace = H5Dget_space(DSet);
         int NDims = H5Sget_simple_extent_ndims(DSpace);
-        if (NDims != 1) {
-            fprintf(stderr, "Dimensions should be 1 in profiling data\nExiting...\n");
+        if (NDims != 2) {
+            fprintf(stderr, "Dimensions should be 2 in profiling data\nExiting...\n");
             exit(-1);
         }
-        hsize_t Dims;
-        H5Sget_simple_extent_dims(DSpace, &Dims, NULL);
-        hsize_t Extend = 1;
-        hsize_t EDims = Dims + Extend;
-        herr_t Status = H5Dextend(DSet, &EDims);
+        hsize_t Dims[2];
+        H5Sget_simple_extent_dims(DSpace, Dims, NULL);
+        hsize_t Extend[2] = { 1, (hsize_t) NumStats};
+        hsize_t EDims[2];
+        hsize_t Start[2] = {Dims[1],0};
+        EDims[0] = Dims[0] + Extend[0];
+        EDims[1] = NumStats;
+
+        herr_t Status = H5Dextend(DSet, EDims);
         hid_t FSpace = H5Dget_space(DSet);
         Status =
-            H5Sselect_hyperslab(FSpace, H5S_SELECT_SET, &Dims, NULL, &Extend, NULL);
-        hid_t MSpace = H5Screate_simple(NDims, &Extend, NULL);
+            H5Sselect_hyperslab(FSpace, H5S_SELECT_SET, Start, NULL, Extend, NULL);
+        hid_t MSpace = H5Screate_simple(NDims, Extend, NULL);
         Status = H5Dwrite(DSet, H5T_NATIVE_DOUBLE, MSpace, FSpace, H5P_DEFAULT,
-                (void *)&Value);
+                (void *)Value);
         Status = H5Sclose(DSpace);
         Status = H5Sclose(MSpace);
         Status = H5Sclose(FSpace);

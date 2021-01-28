@@ -3,22 +3,25 @@
 
 #include <hdf5.h>
 #include <unordered_map>
+#include <vector>
 
 #include <approx_internal.h>
 #include <approx_profile.h>
 
+enum STATS{
+    AVGI, STDI, MINI, MAXI, ESTAT};
+
 class RegionProfiler {
-  long long *Accum;
+  std::vector<long long *> Accum;
   char *RName;
   unsigned int NStats;
-  unsigned int NInvocations;
+  double *Stats;
 
 public:
   RegionProfiler(const char *RName, int NStats);
   ~RegionProfiler();
   void increaseStats(long long *CStats);
-  long long *getStats() { return Accum; }
-  unsigned int getInvocations() { return NInvocations; }
+  double *getStats();
   char *getName() { return RName; }
 };
 

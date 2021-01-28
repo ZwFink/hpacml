@@ -5,6 +5,7 @@
 #include <iostream>
 #include <papi.h>
 #include <string>
+#include <limits.h>
 
 #include <approx_profile_papi.h>
 
@@ -86,14 +87,14 @@ PapiProfiler::~PapiProfiler() {
     // group in the HDF5 file.
     for (auto region : AddrToStats) {
         char *RName = region.second->getName();
-        long long *stats = region.second->getStats();
+        double *stats = region.second->getStats();
         unsigned int NInvocations = region.second->getInvocations();
         hid_t GId = createOrOpenGroup(RName, FileId);
         hid_t GProfile = createOrOpenGroup("ProfileData", GId);
 
         for (int i = 0; i < LEvents; i++) {
             writeProfileData(EventNames[i], GProfile,
-                    stats[i] / (double)NInvocations);
+                    &stats[i], ESTAT);
         }
 
         H5Gclose(GId);
@@ -124,22 +125,62 @@ void PapiProfiler::stopProfile(const char *RName, uintptr_t FnAddr) {
     return;
 }
 
-RegionProfiler::RegionProfiler(const char *Name, int NStats) : NStats(NStats) {
+RegionProfiler::RegionProfiler(const char *Name, int NStats) : NStats(NStats), Stats(nullptr) {
     RName = new char[strlen(Name) + 1];
     std::strcpy(RName, Name);
-    Accum = new long long[NStats];
-    NInvocations = 0;
-    memset(Accum, 0, NStats * sizeof(unsigned long long));
 }
 
 RegionProfiler::~RegionProfiler() {
-    delete[] Accum;
+    for (auto iter : Accum)
+        delete [] iter;
+
+    delete[] Stats;
     delete[] RName;
 }
 
 void RegionProfiler::increaseStats(long long *CStats) {
-    NInvocations += 1;
-    for (unsigned int i = 0; i < NStats; i++) {
-        Accum[i] += CStats[i];
+    long long *NData = new long long[NStats];
+    std::memcpy(NData, CStats, sizeof(long long)* NStats);
+    Accum.push_back(NData);
+    return;
+}
+
+double *RegionProfiler::getStats(){
+    Stats = new double[NStats * ESTAT];
+
+    for (int i = 0; i < NStats; i++){
+        Stats[i*ESTAT + AVGI] = 0.0;
+        Stats[i*ESTAT + STDI] = 0.0;
+        Stats[i*ESTAT + MINI] = std::numeric_limits<double>::max();
+        Stats[i*ESTAT + MAXI] = std::numeric_limits<double>::min();
     }
+
+    for (auto iter : Accum ){
+        for ( unsigned int i = 0; i < NStats; i++){
+            Stats[i*ESTAT + AVGI] += (double) iter[i]/(double) Accum.size();
+            if (iter[i] > Stats[i*ESTAT + MAXI]){
+                Stats[i*ESTAT + MAXI] = iter[i];
+            }
+
+            if ( iter[i]< Stats[i*ESTAT + MINI]){
+                Stats[i*ESTAT+MINI] = iter[i];
+            }
+        }
+    }
+
+    for ( auto iter : Accum ){
+        for (unsigned int i =0; i < NStats; i++){
+            double tmp;
+            tmp = (iter[i] - Stats[i*ESTAT + AVGI]);
+            tmp *= tmp;
+            tmp /= (double) Accum.size();
+            Stats[i*ESTAT+STDI] += tmp;
+        }
+    }
+
+    for (unsigned int i = 0; i < NStats; i++){
+        Stats[i*ESTAT+STDI] = sqrt(Stats[i*ESTAT+STDI]);
+    }
+
+    return Stats;
 }
