@@ -62,6 +62,8 @@ PapiProfiler::PapiProfiler(const char *FName) {
         exit(-1);
     }
 
+    printf("Events are %d\n", LEvents);
+
     int Events[LEvents];
     for (i = 0; i < LEvents; i++) {
         if (PAPI_event_name_to_code(EventNames[i], &Events[i]) != PAPI_OK) {
@@ -70,8 +72,9 @@ PapiProfiler::PapiProfiler(const char *FName) {
         }
     }
 
-    if (PAPI_add_events(ProfileEvents, Events, LEvents) != PAPI_OK) {
-        fprintf(stderr, "Could not add events\n Exiting\n");
+    if ((ErrorCode = PAPI_add_events(ProfileEvents, Events, LEvents) ) != PAPI_OK) {
+        fprintf(stderr, "Could not add events\n%s\n Exiting\n",
+                PAPI_strerror(ErrorCode));
         exit(-1);
     }
 
@@ -81,7 +84,6 @@ PapiProfiler::PapiProfiler(const char *FName) {
 PapiProfiler::~PapiProfiler() {
     // I need to write all the data to the respective
     // group in the HDF5 file.
-    printf("Deleting Profiler\n");
     for (auto region : AddrToStats) {
         char *RName = region.second->getName();
         long long *stats = region.second->getStats();
@@ -101,7 +103,6 @@ PapiProfiler::~PapiProfiler() {
 }
 
 void PapiProfiler::startProfile(const char *RName, uintptr_t FnAddr) {
-    printf("Starting Profiling %s\n", RName);
     if (PAPI_start(ProfileEvents) != PAPI_OK) {
         fprintf(stderr, "Could not start counters\nExiting...\n");
         exit(-1);
@@ -120,7 +121,6 @@ void PapiProfiler::stopProfile(const char *RName, uintptr_t FnAddr) {
         AddrToStats[FnAddr] = NRegion;
     }
     AddrToStats[FnAddr]->increaseStats(TStats);
-    printf("Stopping Profiling %s\n", RName);
     return;
 }
 
