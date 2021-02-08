@@ -11,13 +11,13 @@
 #include "io_helpers.h"
 
 inline bool fileExists(char *FName) {
-    struct stat Buf;   
-    return (stat(FName, &Buf) == 0); 
+    struct stat Buf;
+    return (stat(FName, &Buf) == 0);
 }
 
 inline bool fileExists(const char *FName) {
-    struct stat Buf;   
-    return (stat(FName, &Buf) == 0); 
+    struct stat Buf;
+    return (stat(FName, &Buf) == 0);
 }
 
 bool componentExist(char *Name, hid_t Root) {

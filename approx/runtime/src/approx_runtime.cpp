@@ -65,9 +65,9 @@ public:
     }
   }
 
-  ~ApproxRuntimeConfiguration() { 
+  ~ApproxRuntimeConfiguration() {
       if (DataProfiler)
-          delete DataProfiler; 
+          delete DataProfiler;
       if (TimeProfiler)
           delete TimeProfiler;
   }
