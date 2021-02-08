@@ -519,11 +519,9 @@ void CGApproxRuntime::CGApproxRuntimeEmitLabelInit(
     }
   }
   */
-  dbgs()<< "In Line " << __LINE__ << "\n";
   LValue label;
   llvm::Value *Addr;
   if (StringLiteral *LiteralExpr = dyn_cast_or_null<StringLiteral>(LabelClause.getLabel())) {
-      dbgs() << "It is a literal\n";
       label =
           CGF.EmitStringLiteralLValue(cast<StringLiteral>(LabelClause.getLabel()));
     Addr = label.getPointer(CGF);
@@ -531,7 +529,6 @@ void CGApproxRuntime::CGApproxRuntimeEmitLabelInit(
     Addr = CGF.EmitLValue(LabelClause.getLabel()).getPointer(CGF);
   }
 
-  dbgs()<< "In Line " << __LINE__ << "\n";
 
   Addr = CGF.Builder.CreatePointerCast(Addr, CharPtrTy);
   approxRTParams[Label] = Addr;

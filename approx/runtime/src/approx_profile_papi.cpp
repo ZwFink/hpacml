@@ -5,7 +5,8 @@
 #include <iostream>
 #include <papi.h>
 #include <string>
-#include <limits.h>
+#include <limits>
+#include <cmath>
 
 #include <approx_profile_papi.h>
 
@@ -49,12 +50,10 @@ PapiProfiler::PapiProfiler(const char *FName) {
     int i = 0;
 
     EventNames[i] = std::strtok(PapiNames, DELIM);
-    printf("Event name is %s\n", EventNames[i]);
     LEvents = 0;
 
     while (EventNames[i] != nullptr) {
         EventNames[++i] = std::strtok(NULL, DELIM);
-        printf("Event name is %s\n", EventNames[i]);
     }
 
     LEvents = i;
@@ -63,7 +62,6 @@ PapiProfiler::PapiProfiler(const char *FName) {
         exit(-1);
     }
 
-    printf("Events are %d\n", LEvents);
 
     int Events[LEvents];
     for (i = 0; i < LEvents; i++) {
@@ -88,13 +86,12 @@ PapiProfiler::~PapiProfiler() {
     for (auto region : AddrToStats) {
         char *RName = region.second->getName();
         double *stats = region.second->getStats();
-        unsigned int NInvocations = region.second->getInvocations();
         hid_t GId = createOrOpenGroup(RName, FileId);
         hid_t GProfile = createOrOpenGroup("ProfileData", GId);
 
         for (int i = 0; i < LEvents; i++) {
             writeProfileData(EventNames[i], GProfile,
-                    &stats[i], ESTAT);
+                    &stats[i*ESTAT], ESTAT);
         }
 
         H5Gclose(GId);
@@ -179,7 +176,7 @@ double *RegionProfiler::getStats(){
     }
 
     for (unsigned int i = 0; i < NStats; i++){
-        Stats[i*ESTAT+STDI] = sqrt(Stats[i*ESTAT+STDI]);
+        Stats[i*ESTAT+STDI] = std::sqrt(Stats[i*ESTAT+STDI]);
     }
 
     return Stats;

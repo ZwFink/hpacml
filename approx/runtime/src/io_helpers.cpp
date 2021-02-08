@@ -84,7 +84,7 @@ void writeProfileData(char *Name, hid_t Root, double *Value, int NumStats) {
         H5Sget_simple_extent_dims(DSpace, Dims, NULL);
         hsize_t Extend[2] = { 1, (hsize_t) NumStats};
         hsize_t EDims[2];
-        hsize_t Start[2] = {Dims[1],0};
+        hsize_t Start[2] = {Dims[0],0};
         EDims[0] = Dims[0] + Extend[0];
         EDims[1] = NumStats;
 
