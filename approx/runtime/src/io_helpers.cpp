@@ -24,6 +24,11 @@ bool componentExist(char *Name, hid_t Root) {
     return H5Lexists(Root, Name, H5P_DEFAULT) > 0;
 }
 
+bool componentExist(const char *Name, hid_t Root) {
+    return H5Lexists(Root, Name, H5P_DEFAULT) > 0;
+}
+
+
 hid_t openHDF5File(const char *FName) {
     hid_t file;
     if (fileExists(FName)){
@@ -54,6 +59,21 @@ hid_t createOrOpenGroup(char *RName, hid_t Root) {
     return GId;
 }
 
+hid_t createOrOpenGroup(const char *RName, hid_t Root) {
+    hid_t GId;
+    if (componentExist(RName, Root)) {
+        GId = H5Gopen1(Root, RName);
+    } else {
+        GId = H5Gcreate1(Root, RName, H5P_DEFAULT);
+        if (GId < 0) {
+            fprintf(stderr, "Error While Trying to create group %s\nExiting..,\n",
+                    RName);
+            exit(-1);
+        }
+    }
+    return GId;
+}
+
 void writeProfileData(char *Name, hid_t Root, double *Value, int NumStats) {
     if (!componentExist(Name, Root)) {
         const int NDims = 2;
@@ -65,13 +85,24 @@ void writeProfileData(char *Name, hid_t Root, double *Value, int NumStats) {
         hid_t DSpace = H5Screate_simple(NDims, Dims, MDims);
         hid_t Prop = H5Pcreate(H5P_DATASET_CREATE);
         Status = H5Pset_chunk(Prop, NDims, CDims);
+        if ( Status < 0 ){
+            fprintf(stderr,"I could not Set chunk\nExiting...\n");
+        }
         hid_t DSet = H5Dcreate(Root, Name, H5T_NATIVE_DOUBLE, DSpace, H5P_DEFAULT,
                 Prop, H5P_DEFAULT);
         Status = H5Dwrite(DSet, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT,
                 Value);
+
+        if ( Status < 0 ){
+            fprintf(stderr,"I could not Write\nExiting...\n");
+        }
+
         H5Pclose(Prop);
         H5Sclose(DSpace);
         Status = H5Dclose(DSet);
+        if ( Status < 0 ){
+            fprintf(stderr,"I could not close file\nExiting...\n");
+        }
     } else {
         hid_t DSet = H5Dopen2(Root, Name, H5P_DEFAULT);
         hid_t DSpace = H5Dget_space(DSet);
@@ -89,16 +120,45 @@ void writeProfileData(char *Name, hid_t Root, double *Value, int NumStats) {
         EDims[1] = NumStats;
 
         herr_t Status = H5Dextend(DSet, EDims);
+        if ( Status < 0 ){
+            fprintf(stderr, "Could not extend Data set\nExiting...\n");
+            exit(-1);
+        }
         hid_t FSpace = H5Dget_space(DSet);
         Status =
             H5Sselect_hyperslab(FSpace, H5S_SELECT_SET, Start, NULL, Extend, NULL);
+        if ( Status < 0 ){
+            fprintf(stderr, "Could not select hyperslab\nExiting...\n");
+            exit(-1);
+        }
+
         hid_t MSpace = H5Screate_simple(NDims, Extend, NULL);
         Status = H5Dwrite(DSet, H5T_NATIVE_DOUBLE, MSpace, FSpace, H5P_DEFAULT,
                 (void *)Value);
+        if ( Status < 0 ){
+            fprintf(stderr, "Could not Write Dataset\nExiting...\n");
+            exit(-1);
+        }
+
         Status = H5Sclose(DSpace);
+        if ( Status < 0 ){
+            fprintf(stderr,"I could not close file\nExiting...\n");
+        }
+
         Status = H5Sclose(MSpace);
+        if ( Status < 0 ){
+            fprintf(stderr,"I could not close file\nExiting...\n");
+        }
+
         Status = H5Sclose(FSpace);
+        if ( Status < 0 ){
+            fprintf(stderr,"I could not close file\nExiting...\n");
+        }
+
         Status = H5Dclose(DSet);
+        if ( Status < 0 ){
+            fprintf(stderr,"I could not close file\nExiting...\n");
+        }
     }
     return;
 }
