@@ -9,8 +9,13 @@ endif()
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/;${CMAKE_MODULE_PATH}")
 
-set(PAPI_PREFIX "/g/g90/koparasy/spack/opt/spack/linux-rhel7-broadwell/gcc-4.9.3/papi-5.7.0-6c7tn4h5uvestxit2vdzpgnlqef44knq/")
-find_package(HDF5 REQUIRED COMPONENTS C CXX HL)
+if ( NOT DEFINED HDF5_PREFIX)
+    find_package(HDF5 REQUIRED COMPONENTS C CXX HL)
+else()
+    set(HDF5_DIR ${HDF5_PREFIX})
+    find_package(HDF5 REQUIRED COMPONENTS C CXX HL)
+endif()
+
 find_package(PAPI REQUIRED)
 
 list(APPEND APPROX_EXTERNAL_LIBS ${HDF5_C_LIBRARIES})
