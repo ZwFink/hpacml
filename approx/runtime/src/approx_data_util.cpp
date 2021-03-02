@@ -6,7 +6,16 @@
 
 using namespace std;
 
-template <class T>
+template<typename T>
+static float aggregate(T *ptr, size_t numElements){
+  float total = 0.0f;
+  for (size_t i = 0; i < numElements; i++){
+    total += (float) ptr[i];
+  }
+  return total;
+}
+
+template <typename T>
 static void add(T *sum, T *augend, T *addend, size_t numElements) {
   for (size_t i = 0; i < numElements; i++) {
     sum[i] = augend[i] + addend[i];
@@ -14,14 +23,14 @@ static void add(T *sum, T *augend, T *addend, size_t numElements) {
   return;
 }
 
-template <class T>
+template <typename T>
 static void sub(T *difference, T *minuend, T *subtrahend, size_t numElements) {
   for (size_t i = 0; i < numElements; i++) {
     difference[i] = minuend[i] - subtrahend[i];
   }
 }
 
-template <class T>
+template <typename T>
 static void multiply(T *product, T *multiplier, T *multiplicand,
                      size_t numElements) {
   for (size_t i = 0; i < numElements; i++) {
@@ -29,7 +38,7 @@ static void multiply(T *product, T *multiplier, T *multiplicand,
   }
 }
 
-template <class T>
+template <typename T>
 static void divide(T *quotient, T *dividend, T *divisor, size_t numElements) {
   for (size_t i = 0; i < numElements; i++) {
     quotient[i] = dividend[i] / divisor[i];
@@ -37,7 +46,7 @@ static void divide(T *quotient, T *dividend, T *divisor, size_t numElements) {
   return;
 }
 
-template <class T>
+template <typename T>
 static bool rel_error_larger(T *ground, T *test, size_t numElements,
                              real_t threshold) {
   for (size_t i = 0; i < numElements; i++) {
@@ -49,7 +58,7 @@ static bool rel_error_larger(T *ground, T *test, size_t numElements,
   return false;
 }
 
-template <class T> double average(T *data, size_t numElements) {
+template <typename T> double average(T *data, size_t numElements) {
   double sum = 0.0;
   for (size_t i = 0; i < numElements; i++) {
     sum += (double)data[i];
@@ -58,16 +67,16 @@ template <class T> double average(T *data, size_t numElements) {
   return sum;
 }
 
-template <class T> static void copyData(T *dest, T *src, size_t numElements) {
+template <typename T> static void copyData(T *dest, T *src, size_t numElements) {
   for (size_t i = 0; i < numElements; i++) {
     dest[i] = src[i];
   }
   return;
 }
 
-template <class T> static void cast_and_assign(T* src, double *dest,size_t numElements){
+template <typename To, typename From> static void cast_and_assign(To* src, From *dest,size_t numElements){
   for (size_t i = 0; i < numElements; i++){
-    dest[i] = (double) src[i];
+    dest[i] = (To) src[i];
   }
 }
 
@@ -351,4 +360,59 @@ void cast_and_assign(void *src, size_t numElements,
     }
   }
   return;
+}
+
+
+
+void convertToFloat(float *dest, void *src, size_t numElements,
+                      ApproxType Type) {
+  if (numElements == 1) {
+    switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    *dest = (float)(*(CType *)src);                                           \
+    return;
+#include "clang/Basic/approxTypes.def"
+    case INVALID:
+      std::cout << "INVALID DATA TYPE passed in argument list\n";
+      break;
+    }
+  } else {
+    switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    return cast_and_assign((CType *)src, dest, numElements);
+#include "clang/Basic/approxTypes.def"
+    case INVALID:
+      std::cout << "INVALID DATA TYPE passed in argument list\n";
+      break;
+    }
+  }
+  return;
+}
+
+void convertFromFloat(void *dest, float *src, size_t numElements, ApproxType Type){
+    switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    return cast_and_assign(src, (CType *)dest, numElements);
+#include "clang/Basic/approxTypes.def"
+    case INVALID:
+      std::cout << "INVALID DATA TYPE passed in argument list\n";
+      break;
+    }
+  return;
+}
+
+float aggregate( void *data, size_t numElements, ApproxType Type){
+    switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    return aggregate((CType *)data, numElements);
+#include "clang/Basic/approxTypes.def"
+    case INVALID:
+      std::cout << "INVALID DATA TYPE passed in argument list\n";
+      break;
+    }
+  return 0.0f;
 }

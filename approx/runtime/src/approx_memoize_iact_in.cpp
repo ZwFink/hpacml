@@ -3,6 +3,9 @@
 #include <memory>
 #include <unordered_map>
 #include <stack>
+#include <limits>
+#include <cmath>
+#include <cstring>
 
 #include <approx_data_util.h>
 #include <approx_internal.h>
@@ -13,6 +16,8 @@ using namespace std;
 
 #define MAX_REGIONS 20
 #define NOTFOUND -1
+
+#ifdef __OLD_MEMO__
 class MemoizeInput {
 
   typedef enum : uint8_t {
@@ -259,6 +264,215 @@ public:
   }
 };
 
+#else
+
+class MemoizeInput {
+  public:
+  float **inTable;
+  float **outTable;
+  float *iTemp;
+  float *oTemp;
+  double outAverage[2];
+  double totalDiff;
+  long totalInvocations;
+  int tSize;
+  void (*accurate)(void *);
+  int num_inputs;
+  int num_outputs;
+  float threshold;
+  int input_index, output_index;
+  int accurately;
+  int approximately;
+  int iSize, oSize;
+
+  public:
+  MemoizeInput(void (*acc)(void *), int num_inputs, int num_outputs,
+               approx_var_info_t *inputs, approx_var_info_t *outputs)
+      : accurate(acc), num_inputs(num_inputs), num_outputs(num_outputs),
+        input_index(0), output_index(0), accurately(0), approximately(0) {
+    threshold = 0.0;
+    const char *env_p = std::getenv("THRESHOLD");
+    if (env_p) {
+      threshold = atof(env_p);
+    }
+
+    tSize = 0;
+    env_p = std::getenv("TABLE_SIZE");
+    if (env_p){
+      tSize = atoi(env_p);
+    }
+
+    if (tSize == 0){
+      printf("Should Never happen\n");
+      exit(-1);
+    }
+
+    int iCols= 0;
+    int oCols= 0;
+
+    for (int i = 0; i <  num_inputs; i++){
+      iCols+= inputs[i].num_elem;
+    }
+
+
+    for (int i = 0; i <  num_outputs; i++){
+      oCols += outputs[i].num_elem;
+    }
+
+    iTemp = new float[iCols];
+    oTemp = new float[oCols];
+    inTable = create2DArray<float>(tSize, iCols);
+    outTable = create2DArray<float>(tSize, oCols);
+    iSize = iCols;
+    oSize = oCols;
+    outAverage[0] = 0;
+    outAverage[1] = 0;
+    totalDiff = 0;
+    totalInvocations = 0;
+}
+
+~MemoizeInput(){
+  delete2DArray(inTable);
+  delete2DArray(outTable);
+  double MAPE =0.0f;
+
+  if (totalInvocations != 0){
+    outAverage[0] = outAverage[0]/(float)(totalInvocations*oSize);
+    outAverage[1] = outAverage[1]/(float)(totalInvocations*oSize);
+    MAPE = fabs(outAverage[0]-outAverage[1])/fabs(outAverage[0]);
+  }
+
+  delete [] iTemp;
+  delete [] oTemp;
+
+  if (totalInvocations != 0){
+    cout << "REGION_ERROR:"<<  MAPE << endl;
+  }
+
+  cout << "APPROX:"
+    << (double)approximately / (double)(accurately + approximately)
+    << ":" << approximately<< ":" << accurately << endl; 
+}
+
+void convertFrom(approx_var_info_t *values, int num_values, float *vector){
+  for (int i = 0; i < num_values; i++){
+    convertToFloat(vector, values[i].ptr, values[i].num_elem, (ApproxType)values[i].data_type);
+    vector += values[i].num_elem;
+  }
+}
+
+void convertTo(approx_var_info_t *values, int num_values, float *vector){
+  for (int i = 0; i < num_values; i++){
+    convertFromFloat(values[i].ptr, vector, values[i].num_elem, (ApproxType)values[i].data_type);
+    vector += values[i].num_elem;
+  }
+}
+
+void execute(void *args, approx_var_info_t *inputs, approx_var_info_t *outputs){
+    convertFrom(inputs, num_inputs, iTemp);
+    float minDist = std::numeric_limits<float>::max(); 
+    int index = -1;
+    // Iterate in table and find closest input value
+    for (int i = 0; i < input_index; i++){
+      float *temp = inTable[i];
+      float dist = 0.0f;
+      for (int j = 0; j < iSize; j++){
+        if (temp[j] != 0.0f)
+          dist += fabs((iTemp[j] - temp[j])/temp[j]);
+         else
+          dist += fabs((iTemp[j] - temp[j]));
+      }
+      dist = dist/(float)iSize;
+      if (dist < minDist){
+        minDist = dist;
+        index = i;
+        if (minDist < threshold)
+          break;
+      }
+    }
+
+    if (minDist > threshold){
+      index = -1;
+    }
+
+    if (index == -1){
+      // I need to execute accurately
+      accurately++;
+      accurate(args);
+      if (input_index < tSize ){
+        std::memcpy(inTable[input_index], iTemp, sizeof(float)*iSize);
+        convertFrom(outputs, num_outputs, outTable[input_index]);
+        input_index +=1;
+      }
+    }
+    else{
+      approximately++;
+      convertTo(outputs, num_outputs, outTable[index]);
+    }
+  }
+
+  void execute_both(void *args, approx_var_info_t *inputs, approx_var_info_t *outputs){
+    convertFrom(inputs, num_inputs, iTemp);
+    //Execute accurate
+    accurate(args);
+    convertFrom(outputs,num_outputs, oTemp);
+    
+    float minDist = std::numeric_limits<float>::max(); 
+    int index = -1;
+    // Iterate in table and find closest input value
+    for (int i = 0; i < input_index; i++){
+      float *temp = inTable[i];
+      float dist = 0.0f;
+      for (int j = 0; j < iSize; j++){
+        if (temp[j] != 0.0f)
+          dist += fabs((iTemp[j] - temp[j])/temp[j]);
+         else
+          dist += fabs((iTemp[j] - temp[j]));
+      }
+      dist = dist/(float)iSize;
+      if (dist < minDist){
+        minDist = dist;
+        index = i;
+        if (minDist < threshold)
+          break;
+      }
+    }
+
+    if (minDist > threshold){
+      index = -1;
+    }
+
+    for (int i = 0; i < oSize; i++){
+      outAverage[0] += oTemp[i];
+    }
+
+    double diff = 0.0;
+    if (index == -1){
+      // I need to execute accurately
+      for (int i = 0; i < oSize; i++){
+        outAverage[1] += oTemp[i];
+      }
+      accurately++;
+      if (input_index < tSize ){
+        std::memcpy(inTable[input_index], iTemp, sizeof(float)*iSize);
+        std::memcpy(outTable[input_index], oTemp, sizeof(float)*oSize);
+        convertFrom(outputs, num_outputs, outTable[input_index]);
+        input_index +=1;
+      }
+    }
+    else{
+      approximately++;
+      for (int i = 0; i < oSize; i++){
+        outAverage[1] += outTable[index][i];
+      }
+      convertTo(outputs, num_outputs, outTable[index]);
+    }
+    totalInvocations++;
+  }
+};
+
+#endif
+
 int last_memoIn = 0;
 
 MemoizeInput *memo_regions[MAX_REGIONS];
@@ -284,7 +498,7 @@ int memo_find_index(unsigned long Addr) {
 }
 
 void memoize_in(void (*accurate)(void *), void *arg, approx_var_info_t *inputs,
-                int num_inputs, approx_var_info_t *outputs, int num_outputs) {
+                int num_inputs, approx_var_info_t *outputs, int num_outputs, bool ExecBoth) {
   unsigned long Addr = (unsigned long)accurate;
   int curr_index = memo_find_index(Addr);
   if (curr_index == NOTFOUND) {
@@ -296,5 +510,8 @@ void memoize_in(void (*accurate)(void *), void *arg, approx_var_info_t *inputs,
     memo_regions[last_memoIn++] =
         new MemoizeInput(accurate, num_inputs, num_outputs, inputs, outputs);
   }
-  memo_regions[curr_index]->execute(arg, inputs, outputs);
+  if (ExecBoth)
+    memo_regions[curr_index]->execute_both(arg, inputs, outputs);
+  else
+    memo_regions[curr_index]->execute(arg, inputs, outputs);
 }

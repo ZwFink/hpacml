@@ -79,6 +79,8 @@ public:
   int accurately;
   /// Stat. Counts how many invocations where performed approximately.
   int approximately;
+  double outAverage[2];
+  int totalInvocations;
 
 private:
   /// Stores last computed output to private memory.
@@ -101,7 +103,7 @@ public:
       : accurate(acc), num_outputs(num_outputs), history_size(2),
         prediction_size(2), avg(0.0), stdev(0.0), rsd(FLT_MAX), threshold(0.0),
         cur_index(0), active_values(0), predicted_values(0), state(ACCURATE),
-        accurately(0), approximately(0) {
+        accurately(0), approximately(0), totalInvocations(0) {
     const char *env_p = std::getenv("PREDICTION_SIZE");
     if (env_p) {
       prediction_size = atoi(env_p);
@@ -131,9 +133,18 @@ public:
       std::cout<<"Ptr:" << outputs[i].ptr<<std::endl;
     }
     window = new real_t[history_size]();
+
+    for (int i = 0; i < 2; i++){
+      outAverage[i] = 0.0;
+    }
   }
 
   ~MemoizeOutput() {
+    if (totalInvocations != 0 ){
+      double MAPE = fabs(outAverage[0] - outAverage[1])/fabs(outAverage[0]);
+      cout << "REGION_ERROR:"<<  MAPE << endl;
+    }
+
     cout << "APPROX:"
          << (double)approximately / (double)(accurately + approximately)
          << ":" << approximately<< ":" << accurately << endl;
@@ -211,6 +222,86 @@ public:
       }
     }
   }
+
+  void execute_both(void *arg, approx_var_info_t *outputs) {
+    totalInvocations++;
+    accurate(arg);
+    float correctOut = 0.0f;
+    for (int i = 0; i < num_outputs; i++){
+      correctOut += aggregate(outputs[i].ptr, outputs[i].num_elem,
+                 (ApproxType)outputs[i].data_type);
+    }
+    outAverage[0] += correctOut;
+
+    if (state == APPROXIMATE) {
+      approximate(outputs);
+      for (int i = 0; i < num_outputs; i++){
+        outAverage[1] += aggregate(outputs[i].ptr, outputs[i].num_elem,
+                 (ApproxType)outputs[i].data_type);
+      }
+      approximately++;
+    } else if (state == ACCURATE) {
+      outAverage[1] += correctOut;
+      register_output(outputs);
+      accurately++;
+    }
+
+    // The following code is the actual overhead of.
+    // the approximation technique. In the case of
+    // output memoization this part of code could also be
+    // executed by another "worker thread" to hide the latencies
+    // of the approximation technique itself. In serial applications
+    // this is kind of straight forward. In parallel application versions
+    // this needs to be studied.
+
+    if (state == ACCURATE) {
+      // When executed in accurate state we need to
+      // compute the new avg, stdev, rsd, and change
+      // state if necessary for the next invocation.
+
+      real_t new_value = 0.0;
+      // Compute new incoming value. Here we
+      // actually utilize assumption 1.
+      // This should be further investigated.
+      for (int i = 0; i < num_outputs; i++) {
+        new_value += average(last_values[i], outputs[i].num_elem,
+                             (ApproxType)outputs[i].data_type);
+      }
+      new_value /= (double)num_outputs;
+      real_t old_value = window[cur_index];
+      window[cur_index] = new_value;
+
+      cur_index = (cur_index + 1) % history_size;
+      avg = avg + (new_value - old_value) / (real_t)history_size;
+      active_values++;
+      real_t variance = 0.0;
+      if (active_values >= history_size) {
+        for (int i = 0; i < history_size; i++) {
+          real_t tmp = (window[i] - avg);
+          variance += tmp * tmp;
+        }
+        variance /= (real_t)history_size;
+        /// We might consider using approximable
+        // versions of math functions which are considerably
+        // faster but ofcource the results will not be that accurate.
+        stdev = sqrt(variance);
+        rsd = fabs(stdev / avg);
+        if (rsd < threshold) {
+          state = APPROXIMATE;
+          predicted_values = prediction_size;
+        }
+      }
+    } else if (state == APPROXIMATE) {
+      if (--predicted_values == 0) {
+        state = ACCURATE;
+        active_values = history_size - predicted_values;
+        if (active_values < 0) {
+          active_values = 0;
+        }
+      }
+    }
+  }
+
 };
 
 /* ========================= DRIVER OF TECHNIQUE ===========================*/
@@ -267,7 +358,7 @@ int find_index(unsigned long Addr) {
  * class to perform all the required approximation steps.
  */
 void memoize_out(void (*accurate)(void *), void *arg,
-                 approx_var_info_t *outputs, int num_outputs) {
+                 approx_var_info_t *outputs, int num_outputs, bool ExecBoth) {
   unsigned long Addr = (unsigned long)accurate;
   int curr_index = find_index(Addr);
   if (curr_index == NOTFOUND) {
@@ -278,5 +369,8 @@ void memoize_out(void (*accurate)(void *), void *arg,
     curr_index = last;
     regions[last++] = new MemoizeOutput(accurate, outputs, num_outputs);
   }
-  regions[curr_index]->execute(arg, outputs);
+  if (ExecBoth)
+    regions[curr_index]->execute_both(arg, outputs);
+  else
+    regions[curr_index]->execute(arg, outputs);
 }

@@ -32,6 +32,7 @@ void _printdeps(approx_var_info_t *vars, int num_deps) {
 
 class ApproxRuntimeConfiguration {
   ExecuteMode Mode;
+  bool ExecuteBoth;
 
 public:
   BasePerfProfiler *TimeProfiler;
@@ -40,12 +41,17 @@ public:
   ApproxRuntimeConfiguration() {
       TimeProfiler = nullptr;
       DataProfiler = nullptr;
-    const char *env_p = std::getenv("EXECUTE_MODE");
+      ExecuteBoth = false;
+    const char *env_p = std::getenv("EXECUTE_BOTH");
+    if (env_p){
+      ExecuteBoth = true;
+    }
+
+    env_p = std::getenv("EXECUTE_MODE");
     if (!env_p) {
       Mode = EXECUTE;
       return;
     }
-
     if (strcmp(env_p, "TIME_PROFILE") == 0) {
       Mode = PROFILE_TIME;
       env_p = std::getenv("DATA_FILE");
@@ -73,6 +79,7 @@ public:
   }
 
   ExecuteMode getMode() { return Mode; }
+  bool getExecuteBoth() { return ExecuteBoth; }
 };
 
 ApproxRuntimeConfiguration RTEnv;
@@ -98,9 +105,9 @@ void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
     if (cond) {
       if (memo_type == MEMO_IN) {
         memoize_in(accurate, arg, input_vars, num_inputs, output_vars,
-                   num_outputs);
+                   num_outputs, RTEnv.getExecuteBoth() );
       } else if (memo_type == MEMO_OUT) {
-        memoize_out(accurate, arg, output_vars, num_outputs);
+        memoize_out(accurate, arg, output_vars, num_outputs, RTEnv.getExecuteBoth());
       } else {
         accurate(arg);
       }
