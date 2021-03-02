@@ -17,6 +17,7 @@
 #include "clang/AST/ApproxClause.h"
 #include "clang/AST/DeclApprox.h"
 #include "clang/AST/GlobalDecl.h"
+#include "clang/AST/StmtApprox.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/SourceLocation.h"
 #include "llvm/ADT/SmallVector.h"
@@ -75,13 +76,13 @@ private:
   SourceLocation EndLoc;
 
 private:
-  void CGApproxRuntimeEmitPerfoFn(CapturedStmt &CS);
+  void CGApproxRuntimeEmitPerfoFn(CapturedStmt &CS, const ApproxLoopHelperExprs &LoopExprs, const ApproxPerfoClause &PC);
 
 public:
   CGApproxRuntime(CodeGenModule &CGM);
   void CGApproxRuntimeEnterRegion(CodeGenFunction &CGF, CapturedStmt &CS);
   void CGApproxRuntimeEmitPerfoInit(CodeGenFunction &CGF, CapturedStmt &CS,
-                                    ApproxPerfoClause &PerfoClause);
+                                    ApproxPerfoClause &PerfoClause, const ApproxLoopHelperExprs &LoopExprs);
   void CGApproxRuntimeEmitMemoInit(CodeGenFunction &CGF,
                                    ApproxMemoClause &MemoClause);
   void CGApproxRuntimeEmitIfInit(CodeGenFunction &CGF,
