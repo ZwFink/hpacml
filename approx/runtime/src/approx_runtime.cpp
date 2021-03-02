@@ -68,6 +68,21 @@ public:
       DataProfiler = getDataWriter(env_p);
     } else {
       Mode = EXECUTE;
+
+void __approx_exec_call(void (*accFn)(void *), void (*perfFn)(void *),
+                        void *arg, bool cond, void *perfoArgs,
+                        void *deps, int num_deps, int memo_type) {
+  approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
+  approx_var_info_t *var_info = (approx_var_info_t *)deps;
+  _printdeps(var_info, num_deps);
+
+  if (cond) {
+    if (perfFn) {
+      printf("CALLING cond perforated function\n");
+      perfFn(arg);
+    } else {
+      printf("CALLING cond accurate function\n");
+      accFn(arg);
     }
   }
 
@@ -83,6 +98,21 @@ public:
 };
 
 ApproxRuntimeConfiguration RTEnv;
+
+bool __approx_skip_iteration(unsigned int i, float pr) {
+    // TODO: random seed? reproducible?
+    static std::default_random_engine generator;
+    static std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+    float n = distribution(generator);
+    if (n <= pr) {
+        printf("SKIP n %f __approx_skip_iteration i %d pr %f\n", n, i, pr);
+        return true;
+    }
+
+    printf("DO n %f __approx_skip_iteration i %d pr %f\n", n, i, pr);
+    return false;
+}
+
 
 void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
                         void *arg, bool cond, const char *region_name,
@@ -103,7 +133,9 @@ void __approx_exec_call(void (*accurate)(void *), void (*perforate)(void *),
     RTEnv.DataProfiler->record_end(region_name, output_vars, num_outputs);
   } else {
     if (cond) {
-      if (memo_type == MEMO_IN) {
+      if ( perfFn ){
+        perfFn(arg);
+      } else if (memo_type == MEMO_IN) {
         memoize_in(accurate, arg, input_vars, num_inputs, output_vars,
                    num_outputs, RTEnv.getExecuteBoth() );
       } else if (memo_type == MEMO_OUT) {
