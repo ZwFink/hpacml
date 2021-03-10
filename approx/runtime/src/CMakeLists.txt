@@ -1,6 +1,9 @@
 configure_file(${LIBAPPROX_INC_DIR}/approx.h approx.h COPYONLY)
+message("libapprox is ${LIBAPPROX_INC_DIR}") 
 
 set(CLANG_SOURCE_INCLUDE "${LLVM_EXTERNAL_CLANG_SOURCE_DIR}/include/")
+message("libapprox is ${CLANG_SOURCE_INCLUDE}") 
+message("approx include is ${LIBAPPROX_INC_DIR}")
 
 set(LIBAPPROX_SOURCE_FILES
     approx_runtime.cpp
@@ -28,6 +31,7 @@ endif()
 include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}
     ${LIBAPPROX_INC_DIR}
+    ${LIBAPPROX_BASE_DIR}
     ${CLANG_SOURCE_INCLUDE}
     ${CALIPER_INCLUDE_DIRS}
     ${HDF5_INCLUDE_DIRS}
@@ -49,6 +53,7 @@ foreach (_extlib ${APPROX_EXTERNAL_LIBS})
   target_link_libraries(approx PRIVATE ${_extlib})
 endforeach()
 
+message("PACKAGE VERSION is: ${PACKAGE_VERSION}")
 string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION ${PACKAGE_VERSION})
 set(LIBAPPROX_HEADERS_INSTALL_PATH "${APPROX_INSTALL_LIBDIR}/clang/${CLANG_VERSION}/include")
 

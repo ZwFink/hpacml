@@ -6,265 +6,51 @@
 #include <limits>
 #include <cmath>
 #include <cstring>
+#include <omp.h>
 
-#include <approx_data_util.h>
-#include <approx_internal.h>
+#include "approx_data_util.h"
+#include "approx_internal.h"
+#include "thread_storage.h"
+
+#include <chrono> 
+using namespace std::chrono; 
 
 using namespace std;
 
-#define MEMORY_BLOCKS 1024
-
-#define MAX_REGIONS 20
-#define NOTFOUND -1
-
-#ifdef __OLD_MEMO__
-class MemoizeInput {
-
-  typedef enum : uint8_t {
-    INIT,
-    CREATE,
-    COPY_IN,
-    COPY_OUT,
-    SEARCH,
-    INSERT,
-    ACCURATE,
-    APPROXIMATE,
-    END
-  } CODE_REGIONS;
-
-  struct KeyData {
-    MemoizeInput *parent;
-    mutable uint8_t *ptr;
-    mutable approx_var_info_t *inputs;
-    bool operator==(const KeyData &other) const {
-      const size_t *offsets = parent->input_offsets;
-      const ApproxType *types = parent->input_types;
-      const size_t *num_elements = parent->input_shape;
-      const real_t threshold = parent->threshold;
-      for (int i = 0; i < parent->num_inputs; i++) {
-        void *this_ptr =
-            (inputs == nullptr) ? (void *)&ptr[offsets[i]] : inputs[i].ptr;
-        void *other_ptr = (other.inputs == nullptr)
-                              ? (void *)&other.ptr[offsets[i]]
-                              : other.inputs[i].ptr;
-        if (rel_error_larger(this_ptr, other_ptr, num_elements[i], types[i],
-                             threshold))
-          return false;
-      }
-      return true;
-    }
-  };
-
-  class KeyDataHasher {
-  public:
-    std::size_t operator()(const KeyData &key) const {
-      size_t seed = 5381;
-      const size_t *offsets = key.parent->input_offsets;
-      const size_t *num_elements = key.parent->input_shape;
-      const size_t *sz_types = key.parent->input_sz_type;
-
-      for (int i = 0; i < key.parent->num_inputs; i++) {
-        size_t bytes = sz_types[i] * num_elements[i];
-        uint8_t *ptr = (key.inputs == nullptr) ? &key.ptr[offsets[i]]
-                                               : (uint8_t *)key.inputs[i].ptr;
-        for (size_t j = 0; j < bytes; j++) {
-          seed = ((seed << 5) + seed) + ptr[j];
-        }
-      }
-      return seed;
-    }
-  };
-
-  typedef std::unordered_map<KeyData, uint8_t *, KeyDataHasher> KeyDataHashMap;
-  typedef std::unordered_map<KeyData, uint8_t *, KeyDataHasher>::iterator
-      KeyDataHashMapIterator;
-
-public:
-  std::stack<uint8_t *> input_memory_pool;
-  std::stack<uint8_t *> output_memory_pool;
-  void (*accurate)(void *);
-  int num_inputs;
-  int num_outputs;
-  real_t threshold;
-
-  uint8_t *input_memory;
-  uint8_t *output_memory;
-  size_t input_index;
-  size_t output_index;
-
-  size_t *input_shape;
-  ApproxType *input_types;
-  size_t *input_offsets;
-  size_t *input_sz_type;
-  size_t total_input_size;
-  int *output_shape;
-  ApproxType *output_types;
-  size_t *output_offsets;
-  size_t total_output_size;
-  KeyDataHashMap storage;
-
-  /// Stat. Counts how many invocations where performed accurately.
-  int accurately;
-  /// Stat. Counts how many invocations where performed approximately.
-  int approximately;
-  int counter;
-
-public:
-  MemoizeInput(void (*acc)(void *), int num_inputs, int num_outputs,
-               approx_var_info_t *inputs, approx_var_info_t *outputs)
-      : accurate(acc), num_inputs(num_inputs), num_outputs(num_outputs),
-        input_index(0), output_index(0), accurately(0), approximately(0) {
-    int i;
-    threshold = 0.0;
-    const char *env_p = std::getenv("THRESHOLD");
-    if (env_p) {
-      threshold = atof(env_p);
-    }
-
-    input_shape = new size_t[num_inputs];
-    input_types = new ApproxType[num_inputs];
-    input_offsets = new size_t[num_inputs];
-    input_sz_type = new size_t[num_inputs];
-
-    output_shape = new int[num_outputs];
-    output_types = new ApproxType[num_outputs];
-    output_offsets = new size_t[num_outputs];
-
-    size_t curr_offset = 0;
-
-    for (i = 0; i < num_inputs; i++) {
-      input_shape[i] = inputs[i].num_elem;
-      input_types[i] = (ApproxType)inputs[i].data_type;
-
-      input_sz_type[i] = inputs[i].sz_elem;
-
-      size_t rem = curr_offset % inputs[i].sz_elem;
-      if (rem != 0)
-        curr_offset += inputs[i].sz_elem - rem;
-
-      input_offsets[i] = curr_offset;
-      curr_offset += input_shape[i] * inputs[i].sz_elem;
-    }
-
-    size_t rem = curr_offset % sizeof(uint64_t);
-    if (rem != 0) {
-      curr_offset += sizeof(uint64_t) - rem;
-    }
-    total_input_size = curr_offset;
-    size_t elements = total_input_size;
-    input_memory = new uint8_t[elements * MEMORY_BLOCKS]();
-    input_memory_pool.push(input_memory);
-
-    curr_offset = 0;
-    for (i = 0; i < num_outputs; i++) {
-      output_shape[i] = outputs[i].num_elem;
-      output_types[i] = (ApproxType)outputs[i].data_type;
-      size_t rem = curr_offset % outputs[i].sz_elem;
-      if (rem != 0)
-        curr_offset += outputs[i].sz_elem - rem;
-
-      output_offsets[i] = curr_offset;
-      curr_offset += output_shape[i] * outputs[i].sz_elem;
-    }
-
-    rem = curr_offset % sizeof(uint64_t);
-    if (rem != 0) {
-      curr_offset += sizeof(uint64_t) - rem;
-    }
-    total_output_size = curr_offset;
-    elements = total_output_size;
-    output_memory = new uint8_t[elements * MEMORY_BLOCKS]();
-    output_memory_pool.push(output_memory);
-
-    counter = 0;
-  }
-
-  ~MemoizeInput() {
-    while (!input_memory_pool.empty()){
-      delete[] input_memory_pool.top();
-      input_memory_pool.pop();
-    }
-
-    while (!output_memory_pool.empty()){
-      delete[] output_memory_pool.top();
-      output_memory_pool.pop();
-    }
-
-
-    delete[] input_shape;
-    delete[] input_types;
-    delete[] input_offsets;
-    delete[] input_sz_type;
-
-    delete[] output_types;
-    delete[] output_shape;
-    delete[] output_offsets;
-
-    cout << "APPROX:"
-         << (double)approximately / (double)(accurately + approximately)
-         << ":" << approximately<< ":" << accurately << endl;
-
-  };
-
-  uint8_t *copy_inputs(approx_var_info_t *inputs) {
-    if (input_index + total_input_size > (total_input_size * MEMORY_BLOCKS)){
-      input_memory = new uint8_t[total_input_size * MEMORY_BLOCKS]();
-      input_memory_pool.push(input_memory);
-      input_index = 0;
-    }
-    uint8_t *ptr = &input_memory[input_index];
-    input_index += total_input_size;
-    for (int i = 0; i < num_inputs; i++) {
-      copyData((void *)&ptr[input_offsets[i]], inputs[i].ptr, input_shape[i],
-               input_types[i]);
-    }
-    return ptr;
-  }
-
-  uint8_t *copy_outputs(approx_var_info_t *outputs) {
-    if (output_index + total_output_size> (total_output_size * MEMORY_BLOCKS)){
-      output_memory= new uint8_t[total_output_size* MEMORY_BLOCKS]();
-      output_memory_pool.push(output_memory);
-      output_index= 0;
-    }
-    uint8_t *ptr = &output_memory[output_index];
-    output_index += total_output_size;
-    for (int i = 0; i < num_outputs; i++) {
-      copyData((void *)&ptr[output_offsets[i]], (void *)outputs[i].ptr,
-               output_shape[i], output_types[i]);
-    }
-    return ptr;
-  }
-
-  void copy_results(uint8_t *values, approx_var_info_t *outputs) {
-    for (int i = 0; i < num_outputs; i++) {
-      copyData(outputs[i].ptr, (void *)&(values[output_offsets[i]]),
-               output_shape[i], output_types[i]);
-    }
-  }
-
-  void execute(void *args, approx_var_info_t *inputs,
-               approx_var_info_t *outputs) {
-
-    KeyData new_values = {this, nullptr, inputs};
-    auto ret = storage.insert({new_values, nullptr});
-
-    if (ret.second == false) {
-      copy_results((uint8_t *)ret.first->second, outputs);
-      approximately++;
-    } else {
-      (*ret.first).first.ptr = copy_inputs(inputs);
-      (*ret.first).first.inputs = nullptr;
-      accurately++;
-      accurate(args);
-      uint8_t *output_ptr = copy_outputs(outputs);
-      (*ret.first).second = output_ptr;
-    }
-    counter++;
-  }
+/*
+class Profiler{
+    std::unordered_map<const char *, std::pair<int,double>> profileTime;
+    public:
+    Profiler(){}
+    ~Profiler();
+    void storeData(const char *, double time);
 };
 
-#else
+Profiler profiler; 
+
+Profiler *getProfiler(){
+    return &profiler;
+}
+
+Profiler::~Profiler(){
+    for (auto v: profileTime){
+        std::cout<< "PROFILE: " << v.first << " : " << v.second.second / (double) v.second.first   <<std::endl;
+    }
+}
+
+void Profiler::
+storeData(const char *name, double time){
+    auto elem = profileTime.find(name);
+    if (elem == profileTime.end()){
+        profileTime[name] = std::make_pair(1, time);
+    }
+    else{
+        elem->second.first++;
+        elem->second.second += time;
+    }
+    return;
+}
+*/
 
 class MemoizeInput {
   public:
@@ -275,33 +61,25 @@ class MemoizeInput {
   double outAverage[2];
   double totalDiff;
   long totalInvocations;
-  int tSize;
   void (*accurate)(void *);
   int num_inputs;
   int num_outputs;
+  int tSize;
   float threshold;
   int input_index, output_index;
-  int accurately;
-  int approximately;
+  long accurately;
+  long approximately;
   int iSize, oSize;
+//  Profiler *profile;
 
   public:
   MemoizeInput(void (*acc)(void *), int num_inputs, int num_outputs,
-               approx_var_info_t *inputs, approx_var_info_t *outputs)
+               approx_var_info_t *inputs, approx_var_info_t *outputs, int tSize, float threshold)
       : accurate(acc), num_inputs(num_inputs), num_outputs(num_outputs),
-        input_index(0), output_index(0), accurately(0), approximately(0) {
-    threshold = 0.0;
-    const char *env_p = std::getenv("THRESHOLD");
-    if (env_p) {
-      threshold = atof(env_p);
-    }
+        tSize(tSize), threshold(threshold), input_index(0), output_index(0), 
+        accurately(0), approximately(0) {
 
-    tSize = 0;
-    env_p = std::getenv("TABLE_SIZE");
-    if (env_p){
-      tSize = atoi(env_p);
-    }
-
+//          profile=getProfiler();
     if (tSize == 0){
       printf("Should Never happen\n");
       exit(-1);
@@ -369,10 +147,16 @@ void convertTo(approx_var_info_t *values, int num_values, float *vector){
 }
 
 void execute(void *args, approx_var_info_t *inputs, approx_var_info_t *outputs){
+//    auto start_time = high_resolution_clock::now();
     convertFrom(inputs, num_inputs, iTemp);
+//    auto stop_time = high_resolution_clock::now();
+//    auto duration = duration_cast<microseconds>(stop_time - start_time); 
+//    double time = duration.count(); 
+//    profile->storeData("ConvertFrom", time);
     float minDist = std::numeric_limits<float>::max(); 
     int index = -1;
     // Iterate in table and find closest input value
+//    start_time = high_resolution_clock::now();
     for (int i = 0; i < input_index; i++){
       float *temp = inTable[i];
       float dist = 0.0f;
@@ -395,19 +179,41 @@ void execute(void *args, approx_var_info_t *inputs, approx_var_info_t *outputs){
       index = -1;
     }
 
+//    stop_time = high_resolution_clock::now();
+//    duration = duration_cast<microseconds>(stop_time - start_time); 
+//    time = duration.count(); 
+//    profile->storeData("HashTable", time);
+
     if (index == -1){
       // I need to execute accurately
+//      start_time = high_resolution_clock::now();
       accurately++;
       accurate(args);
+//      stop_time = high_resolution_clock::now();
+//      duration = duration_cast<microseconds>(stop_time - start_time); 
+//      time = duration.count(); 
+//      profile->storeData("accurate", time);
+
+
+//      start_time = high_resolution_clock::now();
       if (input_index < tSize ){
         std::memcpy(inTable[input_index], iTemp, sizeof(float)*iSize);
         convertFrom(outputs, num_outputs, outTable[input_index]);
         input_index +=1;
       }
+//      stop_time = high_resolution_clock::now();
+//      duration = duration_cast<microseconds>(stop_time - start_time); 
+//      time = duration.count(); 
+//      profile->storeData("create_table", time);
     }
     else{
       approximately++;
+//      start_time = high_resolution_clock::now();
       convertTo(outputs, num_outputs, outTable[index]);
+//      stop_time = high_resolution_clock::now();
+//      duration = duration_cast<microseconds>(stop_time - start_time); 
+//      time = duration.count(); 
+//      profile->storeData("approximate", time);
     }
   }
 
@@ -471,47 +277,23 @@ void execute(void *args, approx_var_info_t *inputs, approx_var_info_t *outputs){
   }
 };
 
-#endif
-
-int last_memoIn = 0;
-
-MemoizeInput *memo_regions[MAX_REGIONS];
-
-class GarbageCollectorMemoIn {
-public:
-  GarbageCollectorMemoIn(){};
-  ~GarbageCollectorMemoIn() {
-    for (int i = 0; i < last_memoIn; i++) {
-      delete memo_regions[i];
-    }
-  }
-};
-
-GarbageCollectorMemoIn memoCleaner;
-
-int memo_find_index(unsigned long Addr) {
-  for (int i = 0; i < last_memoIn; i++) {
-    if (((unsigned long)(memo_regions[i]->accurate) == Addr))
-      return i;
-  }
-  return NOTFOUND;
-}
+MemoPool<MemoizeInput> inputMemo;
 
 void memoize_in(void (*accurate)(void *), void *arg, approx_var_info_t *inputs,
-                int num_inputs, approx_var_info_t *outputs, int num_outputs, bool ExecBoth) {
-  unsigned long Addr = (unsigned long)accurate;
-  int curr_index = memo_find_index(Addr);
-  if (curr_index == NOTFOUND) {
-    if (last_memoIn >= MAX_REGIONS) {
-      cout << "I Reached maximum memo_regions exiting\n";
-      exit(0);
-    }
-    curr_index = last_memoIn;
-    memo_regions[last_memoIn++] =
-        new MemoizeInput(accurate, num_inputs, num_outputs, inputs, outputs);
+                int num_inputs, approx_var_info_t *outputs, int num_outputs, bool ExecBoth, int tSize, float threshold) {
+  int threadId = 0;
+  MemoizeInput *curr;
+  if (omp_in_parallel()){
+    threadId = omp_get_thread_num();
   }
+
+  curr = inputMemo.findMemo(threadId, (unsigned long)accurate);
+  if (!curr){ 
+    curr = inputMemo.addNew(threadId, new MemoizeInput(accurate, num_inputs, num_outputs, inputs, outputs,tSize, threshold));
+  }
+
   if (ExecBoth)
-    memo_regions[curr_index]->execute_both(arg, inputs, outputs);
+    curr->execute_both(arg, inputs, outputs);
   else
-    memo_regions[curr_index]->execute(arg, inputs, outputs);
+    curr->execute(arg, inputs, outputs);
 }

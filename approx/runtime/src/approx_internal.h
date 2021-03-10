@@ -59,10 +59,11 @@ enum ApproxType : int8_t {
 };
 
 void memoize_out(void (*accurate)(void *), void *arg,
-                 approx_var_info_t *outputs, int num_outputs, bool execBoth);
+                 approx_var_info_t *outputs, int num_outputs, bool execBoth, int pSize, int hSize, float threshold);
 
 void memoize_in(void (*accurate)(void *), void *arg, approx_var_info_t *inputs,
-                int num_inputs, approx_var_info_t *outputs, int num_outputs, bool execBoth);
+                int num_inputs, approx_var_info_t *outputs, int num_outputs, bool execBoth, 
+                int tSize, float threshold);
 
 bool rel_error_larger(void *ground, void *test, size_t numElements,
                        ApproxType Type, real_t threshold);

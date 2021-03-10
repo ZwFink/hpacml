@@ -1,7 +1,7 @@
 #ifndef __APPROX_PROFILE__
 #define __APPROX_PROFILE__
 
-#include <approx_internal.h>
+#include "approx_internal.h"
 #include <unordered_map>
 
 

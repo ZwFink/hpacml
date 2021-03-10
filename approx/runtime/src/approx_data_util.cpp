@@ -2,7 +2,7 @@
 #include <iostream>
 #include <stdint.h>
 
-#include <approx_internal.h>
+#include "approx_internal.h"
 
 using namespace std;
 

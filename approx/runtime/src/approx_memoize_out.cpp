@@ -5,9 +5,11 @@
 #include <cstring>
 #include <unordered_map>
 #include <cmath>
+#include <omp.h>
 
-#include <approx_data_util.h>
-#include <approx_internal.h>
+#include "approx_data_util.h"
+#include "approx_internal.h"
+#include "thread_storage.h"
 
 #define MAX_REGIONS 20
 #define NOTFOUND -1
@@ -48,10 +50,10 @@ public:
   void (*accurate)(void *);
   /// The number of outputs this function produces.
   int num_outputs;
-  /// The size of the history
-  int history_size;
   /// The size of the prediction
   int prediction_size;
+  /// The size of the history
+  int history_size;
   /// The last computed output values.
   uint8_t **last_values;
   /// The window contais the average value of
@@ -99,38 +101,19 @@ private:
   }
 
 public:
-  MemoizeOutput(void(acc)(void *), approx_var_info_t *outputs, int num_outputs)
-      : accurate(acc), num_outputs(num_outputs), history_size(2),
-        prediction_size(2), avg(0.0), stdev(0.0), rsd(FLT_MAX), threshold(0.0),
+  MemoizeOutput(void(acc)(void *), approx_var_info_t *outputs, int num_outputs, int pSize, int hSize, float threshold)
+      : accurate(acc), num_outputs(num_outputs), history_size(hSize), prediction_size(pSize), 
+        avg(0.0), stdev(0.0), rsd(FLT_MAX), threshold(threshold),
         cur_index(0), active_values(0), predicted_values(0), state(ACCURATE),
         accurately(0), approximately(0), totalInvocations(0) {
-    const char *env_p = std::getenv("PREDICTION_SIZE");
-    if (env_p) {
-      prediction_size = atoi(env_p);
-    }
-
-    env_p = std::getenv("HISTORY_SIZE");
-    if (env_p) {
-      history_size = atoi(env_p);
-    }
-
-    env_p = std::getenv("THRESHOLD");
-    if (env_p) {
-      threshold = atof(env_p);
-    }
-
     // The memory allocation of this approximation technique is far from
     // optimal. In essence we can exploit make allocation to depend on the type
     // of the outputs. and allocate large chunks of memory of the same type.
     // Then we can apply better simd operations on these large chunks of memory.
 
-    std::cout<<"NumOutputs :" << num_outputs <<std::endl;
     last_values = new uint8_t *[num_outputs];
     for (int i = 0; i < num_outputs; i++) {
       last_values[i] = new uint8_t[outputs[i].num_elem * outputs[i].sz_elem];
-      std::cout<<"NumElem:" << outputs[i].num_elem <<std::endl;
-      std::cout<<"SZ Elem:" << outputs[i].sz_elem <<std::endl;
-      std::cout<<"Ptr:" << outputs[i].ptr<<std::endl;
     }
     window = new real_t[history_size]();
 
@@ -301,48 +284,10 @@ public:
       }
     }
   }
-
 };
 
-/* ========================= DRIVER OF TECHNIQUE ===========================*/
 
-int last = 0;
-
-// A small profiling test showed that using a vector instead of an unordered_map
-// is faster. This assumption holds true until around 16 individual approximated
-// regions. Later on we can consider of changing this part of the
-// implementation.
-MemoizeOutput *regions[MAX_REGIONS];
-
-/// A class that will delete everything upon applicaiton
-/// termination
-class GarbageCollector {
-public:
-  GarbageCollector(){};
-  ~GarbageCollector() {
-    for (int i = 0; i < last; i++) {
-      delete regions[i];
-    }
-  }
-};
-
-GarbageCollector Cleaner;
-
-/**
- * Find index that stores the memoization class for this approximated code
- * region
- *
- * @param  Add unsigned representation of the Address of the code region to be
- * approximated.
- * @return index of the region or a NOTFOUND.
- */
-int find_index(unsigned long Addr) {
-  for (int i = 0; i < last; i++) {
-    if (((unsigned long)(regions[i]->accurate) == Addr))
-      return i;
-  }
-  return NOTFOUND;
-}
+MemoPool<MemoizeOutput> outMemo;
 
 /**
  * Memoize code region using output memoize technique
@@ -358,19 +303,20 @@ int find_index(unsigned long Addr) {
  * class to perform all the required approximation steps.
  */
 void memoize_out(void (*accurate)(void *), void *arg,
-                 approx_var_info_t *outputs, int num_outputs, bool ExecBoth) {
-  unsigned long Addr = (unsigned long)accurate;
-  int curr_index = find_index(Addr);
-  if (curr_index == NOTFOUND) {
-    if (last >= MAX_REGIONS) {
-      std::cout << "I Reached maximum regions exiting\n";
-      exit(0);
-    }
-    curr_index = last;
-    regions[last++] = new MemoizeOutput(accurate, outputs, num_outputs);
+                 approx_var_info_t *outputs, int num_outputs, bool ExecBoth, int pSize, int hSize, float threshold){
+  int threadId = 0;
+  MemoizeOutput *curr;
+  if (omp_in_parallel()){
+    threadId = omp_get_thread_num();
   }
+
+  curr = outMemo.findMemo(threadId, (unsigned long)accurate);
+  if (!curr){ 
+    curr = outMemo.addNew(threadId, new MemoizeOutput(accurate, outputs, num_outputs, pSize, hSize, threshold));
+  }
+
   if (ExecBoth)
-    regions[curr_index]->execute_both(arg, outputs);
+    curr->execute_both(arg, outputs);
   else
-    regions[curr_index]->execute(arg, outputs);
+    curr->execute(arg, outputs);
 }

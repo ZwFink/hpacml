@@ -1,4 +1,4 @@
-#include <approx_profile.h>
+#include "approx_profile.h"
 #include <cstdlib>
 #include <cstring>
 #include <hdf5.h>
@@ -8,7 +8,7 @@
 #include <limits>
 #include <cmath>
 
-#include <approx_profile_papi.h>
+#include "approx_profile_papi.h"
 
 #include "H5Gpublic.h"
 #include "io_helpers.h"

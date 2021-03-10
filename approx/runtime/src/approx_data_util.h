@@ -4,7 +4,7 @@
 #include <iostream>
 #include <stdint.h>
 
-#include <approx_internal.h>
+#include "approx_internal.h"
 
 void add(void *sum, void *augend, void *addend, ApproxType Type, size_t numElements);
 void sub(void *difference, void *minuend, void *subtrahend, ApproxType Type, size_t numElements);

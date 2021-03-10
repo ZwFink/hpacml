@@ -5,8 +5,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include <approx_internal.h>
-#include <approx_profile.h>
+#include "approx_internal.h"
+#include "approx_profile.h"
 
 enum STATS{
     AVGI, STDI, MINI, MAXI, ESTAT};

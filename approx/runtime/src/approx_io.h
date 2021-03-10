@@ -1,6 +1,6 @@
 #ifndef __APPROX_IO__
 #define __APPROX_IO__
-#include <approx_internal.h>
+#include "approx_internal.h"
 #include <unordered_map>
 
 #ifdef ENABLE_HDF5

@@ -12,6 +12,13 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/;${CMAKE_MODULE_PATH}")
 set(PAPI_PREFIX "/g/g90/koparasy/spack/opt/spack/linux-rhel7-broadwell/gcc-4.9.3/papi-5.7.0-6c7tn4h5uvestxit2vdzpgnlqef44knq/")
 find_package(HDF5 REQUIRED COMPONENTS C CXX HL)
 find_package(PAPI REQUIRED)
+find_package(OpenMP REQUIRED)
+
+if (OPENMP_FOUND)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
 
 list(APPEND APPROX_EXTERNAL_LIBS ${HDF5_C_LIBRARIES})
 list(APPEND APPROX_EXTERNAL_LIBS ${HDF5_HL_LIBRARIES})
@@ -40,8 +47,6 @@ list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib"
 if("${isSystemDir}" STREQUAL "-1")
     set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 endif("${isSystemDir}" STREQUAL "-1")
-
-
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
