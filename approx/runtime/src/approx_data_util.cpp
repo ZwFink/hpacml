@@ -2,84 +2,8 @@
 #include <iostream>
 #include <stdint.h>
 
+#include "approx_data_util.h"
 #include "approx_internal.h"
-
-using namespace std;
-
-template<typename T>
-static float aggregate(T *ptr, size_t numElements){
-  float total = 0.0f;
-  for (size_t i = 0; i < numElements; i++){
-    total += (float) ptr[i];
-  }
-  return total;
-}
-
-template <typename T>
-static void add(T *sum, T *augend, T *addend, size_t numElements) {
-  for (size_t i = 0; i < numElements; i++) {
-    sum[i] = augend[i] + addend[i];
-  }
-  return;
-}
-
-template <typename T>
-static void sub(T *difference, T *minuend, T *subtrahend, size_t numElements) {
-  for (size_t i = 0; i < numElements; i++) {
-    difference[i] = minuend[i] - subtrahend[i];
-  }
-}
-
-template <typename T>
-static void multiply(T *product, T *multiplier, T *multiplicand,
-                     size_t numElements) {
-  for (size_t i = 0; i < numElements; i++) {
-    product[i] = multiplier[i] * multiplicand[i];
-  }
-}
-
-template <typename T>
-static void divide(T *quotient, T *dividend, T *divisor, size_t numElements) {
-  for (size_t i = 0; i < numElements; i++) {
-    quotient[i] = dividend[i] / divisor[i];
-  }
-  return;
-}
-
-template <typename T>
-static bool rel_error_larger(T *ground, T *test, size_t numElements,
-                             real_t threshold) {
-  for (size_t i = 0; i < numElements; i++) {
-    real_t temp = fabs((ground[i] - test[i]) / (real_t)ground[i]);
-    if (temp > threshold) {
-      return true;
-    }
-  }
-  return false;
-}
-
-template <typename T> double average(T *data, size_t numElements) {
-  double sum = 0.0;
-  for (size_t i = 0; i < numElements; i++) {
-    sum += (double)data[i];
-  }
-  sum /= (double)numElements;
-  return sum;
-}
-
-template <typename T> static void copyData(T *dest, T *src, size_t numElements) {
-  for (size_t i = 0; i < numElements; i++) {
-    dest[i] = src[i];
-  }
-  return;
-}
-
-template <typename To, typename From> static void cast_and_assign(To* src, From *dest,size_t numElements){
-  for (size_t i = 0; i < numElements; i++){
-    dest[i] = (To) src[i];
-  }
-}
-
 /**
  * add vectors and store output to another vector.
  *
@@ -228,6 +152,53 @@ void divide(void *quotient, void *dividend, void *divisor, ApproxType Type,
 }
 
 /**
+ * Function returing a printable representation of the specified type.
+ *
+ * @param  Type Type of the data.
+ * @return const char * of this data.
+ */
+const char *getTypeName(ApproxType Type) {
+  switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    return nameOfType;
+#include "clang/Basic/approxTypes.def"
+  case INVALID:
+    return "INVALID";
+  }
+}
+
+bool rel_error_larger(void *ground, void *test, size_t numElements,
+                      ApproxType Type, real_t threshold) {
+  real_t temp;
+  if (numElements == 1) {
+    switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    temp = (real_t)((*(CType *)ground) - (*(CType *)test)) /                   \
+           (real_t(*(CType *)ground));                                         \
+    return fabs(temp) > threshold;
+#include "clang/Basic/approxTypes.def"
+    case INVALID:
+      std::cout << "INVALID DATA TYPE passed in argument list\n";
+      break;
+    }
+  } else {
+    switch (Type) {
+#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
+  case Enum:                                                                   \
+    return rel_error_larger((CType *)ground, (CType *)test, numElements,       \
+                            threshold);
+#include "clang/Basic/approxTypes.def"
+    case INVALID:
+      std::cout << "INVALID DATA TYPE passed in argument list\n";
+      break;
+    }
+  }
+  return 0.0;
+}
+
+/**
  * Average numbers of an opaque vector.
  *
  * @param  dataPtr data values to be accumulated.
@@ -286,122 +257,6 @@ void copyData(void *dest, void *src, size_t numElements, ApproxType Type) {
       break;
     }
   }
-}
-
-/**
- * Function returing a printable representation of the specified type.
- *
- * @param  Type Type of the data.
- * @return const char * of this data.
- */
-const char *getTypeName(ApproxType Type) {
-  switch (Type) {
-#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
-  case Enum:                                                                   \
-    return nameOfType;
-#include "clang/Basic/approxTypes.def"
-  case INVALID:
-    return "INVALID";
-  }
-}
-
-bool rel_error_larger(void *ground, void *test, size_t numElements,
-                      ApproxType Type, real_t threshold) {
-  real_t temp;
-  if (numElements == 1) {
-    switch (Type) {
-#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
-  case Enum:                                                                   \
-    temp = (real_t)((*(CType *)ground) - (*(CType *)test)) /                   \
-           (real_t(*(CType *)ground));                                         \
-    return fabs(temp) > threshold;
-#include "clang/Basic/approxTypes.def"
-    case INVALID:
-      std::cout << "INVALID DATA TYPE passed in argument list\n";
-      break;
-    }
-  } else {
-    switch (Type) {
-#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
-  case Enum:                                                                   \
-    return rel_error_larger((CType *)ground, (CType *)test, numElements,       \
-                            threshold);
-#include "clang/Basic/approxTypes.def"
-    case INVALID:
-      std::cout << "INVALID DATA TYPE passed in argument list\n";
-      break;
-    }
-  }
-  return 0.0;
-}
-
-void cast_and_assign(void *src, size_t numElements,
-                      ApproxType Type, double *dest) {
-  if (numElements == 1) {
-    switch (Type) {
-#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
-  case Enum:                                                                   \
-    *dest = (double)(*(CType *)src);                                           \
-    return;
-#include "clang/Basic/approxTypes.def"
-    case INVALID:
-      std::cout << "INVALID DATA TYPE passed in argument list\n";
-      break;
-    }
-  } else {
-    switch (Type) {
-#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
-  case Enum:                                                                   \
-    return cast_and_assign((CType *)src, dest, numElements);
-#include "clang/Basic/approxTypes.def"
-    case INVALID:
-      std::cout << "INVALID DATA TYPE passed in argument list\n";
-      break;
-    }
-  }
-  return;
-}
-
-
-
-void convertToFloat(float *dest, void *src, size_t numElements,
-                      ApproxType Type) {
-  if (numElements == 1) {
-    switch (Type) {
-#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
-  case Enum:                                                                   \
-    *dest = (float)(*(CType *)src);                                           \
-    return;
-#include "clang/Basic/approxTypes.def"
-    case INVALID:
-      std::cout << "INVALID DATA TYPE passed in argument list\n";
-      break;
-    }
-  } else {
-    switch (Type) {
-#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
-  case Enum:                                                                   \
-    return cast_and_assign((CType *)src, dest, numElements);
-#include "clang/Basic/approxTypes.def"
-    case INVALID:
-      std::cout << "INVALID DATA TYPE passed in argument list\n";
-      break;
-    }
-  }
-  return;
-}
-
-void convertFromFloat(void *dest, float *src, size_t numElements, ApproxType Type){
-    switch (Type) {
-#define APPROX_TYPE(Enum, CType, nameOfType)                                   \
-  case Enum:                                                                   \
-    return cast_and_assign(src, (CType *)dest, numElements);
-#include "clang/Basic/approxTypes.def"
-    case INVALID:
-      std::cout << "INVALID DATA TYPE passed in argument list\n";
-      break;
-    }
-  return;
 }
 
 float aggregate( void *data, size_t numElements, ApproxType Type){

@@ -12,6 +12,7 @@ set(LIBAPPROX_SOURCE_FILES
     approx_memoize_iact_in.cpp
     approx_io.cpp
     approx_profile.cpp
+    approx_perforate.cpp
 )
 
 if (HDF5_FOUND)

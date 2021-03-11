@@ -7,6 +7,7 @@
 #include <cmath>
 #include <omp.h>
 
+#include "approx_compute_mape.h"
 #include "approx_data_util.h"
 #include "approx_internal.h"
 #include "thread_storage.h"
@@ -45,7 +46,6 @@ class MemoizeOutput {
 public:
   /// The State Machine of this technique.
   typedef enum : bool { ACCURATE, APPROXIMATE } executionState;
-
   /// The accurate function.
   void (*accurate)(void *);
   /// The number of outputs this function produces.
@@ -54,11 +54,12 @@ public:
   int prediction_size;
   /// The size of the history
   int history_size;
-  /// The last computed output values.
-  uint8_t **last_values;
-  /// The window contais the average value of
-  /// the last history_size outputs.
-  real_t *window;
+  /// The last values computed.
+  real_t **window;
+  /// The last values computed.
+  real_t *computedValue;
+  /// Number of values
+  int numCols;
   /// The average value of the window
   real_t avg;
   /// The stdev of the window.
@@ -69,6 +70,8 @@ public:
   real_t threshold;
   /// Index of storing in the window.
   int cur_index;
+  /// Index of the last computed output value.
+  int last_output;
   /// Counter, contains number of invocations done
   /// after the last approximation.
   int active_values;
@@ -81,72 +84,35 @@ public:
   int accurately;
   /// Stat. Counts how many invocations where performed approximately.
   int approximately;
-  double outAverage[2];
-  int totalInvocations;
-
-private:
-  /// Stores last computed output to private memory.
-  void register_output(approx_var_info_t *outputs) {
-    for (int i = 0; i < num_outputs; i++) {
-      memcpy(last_values[i], outputs[i].ptr,
-             outputs[i].num_elem * outputs[i].sz_elem);
-    }
-  }
-  /// Copies last computed outputs to current output.
-  void approximate(approx_var_info_t *outputs) {
-    for (int i = 0; i < num_outputs; i++) {
-      memcpy(outputs[i].ptr, last_values[i],
-             outputs[i].num_elem * outputs[i].sz_elem);
-    }
-  }
-
+  MAPE mape_error;
 public:
   MemoizeOutput(void(acc)(void *), approx_var_info_t *outputs, int num_outputs, int pSize, int hSize, float threshold)
       : accurate(acc), num_outputs(num_outputs), history_size(hSize), prediction_size(pSize), 
         avg(0.0), stdev(0.0), rsd(FLT_MAX), threshold(threshold),
         cur_index(0), active_values(0), predicted_values(0), state(ACCURATE),
-        accurately(0), approximately(0), totalInvocations(0) {
-    // The memory allocation of this approximation technique is far from
-    // optimal. In essence we can exploit make allocation to depend on the type
-    // of the outputs. and allocate large chunks of memory of the same type.
-    // Then we can apply better simd operations on these large chunks of memory.
+        accurately(0), approximately(0) {
 
-    last_values = new uint8_t *[num_outputs];
-    for (int i = 0; i < num_outputs; i++) {
-      last_values[i] = new uint8_t[outputs[i].num_elem * outputs[i].sz_elem];
-    }
-    window = new real_t[history_size]();
-
-    for (int i = 0; i < 2; i++){
-      outAverage[i] = 0.0;
-    }
+    window = createTemp2DVarStorage<real_t>(outputs,num_outputs, history_size, &numCols);
+    computedValue = new real_t [numCols];
   }
 
   ~MemoizeOutput() {
-    if (totalInvocations != 0 ){
-      double MAPE = fabs(outAverage[0] - outAverage[1])/fabs(outAverage[0]);
-      cout << "REGION_ERROR:"<<  MAPE << endl;
-    }
-
     cout << "APPROX:"
          << (double)approximately / (double)(accurately + approximately)
          << ":" << approximately<< ":" << accurately << endl;
-    for (int i = 0; i < num_outputs; i++) {
-      delete[] last_values[i];
-      last_values[i] = nullptr;
-    }
-    delete last_values;
-    delete window;
+    cout<< "CONFIG:" << prediction_size << ":" << history_size <<":"<<threshold << std::endl;
+    delete2DArray(window);
+    delete [] computedValue;
   }
 
   /// The actual implementation of the approximation technique.
   void execute(void *arg, approx_var_info_t *outputs) {
     if (state == APPROXIMATE) {
-      approximate(outputs);
+      unPackVecToVar(outputs, num_outputs, window[last_output]);
       approximately++;
     } else if (state == ACCURATE) {
       accurate(arg);
-      register_output(outputs);
+      packVarToVec(outputs, num_outputs, computedValue);
       accurately++;
     }
 
@@ -164,32 +130,37 @@ public:
       // state if necessary for the next invocation.
 
       real_t new_value = 0.0;
+      real_t old_value = 0.0;
       // Compute new incoming value. Here we
       // actually utilize assumption 1.
       // This should be further investigated.
       for (int i = 0; i < num_outputs; i++) {
-        new_value += average(last_values[i], outputs[i].num_elem,
-                             (ApproxType)outputs[i].data_type);
+        new_value += computedValue[i]; 
+        old_value += window[cur_index][i];
       }
-      new_value /= (double)num_outputs;
-      real_t old_value = window[cur_index];
-      window[cur_index] = new_value;
 
+      std::memcpy(window[cur_index],computedValue, numCols *sizeof(real_t) );
+      last_output = cur_index;
       cur_index = (cur_index + 1) % history_size;
-      avg = avg + (new_value - old_value) / (real_t)history_size;
+      avg = avg + (new_value - old_value) / (real_t)(history_size + num_outputs);
+
       active_values++;
+
       real_t variance = 0.0;
       if (active_values >= history_size) {
         for (int i = 0; i < history_size; i++) {
-          real_t tmp = (window[i] - avg);
-          variance += tmp * tmp;
+          for (int j = 0; j < num_outputs; j++){
+            real_t tmp = (window[i][j] - avg);
+            variance += tmp * tmp;
+          }
         }
-        variance /= (real_t)history_size;
+        variance /= (real_t)(history_size+num_outputs);
         /// We might consider using approximable
         // versions of math functions which are considerably
         // faster but ofcource the results will not be that accurate.
         stdev = sqrt(variance);
         rsd = fabs(stdev / avg);
+//        std::cout<<"Vals are : " << active_values << " : " << rsd << " : " << avg << " : " << stdev << std::endl;
         if (rsd < threshold) {
           state = APPROXIMATE;
           predicted_values = prediction_size;
@@ -207,25 +178,16 @@ public:
   }
 
   void execute_both(void *arg, approx_var_info_t *outputs) {
-    totalInvocations++;
     accurate(arg);
-    float correctOut = 0.0f;
-    for (int i = 0; i < num_outputs; i++){
-      correctOut += aggregate(outputs[i].ptr, outputs[i].num_elem,
-                 (ApproxType)outputs[i].data_type);
-    }
-    outAverage[0] += correctOut;
-
+    mape_error.registerAccurateOut(outputs, num_outputs);
+    
     if (state == APPROXIMATE) {
-      approximate(outputs);
-      for (int i = 0; i < num_outputs; i++){
-        outAverage[1] += aggregate(outputs[i].ptr, outputs[i].num_elem,
-                 (ApproxType)outputs[i].data_type);
-      }
+      unPackVecToVar(outputs, num_outputs, window[last_output]);
+      mape_error.registerApproximateOut(outputs, num_outputs);
       approximately++;
     } else if (state == ACCURATE) {
-      outAverage[1] += correctOut;
-      register_output(outputs);
+      mape_error.registerApproximateOut(outputs, num_outputs);
+      packVarToVec(outputs, num_outputs, computedValue);
       accurately++;
     }
 
@@ -243,27 +205,31 @@ public:
       // state if necessary for the next invocation.
 
       real_t new_value = 0.0;
+      real_t old_value = 0.0;
       // Compute new incoming value. Here we
       // actually utilize assumption 1.
       // This should be further investigated.
       for (int i = 0; i < num_outputs; i++) {
-        new_value += average(last_values[i], outputs[i].num_elem,
-                             (ApproxType)outputs[i].data_type);
+        new_value += computedValue[i]; 
+        old_value += window[cur_index][i];
       }
-      new_value /= (double)num_outputs;
-      real_t old_value = window[cur_index];
-      window[cur_index] = new_value;
 
+      std::memcpy(window[cur_index],computedValue, numCols *sizeof(real_t) );
+      last_output = cur_index;
       cur_index = (cur_index + 1) % history_size;
-      avg = avg + (new_value - old_value) / (real_t)history_size;
+      avg = avg + (new_value - old_value) / (real_t)(history_size + num_outputs);
+
       active_values++;
       real_t variance = 0.0;
       if (active_values >= history_size) {
         for (int i = 0; i < history_size; i++) {
-          real_t tmp = (window[i] - avg);
-          variance += tmp * tmp;
+          for (int j = 0; j < num_outputs; j++){
+            real_t tmp = (window[i][j] - avg);
+            variance += tmp * tmp;
+          }
         }
-        variance /= (real_t)history_size;
+        variance /= (real_t)(history_size+num_outputs);
+
         /// We might consider using approximable
         // versions of math functions which are considerably
         // faster but ofcource the results will not be that accurate.
@@ -286,8 +252,7 @@ public:
   }
 };
 
-
-MemoPool<MemoizeOutput> outMemo;
+ThreadMemoryPool<MemoizeOutput> outMemo;
 
 /**
  * Memoize code region using output memoize technique

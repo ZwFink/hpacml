@@ -3,6 +3,7 @@
 #include <string>
 
 #include "io_helpers.h"
+#include "approx_data_util.h"
 
 #include <hdf5.h>
 
