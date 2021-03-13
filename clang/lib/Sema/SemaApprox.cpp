@@ -1828,17 +1828,17 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
 
   CapturedStmt *CS = nullptr;
   ApproxLoopHelperExprs B;
-  OMPParallelForDirective *OMPFD = nullptr;
+  OMPLoopDirective *OMPLoopDir = nullptr;
   for(const auto &AC : Clauses) {
     if(AC->getClauseKind() == CK_PERFO) {
       dbgs() << "=== AStmt\n";
       AssociatedStmt->dump();
       Stmt *LoopStmt = nullptr;
-      if ((OMPFD = dyn_cast<OMPParallelForDirective>(AssociatedStmt))) {
-        LoopStmt = OMPFD->getAssociatedStmt()->IgnoreContainers(true);
-        dbgs() << "Found OMPParallelForDirective\n";
+      if ((OMPLoopDir = dyn_cast<OMPLoopDirective>(AssociatedStmt))) {
+        LoopStmt = OMPLoopDir->getAssociatedStmt()->IgnoreContainers(true);
+        dbgs() << "Found OMPLoopDirective\n";
       } else {
-        dbgs() << "NOT Found OMPParallelForDirective\n";
+        dbgs() << "NOT Found OMPLoopDirective\n";
         LoopStmt = AssociatedStmt;
         B.OMPParallelForDir = nullptr;
       }
@@ -1855,7 +1855,7 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
       // Capture PerfoStep if a DRE or use directly the expression.
       if (DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(PC->getStep())) {
         ExprResult CapturedDRE =
-            this->BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
+            BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
                                    VK_LValue, SourceLocation());
         B.PerfoStep = CapturedDRE.get();
       } else
@@ -1874,12 +1874,12 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
               ActOnIntegerConstant(SourceLocation(), 0).get());
           ExprResult PerfoCond = BuildBinOp(getCurScope(), SourceLocation(),
                                               BO_LAnd, PerfoCondNotFirst.get(), PerfoCondMod.get());
-          PerfoCond = this->PerformImplicitConversion(
-              PerfoCond.get(), this->Context.BoolTy,
+          PerfoCond = PerformImplicitConversion(
+              PerfoCond.get(), Context.BoolTy,
               /*Action=*/Sema::AA_Casting,
               /*AllowExplicit=*/true);
 #if 0
-          ExprResult PerfoCondAdd = this->ActOnConditionalOp(
+          ExprResult PerfoCondAdd = ActOnConditionalOp(
               SourceLocation(), SourceLocation(), PerfoCond.get(),
               this->ActOnIntegerConstant(SourceLocation(), 1).get(),
               this->ActOnIntegerConstant(SourceLocation(), 0).get());
@@ -1912,7 +1912,7 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
 
           B.PerfoSkip = ActOnIfStmt(SourceLocation(), false, nullptr,
                       ConditionResult(*this, nullptr, FullExprArg(PerfoCond.get()), false),
-                      ActOnContinueStmt(SourceLocation(), getCurScope()).get(),
+                      new (Context) ContinueStmt(SourceLocation()),
                       SourceLocation(), nullptr).get();
 
           break;
@@ -1945,14 +1945,14 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
           ExprResult PerfoCond =
               BuildBinOp(getCurScope(), SourceLocation(), BO_LAnd,
                          PerfoCondNotFirst.get(), PerfoCondMod.get());
-          PerfoCond = this->PerformImplicitConversion(
-              PerfoCond.get(), this->Context.BoolTy,
+          PerfoCond = PerformImplicitConversion(
+              PerfoCond.get(), Context.BoolTy,
               /*Action=*/Sema::AA_Casting,
               /*AllowExplicit=*/true);
 
           B.PerfoSkip = ActOnIfStmt(SourceLocation(), false, nullptr,
                       ConditionResult(*this, nullptr, FullExprArg(PerfoCond.get()), false),
-                      ActOnContinueStmt(SourceLocation(), getCurScope()).get(),
+                      new (Context) ContinueStmt(SourceLocation()),
                       SourceLocation(), nullptr).get();
           break;
         }
@@ -1960,12 +1960,12 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
           // Update canonical loop IV init.
           BinaryOperator *BO = dyn_cast<BinaryOperator>(B.Init);
           ExprResult MaxValue =
-              this->BuildBinOp(this->getCurScope(), SourceLocation(), BO_Add,
-                               B.UB, this->ActOnIntegerConstant(SourceLocation(), 1).get());
+              BuildBinOp(getCurScope(), SourceLocation(), BO_Add,
+                               B.UB, ActOnIntegerConstant(SourceLocation(), 1).get());
           ExprResult MulOp =
-              this->BuildBinOp(this->getCurScope(), SourceLocation(), BO_Mul,
+              BuildBinOp(getCurScope(), SourceLocation(), BO_Mul,
                                MaxValue.get(), B.PerfoStep);
-          MulOp = this->PerformImplicitConversion(MulOp.get(),
+          MulOp = PerformImplicitConversion(MulOp.get(),
                                                   BO->getLHS()->getType(),
                                                   /*Action=*/Sema::AA_Casting,
                                                   /*AllowExplicit=*/true);
@@ -1976,14 +1976,14 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
         case PT_SFINAL: {
           // Update canonical loop condition.
           BinaryOperator *BO = dyn_cast<BinaryOperator>(B.Cond);
-          ExprResult SubOp = this->BuildBinOp(
-              this->getCurScope(), SourceLocation(), BO_Sub,
-              this->ActOnIntegerConstant(SourceLocation(), 1).get(),
+          ExprResult SubOp = BuildBinOp(
+              getCurScope(), SourceLocation(), BO_Sub,
+              ActOnIntegerConstant(SourceLocation(), 1).get(),
               B.PerfoStep);
           ExprResult MulOp =
-              this->BuildBinOp(this->getCurScope(), SourceLocation(), BO_Mul,
+              BuildBinOp(getCurScope(), SourceLocation(), BO_Mul,
                                SubOp.get(), BO->getRHS());
-          MulOp = this->PerformImplicitConversion(MulOp.get(),
+          MulOp = PerformImplicitConversion(MulOp.get(),
                                                   BO->getRHS()->getType(),
                                                   /*Action=*/Sema::AA_Casting,
                                                   /*AllowExplicit=*/true);
@@ -2035,7 +2035,7 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
                   SourceLocation(), false, nullptr,
                   ConditionResult(*this, nullptr, FullExprArg(CallRes.get()),
                                   false),
-                  ActOnContinueStmt(SourceLocation(), getCurScope()).get(),
+                  new (Context) ContinueStmt(SourceLocation()),
                   SourceLocation(), nullptr)
                   .get();
 
@@ -2050,28 +2050,28 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
     }
   }
 
-  if (OMPFD) {
+  if (OMPLoopDir) {
     ASTContext &Context = getASTContext();
     SmallVector<clang::OMPClause *, 8> OMPClauses;
-    for (unsigned i = 0; i < OMPFD->getNumClauses(); i++)
-      OMPClauses.push_back(OMPFD->getClause(i));
+    for (unsigned i = 0; i < OMPLoopDir->getNumClauses(); i++)
+      OMPClauses.push_back(OMPLoopDir->getClause(i));
 
-    const CapturedStmt *OMPCap = cast<CapturedStmt>(OMPFD->getAssociatedStmt());
+    const CapturedStmt *OMPCap = cast<CapturedStmt>(OMPLoopDir->getAssociatedStmt());
     auto BuildOMPParallelFor = [&]() {
       auto *DRE = cast<DeclRefExpr>(B.IterationVarRef);
-      this->BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
+      BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
                              VK_LValue, SourceLocation());
 
       DRE = cast<DeclRefExpr>(B.LB);
-      this->BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
+      BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
                              VK_LValue, SourceLocation());
 
       DRE = cast<DeclRefExpr>(B.UB);
-      this->BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
+      BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
                              VK_LValue, SourceLocation());
 
       DRE = cast<DeclRefExpr>(B.Counter);
-      this->BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
+      BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
                              VK_LValue, SourceLocation());
       clang::OMPClause *PrivCounterClause =
           ActOnOpenMPPrivateClause( { DRE }, SourceLocation(), SourceLocation(),
@@ -2079,13 +2079,13 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
       OMPClauses.push_back(PrivCounterClause);
 
       if((DRE = dyn_cast<DeclRefExpr>(B.PerfoStep)))
-        this->BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
+        BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
                                VK_LValue, SourceLocation());
 
       if (const auto *PreInits = cast_or_null<DeclStmt>(B.PreInits)) {
         for (auto *I : PreInits->decls()) {
           VarDecl *VD = cast<VarDecl>(I);
-          this->BuildDeclRefExpr(VD, VD->getType(), VK_LValue,
+          BuildDeclRefExpr(VD, VD->getType(), VK_LValue,
                                  SourceLocation());
         }
       }
@@ -2095,14 +2095,14 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
           dbgs() << "=== Add Capture\n";
           C.getCapturedVar()->dump();
           VarDecl *VD = C.getCapturedVar();
-          this->BuildDeclRefExpr(VD, VD->getType(),
+          BuildDeclRefExpr(VD, VD->getType(),
                                  VK_LValue, SourceLocation());
           dbgs() << "=== End of Add Capture\n";
         }
       }
 
       SmallVector<Stmt *, 8> StmtList;
-      Stmt *LoopStmt = OMPFD->getAssociatedStmt()->IgnoreContainers(true);
+      Stmt *LoopStmt = OMPLoopDir->getAssociatedStmt()->IgnoreContainers(true);
       Stmt *LoopBody = nullptr;
       if (auto *For = dyn_cast<ForStmt>(LoopStmt)) {
         LoopBody = For->getBody();
@@ -2134,10 +2134,10 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
       return NewForStmtRes;
     };
 
-    StartOpenMPDSABlock(OMPFD->getDirectiveKind(), DeclarationNameInfo(),
+    StartOpenMPDSABlock(OMPLoopDir->getDirectiveKind(), DeclarationNameInfo(),
                         getCurScope(), SourceLocation());
 
-    ActOnOpenMPRegionStart(OMPFD->getDirectiveKind(), getCurScope());
+    ActOnOpenMPRegionStart(OMPLoopDir->getDirectiveKind(), getCurScope());
     StmtResult CompStmtRes = BuildOMPParallelFor();
     dbgs() << "=== CompStmt\n";
     CompStmtRes.get()->dump();
@@ -2157,7 +2157,7 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
     }
 
     StmtResult OMPParForDirRes = ActOnOpenMPExecutableDirective(
-        OMPFD->getDirectiveKind(), DeclarationNameInfo(), OMPD_unknown,
+        OMPLoopDir->getDirectiveKind(), DeclarationNameInfo(), OMPD_unknown,
         OMPClauses, OMPCSRes.get(), SourceLocation(), SourceLocation());
 
     EndOpenMPDSABlock(OMPParForDirRes.get());
