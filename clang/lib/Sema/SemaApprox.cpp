@@ -2119,7 +2119,7 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
       if (B.PerfoSkip)
         StmtList.push_back(B.PerfoSkip);
       StmtList.push_back(B.CounterUpdate);
-      for(Stmt *S : cast<CompoundStmt>(LoopBody)->children())
+      for(Stmt *S : cast<CompoundStmt>(LoopBody)->body())
         StmtList.push_back(S);
 
       CompoundStmt *ExtLoopBody = CompoundStmt::Create(
@@ -2130,7 +2130,7 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
                        ConditionResult(*this, nullptr, FullExprArg(B.Cond),
                                        /* isConstExpr */ false),
                        FullExprArg(B.Inc), SourceLocation(), ExtLoopBody);
-      
+
       return NewForStmtRes;
     };
 
