@@ -2095,8 +2095,8 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
           dbgs() << "=== Add Capture\n";
           C.getCapturedVar()->dump();
           VarDecl *VD = C.getCapturedVar();
-          BuildDeclRefExpr(VD, VD->getType(),
-                                 VK_LValue, SourceLocation());
+          BuildDeclRefExpr(VD, VD->getType().getNonReferenceType(), VK_LValue,
+                           SourceLocation());
           dbgs() << "=== End of Add Capture\n";
         }
       }
