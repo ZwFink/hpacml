@@ -6,7 +6,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-typedef float real_t;
+typedef double real_t;
 
 /** @struct approx_perfo_info_t
  *  @brief This structure contains all the information the

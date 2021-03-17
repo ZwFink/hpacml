@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <random>
+#include <omp.h>
 
 #include "approx.h"
 #include "approx_data_util.h"
@@ -122,25 +123,31 @@ public:
 
  // This is not the optimal way. Since, we will 
  // always use the same random numbers.
-    randomNumbers = new float[RAND_SIZE];
+    int numThreads = omp_get_max_threads();
+    randomNumbers = new float[RAND_SIZE*numThreads];
     static std::default_random_engine generator;
     static std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
 
-    for (int i = 0 ; i < RAND_SIZE; i++){
+    for (int i = 0 ; i < RAND_SIZE*numThreads; i++){
      randomNumbers[i] = distribution(generator);
     }
 
   }
 
   bool getExecuteBoth(){ return ExecuteBoth; }
-  ExecuteMode getMode() {return Mode; }
+  ExecuteMode getMode() { return Mode; }
 };
 
 ApproxRuntimeConfiguration RTEnv;
 
 bool __approx_skip_iteration(unsigned int i, float pr) {
-  static thread_local int index = 0;
-    if (RTEnv.randomNumbers[(index++)%RAND_SIZE] <= pr) {
+  thread_local int index = 0;
+  thread_local int threadId = 0;
+  if (omp_in_parallel()){
+      threadId = omp_get_thread_num();
+  }
+
+    if (RTEnv.randomNumbers[threadId*RAND_SIZE + (index++)%RAND_SIZE] <= pr) {
         return true;
     }
     return false;

@@ -96,13 +96,14 @@ public:
     computedValue = new real_t [numCols];
   }
 
+
   ~MemoizeOutput() {
-    cout << "APPROX:"
-         << (double)approximately / (double)(accurately + approximately)
-         << ":" << approximately<< ":" << accurately << endl;
-    cout<< "CONFIG:" << prediction_size << ":" << history_size <<":"<<threshold << std::endl;
     delete2DArray(window);
     delete [] computedValue;
+  }
+
+  double getStatistics(){
+    return (double)(approximately) / (double)(accurately+approximately);
   }
 
   /// The actual implementation of the approximation technique.
@@ -129,38 +130,34 @@ public:
       // compute the new avg, stdev, rsd, and change
       // state if necessary for the next invocation.
 
-      real_t new_value = 0.0;
-      real_t old_value = 0.0;
-      // Compute new incoming value. Here we
-      // actually utilize assumption 1.
-      // This should be further investigated.
-      for (int i = 0; i < num_outputs; i++) {
-        new_value += computedValue[i]; 
-        old_value += window[cur_index][i];
-      }
-
-      std::memcpy(window[cur_index],computedValue, numCols *sizeof(real_t) );
+      std::memcpy(window[cur_index], computedValue, numCols *sizeof(real_t) );
       last_output = cur_index;
       cur_index = (cur_index + 1) % history_size;
-      avg = avg + (new_value - old_value) / (real_t)(history_size + num_outputs);
-
       active_values++;
-
-      real_t variance = 0.0;
       if (active_values >= history_size) {
+        real_t variance = 0.0;
+        real_t avg = 0.0;
+
         for (int i = 0; i < history_size; i++) {
-          for (int j = 0; j < num_outputs; j++){
+          for (int j = 0; j < numCols; j++){
+            avg += window[i][j];
+          }
+        }
+
+        avg = avg / double(history_size*numCols);
+
+        for (int i = 0; i < history_size; i++) {
+          for (int j = 0; j < numCols; j++){
             real_t tmp = (window[i][j] - avg);
             variance += tmp * tmp;
           }
         }
-        variance /= (real_t)(history_size+num_outputs);
+        variance /= (real_t)(history_size*numCols);
         /// We might consider using approximable
         // versions of math functions which are considerably
         // faster but ofcource the results will not be that accurate.
         stdev = sqrt(variance);
         rsd = fabs(stdev / avg);
-//        std::cout<<"Vals are : " << active_values << " : " << rsd << " : " << avg << " : " << stdev << std::endl;
         if (rsd < threshold) {
           state = APPROXIMATE;
           predicted_values = prediction_size;
@@ -169,10 +166,7 @@ public:
     } else if (state == APPROXIMATE) {
       if (--predicted_values == 0) {
         state = ACCURATE;
-        active_values = history_size - predicted_values;
-        if (active_values < 0) {
-          active_values = 0;
-        }
+        active_values = 0;
       }
     }
   }
@@ -214,7 +208,7 @@ public:
         old_value += window[cur_index][i];
       }
 
-      std::memcpy(window[cur_index],computedValue, numCols *sizeof(real_t) );
+      std::memcpy(window[cur_index],computedValue, numCols * sizeof(real_t) );
       last_output = cur_index;
       cur_index = (cur_index + 1) % history_size;
       avg = avg + (new_value - old_value) / (real_t)(history_size + num_outputs);
@@ -268,7 +262,7 @@ ThreadMemoryPool<MemoizeOutput> outMemo;
  * class to perform all the required approximation steps.
  */
 void memoize_out(void (*accurate)(void *), void *arg,
-                 approx_var_info_t *outputs, int num_outputs, bool ExecBoth, int pSize, int hSize, float threshold){
+                 approx_var_info_t *outputs, int num_outputs, bool ExecBoth, int pSize, int hSize, real_t threshold){
   int threadId = 0;
   MemoizeOutput *curr;
   if (omp_in_parallel()){
