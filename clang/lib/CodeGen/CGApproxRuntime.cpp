@@ -469,7 +469,7 @@ llvm::Function *CodeGenFunction::GeneratePerfoCapturedStmtFunction(
     EmitStmt(LoopExprs.OMPParallelForDir);
   }
   else {
-        // Create BBs for end of the loop and condition check.
+    // Create BBs for end of the loop and condition check.
     auto LoopExit = getJumpDestInCurrentScope("approx.perfo.for.end");
     auto CondBlock = createBasicBlock("approx.perfo.for.cond");
     EmitBlock(CondBlock);
