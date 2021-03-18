@@ -2058,37 +2058,45 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
 
     const CapturedStmt *OMPCap = cast<CapturedStmt>(OMPLoopDir->getAssociatedStmt());
     auto BuildOMPParallelFor = [&]() {
-      auto *DRE = cast<DeclRefExpr>(B.IterationVarRef);
-      BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
-                             VK_LValue, SourceLocation());
+      SmallVector<Expr *, 2> PrivateVars;
+      SmallVector<Expr *, 8> FirstprivateVars;
 
+      // Privatize the iteration counter var.
+      auto *DRE = cast<DeclRefExpr>(B.IterationVarRef);
+      PrivateVars.push_back(DRE);
+
+      // Privatize counter var if not captured.
+      DRE = cast<DeclRefExpr>(B.Counter);
+      const auto *VD = cast<VarDecl>(DRE->getDecl());
+      if (!OMPCap->capturesVariable(VD))
+        PrivateVars.push_back(DRE);
+
+      // First-privatize helper vars.
       DRE = cast<DeclRefExpr>(B.LB);
-      BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
-                             VK_LValue, SourceLocation());
+      FirstprivateVars.push_back(DRE);
 
       DRE = cast<DeclRefExpr>(B.UB);
-      BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
-                             VK_LValue, SourceLocation());
-
-      DRE = cast<DeclRefExpr>(B.Counter);
-      BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
-                             VK_LValue, SourceLocation());
-      clang::OMPClause *PrivCounterClause =
-          ActOnOpenMPPrivateClause( { DRE }, SourceLocation(), SourceLocation(),
-                                   SourceLocation());
-      OMPClauses.push_back(PrivCounterClause);
+      FirstprivateVars.push_back(DRE);
 
       if((DRE = dyn_cast<DeclRefExpr>(B.PerfoStep)))
-        BuildDeclRefExpr(DRE->getDecl(), DRE->getDecl()->getType(),
-                               VK_LValue, SourceLocation());
+        FirstprivateVars.push_back(DRE);
 
       if (const auto *PreInits = cast_or_null<DeclStmt>(B.PreInits)) {
         for (auto *I : PreInits->decls()) {
           VarDecl *VD = cast<VarDecl>(I);
-          BuildDeclRefExpr(VD, VD->getType(), VK_LValue,
+          DRE = BuildDeclRefExpr(VD, VD->getType().getNonReferenceType(), VK_LValue,
                                  SourceLocation());
+          FirstprivateVars.push_back(DRE);
         }
       }
+
+      // Add private clause.
+      OMPClauses.push_back(ActOnOpenMPPrivateClause(
+          PrivateVars, SourceLocation(), SourceLocation(), SourceLocation()));
+
+      // Add firstprivate clause.
+      OMPClauses.push_back(ActOnOpenMPFirstprivateClause(
+          FirstprivateVars, SourceLocation(), SourceLocation(), SourceLocation()));
 
       for (CapturedStmt::Capture C : OMPCap->captures()) {
         if (C.capturesVariable()) {
