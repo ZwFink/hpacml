@@ -40,15 +40,17 @@ public:
 
   T *findMemo(int threadId, unsigned long Addr) {
     static thread_local int myIndex = -1;
-    static thread_local T**thread_region = memoryRegions[threadId];
+    static thread_local T** thread_region = memoryRegions[threadId];
 
-    if (myIndex != -1 && thread_region[myIndex] && (((unsigned long) (thread_region[myIndex]->accurate)) == Addr)){
+    if (myIndex != -1 && (((unsigned long) (thread_region[myIndex]->accurate)) == Addr)){
       return thread_region[myIndex];
     }
 
     for (int i = 0; i < lastMemoIn[threadId]; i++) {
-      if ((unsigned long)(thread_region[i]->accurate) == Addr)
-        return memoryRegions[threadId][i];
+      if ((unsigned long)(thread_region[i]->accurate) == Addr){
+            myIndex = i;
+            return thread_region[i];
+      }
     }
     return nullptr;
   }

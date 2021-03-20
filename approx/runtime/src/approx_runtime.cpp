@@ -36,10 +36,10 @@ void _printdeps(approx_var_info_t *vars, int num_deps) {
 
 class ApproxRuntimeConfiguration {
   ExecuteMode Mode;
-  bool ExecuteBoth;
 public:
   BasePerfProfiler *TimeProfiler;
   BaseDataWriter *DataProfiler;
+  bool ExecuteBoth;
   int tableSize;
   float threshold;
   int historySize;
@@ -140,6 +140,13 @@ public:
 
 ApproxRuntimeConfiguration RTEnv;
 
+
+int getPredictionSize() { return RTEnv.predictionSize;}
+int getHistorySize() { return RTEnv.historySize; }
+int getTableSize() { return RTEnv.tableSize; }
+float getThreshold(){ return RTEnv.threshold;}
+
+
 bool __approx_skip_iteration(unsigned int i, float pr) {
   thread_local int index = 0;
   thread_local int threadId = 0;
@@ -160,7 +167,7 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
   approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
   approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
   approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
-
+    /*
   if (RTEnv.getMode() == PROFILE_TIME) {
     RTEnv.TimeProfiler->startProfile(region_name, (uintptr_t) accurateFN);
     accurateFN(arg);
@@ -171,21 +178,25 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
     accurateFN(arg);
     RTEnv.DataProfiler->record_end(region_name, output_vars, num_outputs);
   } else {
-    if (cond) {
+      */
+//    if (cond) {
       if ( perfoFN ){
           perforate(accurateFN, perfoFN, arg, input_vars, num_inputs, output_vars, num_outputs, RTEnv.getExecuteBoth());
       } else if (memo_type == MEMO_IN) {
         memoize_in(accurateFN, arg, input_vars, num_inputs, output_vars,
                    num_outputs, RTEnv.getExecuteBoth(), RTEnv.tableSize, RTEnv.threshold );
       } else if (memo_type == MEMO_OUT) {
-        memoize_out(accurateFN, arg, output_vars, num_outputs, RTEnv.getExecuteBoth(), RTEnv.predictionSize, RTEnv.historySize, RTEnv.threshold);
+        memoize_out(accurateFN, arg, output_vars, num_outputs);
       } else {
         accurateFN(arg);
       }
-    } else {
+/*
+    }
+    else {
       accurateFN(arg);
     }
   }
+  */
   return;
 }
 
