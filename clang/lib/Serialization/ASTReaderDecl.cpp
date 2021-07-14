@@ -2721,7 +2721,6 @@ void ASTDeclReader::VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D){
   VisitVarDecl(D);
 }
 
-
 //===----------------------------------------------------------------------===//
 // Attribute Reading
 //===----------------------------------------------------------------------===//
