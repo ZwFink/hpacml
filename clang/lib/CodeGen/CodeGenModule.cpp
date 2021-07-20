@@ -163,8 +163,12 @@ CodeGenModule::CodeGenModule(ASTContext &C,
     createOpenMPRuntime();
   if (LangOpts.CUDA)
     createCUDARuntime();
+<<<<<<< HEAD
   if (LangOpts.HLSL)
     createHLSLRuntime();
+=======
+
+>>>>>>> 8b8a98c2eff4 (Add "-fapprox" options.)
   if (LangOpts.Approx)
     createApproxRuntime();
 
