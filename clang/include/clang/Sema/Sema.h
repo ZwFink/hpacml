@@ -11384,7 +11384,9 @@ public:
                                        approx::PerfoType PType,
                                        approx::ApproxVarListLocTy &Locs,
                                        Expr *Step);
-
+  ApproxClause* ActOnApproxPetrubateClause(approx::ClauseKind Kind,
+                                      approx::PetrubateType MType,
+                                      approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxMemoClause(approx::ClauseKind Kind,
                                       approx::MemoType MType,
                                       approx::ApproxVarListLocTy &Locs);
