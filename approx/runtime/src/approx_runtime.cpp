@@ -24,6 +24,7 @@
 #include "approx.h"
 #include "approx_data_util.h"
 #include "approx_internal.h"
+#include "approx_io.h"
 
 
 using namespace std;
@@ -33,6 +34,15 @@ using namespace std;
 
 #define PETRUBATE_IN 1
 #define PETRUBATE_OUT 2
+
+
+enum MLType: uint {
+  ML_ONLINETRAIN = 1,
+  ML_OFFLINETRAIN,
+  ML_INFER,
+  ML_END
+};
+
 
 #define RAND_SIZE  10000
 
@@ -46,6 +56,7 @@ enum ExecuteMode: uint8_t{
 class ApproxRuntimeConfiguration{
   ExecuteMode Mode;
 public:
+  HDF5DataWriter *DataProfiler;
   bool ExecuteBoth;
   int tableSize;
   float threshold;
@@ -59,6 +70,8 @@ public:
   ApproxRuntimeConfiguration() {
       ExecuteBoth = false;
       count = 0;
+
+    DataProfiler = new HDF5DataWriter("test.h5");
 
     const char *env_p = std::getenv("EXECUTE_BOTH");
     if (env_p){
@@ -132,6 +145,7 @@ public:
 
   ~ApproxRuntimeConfiguration(){
     delete [] randomNumbers;
+    delete DataProfiler;
     deinitPetrubate();
   }
 
@@ -169,7 +183,8 @@ bool __approx_skip_iteration(unsigned int i, float pr) {
 
 void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
                         void *arg, bool cond, const char *region_name,
-                        void *perfoArgs, int memo_type, int petru_type, void *inputs,
+                        void *perfoArgs, int memo_type, int petru_type,
+                        int ml_type, void *inputs,
                         int num_inputs, void *outputs, int num_outputs) {
   approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
   approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
@@ -186,7 +201,25 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
                num_outputs, RTEnv.getExecuteBoth(), RTEnv.tableSize, RTEnv.threshold );
   } else if (memo_type == MEMO_OUT) {
     memoize_out(accurateFN, arg, output_vars, num_outputs);
-  } else {
+  } 
+  else if ( (MLType) ml_type == ML_ONLINETRAIN){
+    // Not implemented
+    accurateFN(arg);
+  }
+  else if ( (MLType) ml_type == ML_OFFLINETRAIN ){
+    // I need to write the files here
+    RTEnv.DataProfiler->record_start(region_name, input_vars, 
+                        num_inputs, output_vars, num_outputs);
+
+    accurateFN(arg);
+
+    RTEnv.DataProfiler->record_end(region_name, output_vars, num_outputs);
+  }
+  else if ( (MLType) ml_type == ML_INFER ){
+    // I have not implemented this part
+    accurateFN(arg);
+  }
+  else {
     accurateFN(arg);
   }
 

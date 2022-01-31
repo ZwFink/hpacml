@@ -11,6 +11,8 @@ set(LIBAPPROX_SOURCE_FILES
     approx_memoize_out.cpp
     approx_memoize_iact_in.cpp
     approx_perforate.cpp
+    approx_io_hdf5.cpp
+    io_helpers.cpp
     approx_petrubate.cpp
 )
 
@@ -30,12 +32,20 @@ add_library(approx ${LIBAPPROX_LIBRARY_KIND} ${LIBAPPROX_SOURCE_FILES})
 
 find_package(nlohmann_json 3.2.0 REQUIRED)
 
+set(HDF5_DIR /usr/workspace/koparasy/approx-programming-model/hdf5/usr/)
+find_package(HDF5 REQUIRED COMPONENTS C CXX HL)
+
 set_target_properties(approx PROPERTIES
     PREFIX "" SUFFIX "" OUTPUT_NAME "${LIBAPPROX_LIB_FILE}"
     LINK_FLAGS ""
     LINKER_LANGUAGE ${LIBAPPROX_LINKER_LANGUAGE})
 
+
+message(STATUS "HDF5 include dir: ${HDF5_C_LIBRARIES}")
+
 target_link_libraries(approx PRIVATE ${CMAKE_DL_LIBS})
+target_link_libraries(approx PRIVATE $HDF5_C_LIBRARIES)
+target_link_libraries(approx PRIVATE $HDF5_HL_LIBRARIES)
 target_link_libraries(approx PRIVATE nlohmann_json::nlohmann_json)
 
 message("PACKAGE VERSION is: ${PACKAGE_VERSION}")

@@ -2177,6 +2177,15 @@ ApproxClause *Sema::ActOnApproxLabelClause(ClauseKind Kind, ApproxVarListLocTy &
   return new (Context) ApproxLabelClause(StartLoc, EndLoc, LParenLoc, PreInitStmt, Label);
 }
 
+ApproxClause *Sema::ActOnApproxMLClause(ClauseKind Kind,
+                                          MLType MType,
+                                          ApproxVarListLocTy &Locs) {
+  SourceLocation StartLoc = Locs.StartLoc;
+  SourceLocation LParenLoc = Locs.LParenLoc;
+  SourceLocation EndLoc = Locs.EndLoc;
+  return new (Context) ApproxMLClause(MType, StartLoc, EndLoc, LParenLoc);
+}
+
 ApproxClause *Sema::ActOnApproxMemoClause(ClauseKind Kind,
                                           MemoType MType,
                                           ApproxVarListLocTy &Locs) {

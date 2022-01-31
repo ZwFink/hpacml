@@ -23,6 +23,17 @@ using namespace clang;
 using namespace llvm;
 using namespace approx;
 
+static bool isMLType(Token &Tok, MLType &Kind) {
+  for (unsigned i = ML_START; i < ML_END; i++) {
+    enum MLType MT = (enum MLType)i;
+    if (Tok.getIdentifierInfo()->getName().equals(ApproxMLClause::MLName[MT])) {
+      Kind = MT;
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool isPerfoType(Token &Tok, PerfoType &Kind) {
   for (unsigned i = PT_START; i < PT_END; i++) {
     enum PerfoType PT = (enum PerfoType)i;
@@ -163,6 +174,28 @@ ApproxClause *Parser::ParseApproxMemoClause(ClauseKind CK) {
   return Actions.ActOnApproxMemoClause(CK, MT, Locs);
 }
 
+ApproxClause *Parser::ParseApproxMLClause(ClauseKind CK) {
+  SourceLocation Loc = Tok.getLocation();
+  SourceLocation LParenLoc = ConsumeAnyToken();
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after, ApproxClause::Name[CK].c_str()))
+    return nullptr;
+
+  MLType MT;
+  if (!isMLType(Tok, MT)){
+    return nullptr;
+  }
+  /// Consume Memo Type
+  ConsumeAnyToken();
+
+  SourceLocation ELoc = Tok.getLocation();
+  if (!T.consumeClose())
+    ELoc = T.getCloseLocation();
+  ApproxVarListLocTy Locs(Loc, LParenLoc, ELoc);
+  return Actions.ActOnApproxMLClause(CK, MT, Locs);
+}
+
+//These claues are not used a.t.m
 ApproxClause *Parser::ParseApproxDTClause(ClauseKind CK) {
   SourceLocation Loc = Tok.getLocation();
   SourceLocation ELoc = ConsumeAnyToken();
@@ -176,6 +209,7 @@ ApproxClause *Parser::ParseApproxNNClause(ClauseKind CK) {
   ApproxVarListLocTy Locs(Loc, SourceLocation(), ELoc);
   return Actions.ActOnApproxNNClause(CK, Locs);
 }
+//~These claues are not used/implemented a.t.m
 
 ApproxClause *Parser::ParseApproxUserClause(ClauseKind CK) {
   SourceLocation Loc = Tok.getLocation();
@@ -265,6 +299,7 @@ ApproxClause *Parser::ParseApproxLabelClause(ClauseKind CK) {
 }
 
 bool isApproxClause(Token &Tok, ClauseKind &Kind) {
+  dbgs () << "Checking if clause is approx\n";
   for (unsigned i = CK_START; i < CK_END; i++) {
     enum ClauseKind CK = (enum ClauseKind)i;
     if (Tok.getIdentifierInfo()->getName().equals(ApproxClause::Name[CK])) {
@@ -279,7 +314,6 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_approx_start));
   /// This should be a function call;
   inApproxScope = true;
-
 #define PARSER_CALL(method) ((*this).*(method))
 
   StmtResult Directive = StmtError();

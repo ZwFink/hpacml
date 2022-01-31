@@ -43,6 +43,7 @@ enum ClauseKind : uint {
   CK_INOUT,
   CK_LABEL,
   CK_PETRUBATE,
+  CK_ML,
   CK_END
 };
 
@@ -73,6 +74,15 @@ enum PetrubateType: uint {
   PETRUBATE_INOUT,
   PETRUBATE_END
 };
+
+enum MLType: uint {
+  ML_ONLINETRAIN = 0,
+  ML_OFFLINETRAIN,
+  ML_INFER,
+  ML_END
+};
+
+const unsigned ML_START = ML_ONLINETRAIN;
 
 const unsigned PETRUBATE_START = PETRUBATE_IN;
 

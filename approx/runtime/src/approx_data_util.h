@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <cstring>
 #include <random>
+#include <omp.h>
 
 #include "approx_internal.h"
 
