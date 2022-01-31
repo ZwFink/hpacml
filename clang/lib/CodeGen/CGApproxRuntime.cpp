@@ -239,6 +239,7 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
        /* Perfo Description */ CGM.VoidPtrTy,
        /* Memoization Type*/ CGM.Int32Ty,
        /* Petrubation Type*/ CGM.Int32Ty,
+       /* ML Type*/ CGM.Int32Ty,
        /* Input Data Descr*/ CGM.VoidPtrTy,
        /* Input Data Num Elements*/ CGM.Int32Ty,
        /* Ouput Data Descr. */ CGM.VoidPtrTy,
@@ -291,6 +292,8 @@ void CGApproxRuntime::CGApproxRuntimeEnterRegion(CodeGenFunction &CGF,
   approxRTParams[MemoDescr] =
       llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0);
   approxRTParams[PetruDescr] =
+      llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0);
+  approxRTParams[MLDescr] =
       llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0);
 
   StartLoc = CS.getBeginLoc();
@@ -791,4 +794,20 @@ void CGApproxRuntime::CGApproxRuntimeEmitLabelInit(
   }
   Addr = CGF.Builder.CreatePointerCast(Addr, CharPtrTy);
   approxRTParams[Label] = Addr;
+}
+
+void CGApproxRuntime::CGApproxRuntimeEmitMLInit(
+    CodeGenFunction &CGF, ApproxMLClause &MLClause) {
+  requiresData = true;
+  requiresInputs = true;
+  if (MLClause.getMLType() == approx::ML_ONLINETRAIN) {
+    approxRTParams[MLDescr] =
+        llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 1);
+  } else if (MLClause.getMLType() == approx::ML_OFFLINETRAIN) {
+    approxRTParams[MLDescr] =
+        llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 2);
+  } else if (MLClause.getMLType() == approx::ML_INFER) {
+    approxRTParams[MLDescr] =
+        llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 3);
+  }
 }

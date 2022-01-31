@@ -51,6 +51,9 @@ void CodeGenFunction::EmitApproxDirective(const ApproxDirective &AD) {
     else if ( ApproxPetrubateClause *PetrubateClause = dyn_cast_or_null<ApproxPetrubateClause>(C)){
       RT.CGApproxRuntimeEmitPetrubateInit(*this, *PetrubateClause);
     }
+    else if ( ApproxMLClause *MLClause = dyn_cast_or_null<ApproxMLClause>(C)){
+      RT.CGApproxRuntimeEmitMLInit(*this, *MLClause);
+    }
     else {
       dbgs() << "Clause Not Handled Yet" << C->getAsString() << "\n";
     }
