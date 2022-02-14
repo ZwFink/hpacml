@@ -32,7 +32,6 @@ add_library(approx ${LIBAPPROX_LIBRARY_KIND} ${LIBAPPROX_SOURCE_FILES})
 
 find_package(nlohmann_json 3.2.0 REQUIRED)
 
-set(HDF5_DIR /usr/workspace/koparasy/approx-programming-model/hdf5/usr/)
 find_package(HDF5 REQUIRED COMPONENTS C CXX HL)
 
 set_target_properties(approx PROPERTIES
