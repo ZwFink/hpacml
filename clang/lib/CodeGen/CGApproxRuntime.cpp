@@ -239,6 +239,7 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
        /* Perfo Description */ CGM.VoidPtrTy,
        /* Memoization Type*/ CGM.Int32Ty,
        /* Petrubation Type*/ CGM.Int32Ty,
+       /* Snapshot Type*/ CGM.Int32Ty,
        /* ML Type*/ CGM.Int32Ty,
        /* Input Data Descr*/ CGM.VoidPtrTy,
        /* Input Data Num Elements*/ CGM.Int32Ty,
@@ -292,6 +293,8 @@ void CGApproxRuntime::CGApproxRuntimeEnterRegion(CodeGenFunction &CGF,
   approxRTParams[MemoDescr] =
       llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0);
   approxRTParams[PetruDescr] =
+      llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0);
+  approxRTParams[SPDescr] =
       llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0);
   approxRTParams[MLDescr] =
       llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0);
@@ -366,6 +369,25 @@ void CGApproxRuntime::CGApproxRuntimeEmitPetrubateInit(
   }
 }
 
+void CGApproxRuntime::CGApproxRuntimeEmitSnapshotInit(
+    CodeGenFunction &CGF, ApproxSnapshotClause &SnapshotClause) {
+  requiresData = true;
+  if (SnapshotClause.getSnapshotType() == approx::SP_IN) {
+    requiresInputs = true;
+    llvm::dbgs() << "Setting Snap shot type equal to 'in'\n";
+    approxRTParams[SPDescr] =
+        llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 1);
+  } else if (SnapshotClause.getSnapshotType() == approx::SP_OUT) {
+    llvm::dbgs() << "Setting Snap shot type equal to 'out'\n";
+    approxRTParams[SPDescr] =
+        llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 2);
+  } else if (SnapshotClause.getSnapshotType() == approx::SP_INOUT) {
+    llvm::dbgs() << "Setting Snap shot type equal to 'inout'\n";
+    approxRTParams[SPDescr] =
+        llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 3);
+  }
+  llvm::dbgs() << "Finished Snapshot\n";
+}
 
 void CGApproxRuntime::CGApproxRuntimeEmitMemoInit(
     CodeGenFunction &CGF, ApproxMemoClause &MemoClause) {

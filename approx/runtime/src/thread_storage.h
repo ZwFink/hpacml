@@ -13,7 +13,7 @@ class ThreadMemoryPool{
   int totalThreads;
 public:
   ThreadMemoryPool(){
-     totalThreads = 32; 
+     totalThreads = 36; 
      lastMemoIn = new int[totalThreads]();
      memoryRegions = new T**[totalThreads];
      for ( int i = 0; i < totalThreads; i++){
@@ -22,20 +22,16 @@ public:
   };
 
   ~ThreadMemoryPool() {
-    double statistics = 0;
+   double statistics = 0;
    long int cnt = 0;
     for (int i = 0; i < totalThreads; i++) {
       for (int j = 0; j < lastMemoIn[i]; j++) {
-        statistics += memoryRegions[i][j] -> getStatistics();
-        cnt+=1;
         delete memoryRegions[i][j];
       }
       delete [] memoryRegions[i];
     }
     delete [] memoryRegions;
     delete [] lastMemoIn;
-    if (cnt != 0)
-        cout<<"APPROX:" << statistics/(double)cnt << endl;
   }
 
   T *findMemo(int threadId, unsigned long Addr) {

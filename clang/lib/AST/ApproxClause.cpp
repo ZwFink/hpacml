@@ -22,7 +22,7 @@ using namespace approx;
 using namespace llvm;
 
 const std::string ApproxClause::Name[approx::CK_END] = {
-    "perfo", "memo", "dt", "nn", "user", "if", "in", "out", "inout", "label", "petrubate", "ml"};
+    "perfo", "memo", "dt", "nn", "user", "if", "in", "out", "inout", "label", "petrubate", "ml", "snapshot"};
 
 const std::string ApproxPerfoClause::PerfoName[approx::PT_END] = {
     "small", "large", "rand", "init", "fini"};
@@ -33,7 +33,10 @@ const std::string ApproxMemoClause::MemoName[approx::MT_END] = {
 const std::string ApproxMLClause::MLName[approx::ML_END] = {
     "online", "offline", "infer"};
 
-const std::string ApproxPetrubateClause::PetrubateName[approx::PETRUBATE_END] = {
+const std::string ApproxSnapshotClause::SnapshotName[approx::PETRUBATE_END] = {
+    "in", "out", "inout"};
+
+const std::string ApproxPetrubateClause::PetrubateName[approx::SP_END] = {
     "in", "out", "inout"};
 
 ApproxInClause *ApproxInClause::Create(const ASTContext &C,
@@ -102,6 +105,10 @@ void ApproxClausePrinter::VisitApproxMLClause(ApproxMLClause *Node) {
 
 void ApproxClausePrinter::VisitApproxPetrubateClause(ApproxPetrubateClause *Node) {
   OS << Node->getAsString() << "(" << Node->getPetrubateTypeAsString() << ") ";
+}
+
+void ApproxClausePrinter::VisitApproxSnapshotClause(ApproxSnapshotClause *Node) {
+  OS << Node->getAsString() << "(" << Node->getSnapshotTypeAsString() << ") ";
 }
 
 void ApproxClausePrinter::VisitApproxDTClause(ApproxDTClause *Node) {

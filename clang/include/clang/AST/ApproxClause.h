@@ -316,6 +316,45 @@ public:
   approx::MLType getMLType() const {return Type;}
 };
 
+class ApproxSnapshotClause final : public ApproxClause {
+  approx::SPType Type;
+  SourceLocation LParenLoc;
+public:
+  static const std::string SnapshotName[approx::SP_END];
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ApproxSnapshotClause(approx::SPType ST, SourceLocation StartLoc,
+                    SourceLocation EndLoc, SourceLocation LParenLoc)
+      :ApproxClause(approx::CK_SNAPSHOT, StartLoc, EndLoc), Type(ST), LParenLoc(LParenLoc){}
+
+  /// Build an empty clause.
+  ApproxSnapshotClause()
+      : ApproxClause(approx::CK_SNAPSHOT, SourceLocation(), SourceLocation()) {}
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  const_child_range children() const {
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+
+  child_range used_children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+  const_child_range used_children() const {
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+
+  static bool classof(const ApproxClause *T) {
+    return T->getClauseKind() == approx::CK_SNAPSHOT;
+  }
+
+  std::string getSnapshotTypeAsString() const {return SnapshotName[Type];}
+  approx::SPType getSnapshotType() const {return Type;}
+};
+
+
 class ApproxNNClause final : public ApproxClause {
 public:
   /// \param StartLoc Starting location of the clause.
@@ -627,6 +666,7 @@ class ApproxClauseVisitorBase{
   RetTy VisitApproxPerfoClause(PTR(ApproxPerfoClause) S) {DISPATCH(ApproxPerfoClause);}
   RetTy VisitApproxMemoClause(PTR(ApproxMemoClause) S) {DISPATCH(ApproxMemoClause);}
   RetTy VisitApproxMLClause(PTR(ApproxMLClause) S) {DISPATCH(ApproxMLClause);}
+  RetTy VisitApproxSnapshotClause(PTR(ApproxSnapshotClause) S) {DISPATCH(ApproxSnapshotClause);}
   RetTy VisitApproxDTClause(PTR(ApproxDTClause) S) {DISPATCH(ApproxDTClause);}
   RetTy VisitApproxNNClause(PTR(ApproxNNClause) S) {DISPATCH(ApproxNNClause);}
   RetTy VisitApproxUserClause(PTR(ApproxUserClause) S) {DISPATCH(ApproxUserClause);}
@@ -645,6 +685,8 @@ class ApproxClauseVisitorBase{
         return VisitApproxMemoClause(static_cast<PTR(ApproxMemoClause)>(S));
       case approx::CK_ML:
         return VisitApproxMLClause(static_cast<PTR(ApproxMLClause)>(S));
+      case approx::CK_SNAPSHOT:
+        return VisitApproxSnapshotClause(static_cast<PTR(ApproxSnapshotClause)>(S));
       case approx::CK_DT:
         return VisitApproxDTClause(static_cast<PTR(ApproxDTClause)>(S));
       case approx::CK_NN:
@@ -697,6 +739,7 @@ class ApproxClausePrinter final : public ApproxClauseVisitor<ApproxClausePrinter
     void VisitApproxPerfoClause(ApproxPerfoClause *S);
     void VisitApproxMemoClause(ApproxMemoClause *S);
     void VisitApproxMLClause(ApproxMLClause *S);
+    void VisitApproxSnapshotClause(ApproxSnapshotClause *S);
     void VisitApproxDTClause(ApproxDTClause *S);
     void VisitApproxNNClause(ApproxNNClause *S);
     void VisitApproxUserClause(ApproxUserClause *S);

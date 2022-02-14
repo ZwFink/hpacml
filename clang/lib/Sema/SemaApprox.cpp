@@ -2204,6 +2204,16 @@ ApproxClause *Sema::ActOnApproxPetrubateClause(ClauseKind Kind,
   return new (Context) ApproxPetrubateClause(PType, StartLoc, EndLoc, LParenLoc);
 }
 
+ApproxClause *Sema::ActOnApproxSnapshotClause(ClauseKind Kind,
+                                          SPType SType,
+                                          ApproxVarListLocTy &Locs) {
+  SourceLocation StartLoc = Locs.StartLoc;
+  SourceLocation LParenLoc = Locs.LParenLoc;
+  SourceLocation EndLoc = Locs.EndLoc;
+  return new (Context) ApproxSnapshotClause(SType, StartLoc, EndLoc, LParenLoc);
+}
+
+
 ApproxClause *Sema::ActOnApproxDTClause(ClauseKind Kind,
                                         ApproxVarListLocTy &Locs) {
   SourceLocation StartLoc = Locs.StartLoc;

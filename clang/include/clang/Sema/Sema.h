@@ -10223,6 +10223,9 @@ public:
   ApproxClause* ActOnApproxMLClause(approx::ClauseKind Kind,
                                       approx::MLType MType,
                                       approx::ApproxVarListLocTy &Locs);
+  ApproxClause* ActOnApproxSnapshotClause(approx::ClauseKind Kind,
+                                      approx::SPType SType,
+                                      approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxDTClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxNNClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxUserClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);

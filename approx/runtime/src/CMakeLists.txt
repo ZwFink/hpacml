@@ -11,9 +11,9 @@ set(LIBAPPROX_SOURCE_FILES
     approx_memoize_out.cpp
     approx_memoize_iact_in.cpp
     approx_perforate.cpp
-    approx_io_hdf5.cpp
-    io_helpers.cpp
     approx_petrubate.cpp
+    memory_pool/memory_pool.cpp
+    database/database.cpp
 )
 
 include_directories(

@@ -41,6 +41,7 @@ enum ApproxRTArgsIndex : uint {
   PerfoDesc,
   MemoDescr,
   PetruDescr,
+  SPDescr,
   MLDescr,
   DataDescIn,
   DataSizeIn,
@@ -113,6 +114,7 @@ public:
   void CGApproxRuntimeRegisterOutputs(ApproxOutClause &OutClause);
   void CGApproxRuntimeRegisterInputsOutputs(ApproxInOutClause &InOutClause);
   void CGApproxRuntimeEmitDataValues(CodeGenFunction &CG);
+  void CGApproxRuntimeEmitSnapshotInit(CodeGenFunction &CGF, ApproxSnapshotClause &SnapshotClause);
   llvm::Constant* getOrCreateName(StringRef Name, CodeGenFunction &CGF);
 };
 

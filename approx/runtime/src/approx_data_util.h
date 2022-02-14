@@ -292,4 +292,7 @@ bool rel_error_larger(void *ground, void *test, size_t numElements,
 double average(void *dataPtr, size_t numElements, ApproxType Type);
 void copyData(void *dest, void *src, size_t numElements, ApproxType Type);
 float aggregate( void *data, size_t numElements, ApproxType Type);
+
+size_t computeNumElements(approx_var_info_t *vars, int numVars);
+
 #endif

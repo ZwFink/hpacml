@@ -472,6 +472,7 @@ void Parser::Initialize() {
     ParseApproxClause[CK_INOUT] = &Parser::ParseApproxInOutClause;
     ParseApproxClause[CK_LABEL] = &Parser::ParseApproxLabelClause;
     ParseApproxClause[CK_PETRUBATE] = &Parser::ParseApproxPetrubateClause;
+    ParseApproxClause[CK_SNAPSHOT] = &Parser::ParseApproxSnapshotClause;
     ParseApproxClause[CK_ML] = &Parser::ParseApproxMLClause;
   }
 

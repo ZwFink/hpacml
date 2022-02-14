@@ -44,6 +44,7 @@ enum ClauseKind : uint {
   CK_LABEL,
   CK_PETRUBATE,
   CK_ML,
+  CK_SNAPSHOT,
   CK_END
 };
 
@@ -68,12 +69,23 @@ enum MemoType : uint {
 
 const unsigned MT_START = MT_IN;
 
+enum SPType : uint {
+  SP_IN = 0,
+  SP_OUT,
+  SP_INOUT,
+  SP_END
+};
+
+const unsigned SP_START = SP_IN;
+
 enum PetrubateType: uint {
   PETRUBATE_IN = 0,
   PETRUBATE_OUT,
   PETRUBATE_INOUT,
   PETRUBATE_END
 };
+
+const unsigned PETRUBATE_START = PETRUBATE_IN;
 
 enum MLType: uint {
   ML_ONLINETRAIN = 0,
@@ -83,8 +95,6 @@ enum MLType: uint {
 };
 
 const unsigned ML_START = ML_ONLINETRAIN;
-
-const unsigned PETRUBATE_START = PETRUBATE_IN;
 
 struct ApproxVarListLocTy {
   SourceLocation StartLoc;
