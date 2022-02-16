@@ -156,11 +156,13 @@ public:
 ApproxRuntimeConfiguration RTEnv;
 ThreadMemoryPool<HPACRegion> HPACRegions;
 
-extern "C" void HPACRegisterApplicationInput(void *ptr, size_t numBytes, const char *name, HPACDType dType);
-extern "C" void HPACRegisterApplicationOutput(void *ptr, size_t numBytes, const char *name, HPACDType dType);
+extern "C" void HPACRegisterApplicationInput(void *ptr, size_t numBytes,
+                                             const char *name, HPACDType dType);
+extern "C" void HPACRegisterApplicationOutput(void *ptr, size_t numBytes,
+                                              const char *name,
+                                              HPACDType dType);
 
-
-#define NUM_CHUNKS 1024
+#define NUM_CHUNKS 8
 
 int getPredictionSize() { return RTEnv.predictionSize; }
 int getHistorySize() { return RTEnv.historySize; }
@@ -184,11 +186,11 @@ bool __approx_skip_iteration(unsigned int i, float pr) {
   return false;
 }
 
-static inline void create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *),
-                                     const char *region_name,
-                                     approx_var_info_t *inputs, int num_inputs,
-                                     approx_var_info_t *outputs,
-                                     int num_outputs) {
+static inline void
+create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *),
+                       const char *region_name, approx_var_info_t *inputs,
+                       int num_inputs, approx_var_info_t *outputs,
+                       int num_outputs) {
   thread_local int threadId = -1;
   thread_local HPACRegion *curr;
   if (threadId == -1) {
@@ -198,21 +200,25 @@ static inline void create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *
       threadId = 0;
   }
 
-  if (curr && (curr->accurate != (unsigned long)user_fn || curr->getName() != region_name))
+  if (curr && (curr->accurate != (unsigned long)user_fn ||
+               curr->getName() != region_name))
     curr = HPACRegions.findMemo(threadId, (unsigned long)user_fn, region_name);
 
   if (!curr) {
     int IElem = computeNumElements(inputs, num_inputs);
     int OElem = computeNumElements(outputs, num_outputs);
     if (RTEnv.db != nullptr) {
+      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
+                            region_name);
       void *dbRId =
           RTEnv.db->InstantiateRegion((uintptr_t)user_fn, region_name, inputs,
-                                      num_inputs, outputs, num_outputs);
-      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
-                            RTEnv.db, dbRId, region_name);
+                                      num_inputs, outputs, num_outputs, curr->getNumRows());
+      curr->setDB(RTEnv.db);
+      curr->setDBRegionId(dbRId);
       HPACRegions.addNew(threadId, curr);
     } else {
-      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS, region_name);
+      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
+                            region_name);
       HPACRegions.addNew(threadId, curr);
     }
   }
@@ -224,11 +230,13 @@ static inline void create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *
   return;
 }
 
-void HPACRegisterApplicationInput(void *ptr, size_t numBytes, const char *name, HPACDType dType){
+void HPACRegisterApplicationInput(void *ptr, size_t numBytes, const char *name,
+                                  HPACDType dType) {
   RTEnv.db->RegisterMemory("ApplicationInput", name, ptr, numBytes, dType);
 }
 
-void HPACRegisterApplicationOutput(void *ptr, size_t numBytes, const char *name, HPACDType dType){
+void HPACRegisterApplicationOutput(void *ptr, size_t numBytes, const char *name,
+                                   HPACDType dType) {
   RTEnv.db->RegisterMemory("ApplicationOutput", name, ptr, numBytes, dType);
 }
 
@@ -239,18 +247,17 @@ bool HPAC_UQPredict(double *inputs, size_t IElem, double *outputs,
 
 // This is the main driver of the HPAC approach.
 void __snapshot_call__(void (*_user_fn_)(void *), void *args,
-                  const char *region_name, void *inputs, int num_inputs,
-                  void *outputs, int num_outputs) {
+                       const char *region_name, void *inputs, int num_inputs,
+                       void *outputs, int num_outputs) {
   HPACPacket dP;
   approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
   approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
 
   create_snapshot_packet(dP, _user_fn_, region_name, input_vars, num_inputs,
-                    output_vars, num_outputs);
+                         output_vars, num_outputs);
 
   packVarToVec(input_vars, num_inputs, dP.inputs); // Copy from application
                                                    // space to library space
-
   // When true we will use HPAC Model for this output
   _user_fn_(args);
   packVarToVec(output_vars, num_outputs, dP.outputs);
@@ -261,12 +268,15 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
                         void *perfoArgs, int memo_type, int petru_type,
                         int sp_type, int ml_type, void *inputs, int num_inputs,
                         void *outputs, int num_outputs) {
-  if ( sp_type == 1)
-    __snapshot_call__(accurateFN, arg, region_name, inputs, num_inputs, nullptr, 0);
-  else if ( sp_type == 2)
-    __snapshot_call__(accurateFN, arg, region_name, nullptr, 0, outputs, num_outputs);
+  if (sp_type == 1)
+    __snapshot_call__(accurateFN, arg, region_name, inputs, num_inputs, nullptr,
+                      0);
+  else if (sp_type == 2)
+    __snapshot_call__(accurateFN, arg, region_name, nullptr, 0, outputs,
+                      num_outputs);
   else if (sp_type == 3)
-    __snapshot_call__(accurateFN, arg, region_name, inputs, num_inputs, outputs, num_outputs);
+    __snapshot_call__(accurateFN, arg, region_name, inputs, num_inputs, outputs,
+                      num_outputs);
 }
 
 const float approx_rt_get_percentage() { return RTEnv.perfoRate; }

@@ -1,9 +1,11 @@
 #include <stdlib.h>
+#include <iostream>
 
 #include "memory_pool.h"
 
 Chunk *PoolAllocator::allocateBlock(size_t chunkSize) {
   size_t blockSize = mChunksPerBlock * chunkSize;
+  std::cout<< "I am allocating " << blockSize/(1024*1024.0) << "\n";
   Chunk *blockBegin = reinterpret_cast<Chunk *>(malloc(blockSize));
   Chunk *chunk = blockBegin;
   for (int i = 0; i < mChunksPerBlock - 1; ++i) {

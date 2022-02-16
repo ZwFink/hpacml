@@ -157,7 +157,7 @@ int HDF5RegionView::writeDataLayout(approx_var_info_t *vars, int numVars,
   return totalElements;
 }
 
-void HDF5RegionView::writeFeatureVecToFile(double *data, int numRows,
+void HDF5RegionView::writeFeatureVecToFile(double *data, size_t numRows,
                                            int numCols) {
   hsize_t dims[NUM_DIMS] = {(hsize_t)numRows, (hsize_t)numCols};
   hsize_t start[NUM_DIMS];
@@ -183,7 +183,7 @@ void HDF5RegionView::writeFeatureVecToFile(double *data, int numRows,
   H5Sclose(fileSpace);
 }
 
-void HDF5RegionView::createDataSet(int totalElements) {
+void HDF5RegionView::createDataSet(int totalElements, size_t ChunkRows) {
   hsize_t dims[NUM_DIMS] = {0, static_cast<hsize_t>(totalElements)};
   hsize_t maxDims[NUM_DIMS] = {H5S_UNLIMITED,
                                static_cast<hsize_t>(totalElements)};
@@ -193,7 +193,7 @@ void HDF5RegionView::createDataSet(int totalElements) {
   // CHUNK_DIMS impacts performance considerably.
   // TODO: give an option to the config file
   // for this option to work out.
-  hsize_t chunk_dims[NUM_DIMS] = {NUM_ROWS,
+  hsize_t chunk_dims[NUM_DIMS] = {ChunkRows,
                                   static_cast<hsize_t>(totalElements)};
   H5Pset_chunk(pList, NUM_DIMS, chunk_dims);
   dset = H5Dcreate(group, "data", H5T_NATIVE_DOUBLE, fileSpace, H5P_DEFAULT,
@@ -205,13 +205,14 @@ void HDF5RegionView::createDataSet(int totalElements) {
 
 HDF5RegionView::HDF5RegionView(uintptr_t rAddr, const char *name, hid_t file,
                                approx_var_info_t *inputs, int numInputs,
-                               approx_var_info_t *outputs, int numOutputs)
+                               approx_var_info_t *outputs, int numOutputs,
+                               size_t ChunkRows)
     : file(file), totalNumRows(0), totalNumCols(0), Name(name){
   group = createOrOpenGroup(name, file);
 
   int tmpNumInputs = writeDataLayout(inputs, numInputs, "ishape");
   int tmpNumOutputs = writeDataLayout(outputs, numOutputs, "oshape");
-  createDataSet(tmpNumInputs + tmpNumOutputs);
+  createDataSet(tmpNumInputs + tmpNumOutputs, ChunkRows);
   addr = rAddr;
   return;
 }
@@ -229,7 +230,8 @@ HDF5DB::HDF5DB(const char *fileName) {
 
 void *HDF5DB::InstantiateRegion(uintptr_t addr, const char *name,
                                 approx_var_info_t *inputs, int numInputs,
-                                approx_var_info_t *outputs, int numOutputs) {
+                                approx_var_info_t *outputs, int numOutputs,
+                                size_t ChunkRows) {
   for (auto it = regions.begin(); it != regions.end(); ++it) {
     if ((*it)->getAddr() == addr && (*it)->getName() == name ) {
       long index = it - regions.begin();
@@ -238,11 +240,11 @@ void *HDF5DB::InstantiateRegion(uintptr_t addr, const char *name,
   }
   uintptr_t index = reinterpret_cast<uintptr_t>(regions.size());
   regions.push_back(new HDF5RegionView(addr, name, file, inputs, numInputs,
-                                       outputs, numOutputs));
+                                       outputs, numOutputs, ChunkRows));
   return reinterpret_cast<void *>(index);
 }
 
-void HDF5DB::DataToDB(void *region, double *data, int numRows, int numCols) {
+void HDF5DB::DataToDB(void *region, double *data, size_t numRows, int numCols) {
   uintptr_t index = reinterpret_cast<uintptr_t>(region);
   if (index >= regions.size()) {
     std::cout << "Index (" << index
