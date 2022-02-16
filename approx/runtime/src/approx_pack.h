@@ -46,7 +46,7 @@ class HPACRegion{
             CurrentReleases++;
             if (CurrentReleases == BlkSize && CurrentReleases == CurrentBlk){
                 if (db)
-                    db->DataToDB(dbRegionId, (double *) ptr, BlkSize, IElem + OElem);
+                    db->DataToDB(dbRegionId, (double *) MemPtr, BlkSize, IElem + OElem);
                 allocator.deallocate(MemPtr, sizeof(double) * (IElem + OElem) * BlkSize);
                 CurrentReleases = 0;
                 CurrentBlk = 0;
@@ -67,7 +67,7 @@ class HPACRegion{
                 if (CurrentBlk < BlkSize){
                     int Index = CurrentBlk;
                     CurrentBlk += 1;
-                    return (void *) &(static_cast<double*> (MemPtr))[CurrentBlk*(IElem + OElem)];
+                    return (void *) &(static_cast<double*> (MemPtr))[Index*(IElem + OElem)];
                 }
                 else{
                     std::cerr<< "This should never happen, memory has not been released\n";
