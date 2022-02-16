@@ -14,7 +14,7 @@
 #include "../include/approx.h"
 
 #define NUM_DIMS 2
-#define NUM_ROWS 1
+#define NUM_ROWS (4096*16)
 
 #define HDF5_ERROR(id)                                                         \
   if (id < 0) {                                                                \
@@ -206,9 +206,7 @@ void HDF5RegionView::createDataSet(int totalElements) {
 HDF5RegionView::HDF5RegionView(uintptr_t rAddr, const char *name, hid_t file,
                                approx_var_info_t *inputs, int numInputs,
                                approx_var_info_t *outputs, int numOutputs)
-    : file(file) {
-  totalNumRows = 0;
-  totalNumCols = 0;
+    : file(file), totalNumRows(0), totalNumCols(0), Name(name){
   group = createOrOpenGroup(name, file);
 
   int tmpNumInputs = writeDataLayout(inputs, numInputs, "ishape");
@@ -233,7 +231,7 @@ void *HDF5DB::InstantiateRegion(uintptr_t addr, const char *name,
                                 approx_var_info_t *inputs, int numInputs,
                                 approx_var_info_t *outputs, int numOutputs) {
   for (auto it = regions.begin(); it != regions.end(); ++it) {
-    if ((*it)->getAddr() == addr) {
+    if ((*it)->getAddr() == addr && (*it)->getName() == name ) {
       long index = it - regions.begin();
       return reinterpret_cast<void *>(index);
     }

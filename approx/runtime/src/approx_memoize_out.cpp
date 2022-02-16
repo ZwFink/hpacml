@@ -24,7 +24,6 @@
 #include "approx_internal.h"
 #include "thread_storage.h"
 
-#define MAX_REGIONS 20
 #define NOTFOUND -1
 
 using namespace std;

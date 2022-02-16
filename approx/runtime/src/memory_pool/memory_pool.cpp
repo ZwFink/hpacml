@@ -34,5 +34,5 @@ void PoolAllocator::deallocate(void *chunk, size_t size) {
 }
 
 PoolAllocator::~PoolAllocator(){
-    //TODO: Keep track of allocated memory and garbase collect it.
+    //TODO: Keep track of allocated memory and garbage collect it.
 }

@@ -1,10 +1,13 @@
 #ifndef __PACK__
 #define __PACK__
 #include <queue>
+#include <iostream>
 
 #include "approx_internal.h"
 #include "memory_pool/memory_pool.h"
 #include "database/database.h"
+
+#define BLOCK_SIZE (4096*16) 
 
 using namespace std;
 class HPACRegion{
@@ -16,28 +19,70 @@ class HPACRegion{
         PoolAllocator allocator;
         BaseDB *db; 
         void *dbRegionId;
-        HPACRegion(uintptr_t Addr, size_t IElem, 
-            size_t OElem, size_t chunks) :
-            accurate(Addr), IElem(IElem), OElem(OElem), 
-            NumBytes((IElem + OElem)*sizeof(double)),
-            allocator(chunks), db(nullptr), dbRegionId(nullptr) {};
+        int BlkSize;
+        int CurrentBlk;
+        void *MemPtr;
+        int CurrentReleases;
+        std::string Name;
 
         HPACRegion(uintptr_t Addr, size_t IElem, 
-            size_t OElem, size_t chunks, BaseDB *db, void *dRId) :
+            size_t OElem, size_t chunks, const char *name) :
             accurate(Addr), IElem(IElem), OElem(OElem), 
             NumBytes((IElem + OElem)*sizeof(double)),
-            allocator(chunks), db(db), dbRegionId(dRId) {};
+            allocator(chunks), db(nullptr), dbRegionId(nullptr),
+            BlkSize(BLOCK_SIZE), CurrentBlk(0), MemPtr(nullptr), CurrentReleases(0),
+            Name(name){};
 
-        void deallocate(void * ptr){
-            if (db){
-                db->DataToDB(dbRegionId, (double *) ptr, 1, IElem + OElem);
+        HPACRegion(uintptr_t Addr, size_t IElem, 
+            size_t OElem, size_t chunks, BaseDB *db, void *dRId,
+            const char *name) :
+            accurate(Addr), IElem(IElem), OElem(OElem), 
+            NumBytes((IElem + OElem)*sizeof(double)),
+            allocator(chunks), db(db), dbRegionId(dRId),
+            BlkSize(BLOCK_SIZE), CurrentBlk(0), MemPtr(nullptr), CurrentReleases(0),
+            Name(name){};
+
+        void release(void * ptr){
+            CurrentReleases++;
+            if (CurrentReleases == BlkSize && CurrentReleases == CurrentBlk){
+                if (db)
+                    db->DataToDB(dbRegionId, (double *) ptr, BlkSize, IElem + OElem);
+                allocator.deallocate(MemPtr, sizeof(double) * (IElem + OElem) * BlkSize);
+                CurrentReleases = 0;
+                CurrentBlk = 0;
+                MemPtr = nullptr;
             }
-            allocator.deallocate(ptr, sizeof(double) * (IElem + OElem));
+        }
+
+        ~HPACRegion() {
+            if (MemPtr != nullptr){
+                if (db)
+                    db->DataToDB(dbRegionId, (double *) MemPtr, CurrentBlk, IElem + OElem);
+                allocator.deallocate(MemPtr, sizeof(double) * (IElem + OElem) * CurrentBlk);
+            }
         }
 
         void* allocate(){
-            return allocator.allocate(NumBytes);
+            if ( MemPtr !=nullptr ){
+                if (CurrentBlk < BlkSize){
+                    int Index = CurrentBlk;
+                    CurrentBlk += 1;
+                    return (void *) &(static_cast<double*> (MemPtr))[CurrentBlk*(IElem + OElem)];
+                }
+                else{
+                    std::cerr<< "This should never happen, memory has not been released\n";
+                    exit(-1);
+                }
+            }
+            else{
+                MemPtr = allocator.allocate((IElem + OElem)*sizeof(double)*BlkSize);
+                CurrentBlk = 1;
+                return MemPtr;
+            }
         }
+
+
+        std::string getName() { return Name; }
 };
 
 struct HPACPacket{
@@ -45,7 +90,7 @@ struct HPACPacket{
     double *outputs;
     HPACRegion *feature;
     ~HPACPacket() {
-        feature->deallocate((void *) inputs);
+        feature->release((void *) inputs);
         inputs = nullptr;
         outputs = nullptr;
         feature = nullptr;

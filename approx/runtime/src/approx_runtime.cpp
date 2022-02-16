@@ -160,7 +160,7 @@ extern "C" void HPACRegisterApplicationInput(void *ptr, size_t numBytes, const c
 extern "C" void HPACRegisterApplicationOutput(void *ptr, size_t numBytes, const char *name, HPACDType dType);
 
 
-#define NUM_CHUNKS 8
+#define NUM_CHUNKS 1024
 
 int getPredictionSize() { return RTEnv.predictionSize; }
 int getHistorySize() { return RTEnv.historySize; }
@@ -198,8 +198,8 @@ static inline void create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *
       threadId = 0;
   }
 
-  if (curr && curr->accurate != (unsigned long)user_fn)
-    curr = HPACRegions.findMemo(threadId, (unsigned long)user_fn);
+  if (curr && (curr->accurate != (unsigned long)user_fn || curr->getName() != region_name))
+    curr = HPACRegions.findMemo(threadId, (unsigned long)user_fn, region_name);
 
   if (!curr) {
     int IElem = computeNumElements(inputs, num_inputs);
@@ -209,10 +209,10 @@ static inline void create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *
           RTEnv.db->InstantiateRegion((uintptr_t)user_fn, region_name, inputs,
                                       num_inputs, outputs, num_outputs);
       curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
-                            RTEnv.db, dbRId);
+                            RTEnv.db, dbRId, region_name);
       HPACRegions.addNew(threadId, curr);
     } else {
-      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS);
+      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS, region_name);
       HPACRegions.addNew(threadId, curr);
     }
   }
@@ -252,14 +252,8 @@ void __snapshot_call__(void (*_user_fn_)(void *), void *args,
                                                    // space to library space
 
   // When true we will use HPAC Model for this output
-  bool uncertainty = HPAC_UQPredict(dP.inputs, dP.feature->IElem, dP.outputs,
-                                    dP.feature->OElem);
-  if (uncertainty) {
-    unPackVecToVar(output_vars, num_outputs, dP.outputs);
-  } else {
-    _user_fn_(args);
-    packVarToVec(output_vars, num_outputs, dP.outputs);
-  }
+  _user_fn_(args);
+  packVarToVec(output_vars, num_outputs, dP.outputs);
 }
 
 void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),

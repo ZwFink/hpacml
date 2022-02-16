@@ -3,6 +3,7 @@
 
 #include <hdf5.h>
 #include <vector>
+#include <string>
 
 #include "../approx_internal.h"
 #include "../include/approx.h"
@@ -28,6 +29,7 @@ class HDF5RegionView {
   uintptr_t addr;
   size_t totalNumRows;
   size_t totalNumCols;
+  std::string Name;
 
 private:
   int writeDataLayout(approx_var_info_t *vars, int numVars,
@@ -41,6 +43,7 @@ public:
   ~HDF5RegionView();
   void writeFeatureVecToFile(double *data, int numRows, int numCols);
   uintptr_t getAddr() { return addr; }
+  std::string getName() { return Name; }
 };
 
 class HDF5DB : public BaseDB {
