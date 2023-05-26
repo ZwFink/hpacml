@@ -193,6 +193,9 @@ create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *),
                        int num_outputs) {
   thread_local int threadId = -1;
   thread_local HPACRegion *curr;
+  if(region_name == nullptr) {
+    region_name = "unknown";
+  }
   if (threadId == -1) {
     if (omp_in_parallel())
       threadId = omp_get_thread_num();

@@ -137,14 +137,25 @@ int HDF5RegionView::writeDataLayout(approx_var_info_t *vars, int numVars,
   int dims = 2;
   hid_t tmpspace = H5Screate_simple(dims, dimensions, NULL);
   HDF5_ERROR(tmpspace);
-  hid_t tmpdset =
-      H5Dcreate1(group, groupName, H5T_NATIVE_INT32, tmpspace, H5P_DEFAULT);
-  HDF5_ERROR(tmpdset);
+
+  hid_t tmpdset = hid_t(-1);
+
+  if (!componentExist(groupName, group)) {
+    tmpdset =
+        H5Dcreate1(group, groupName, H5T_NATIVE_INT32, tmpspace, H5P_DEFAULT);
+    HDF5_ERROR(tmpdset);
+  }
+  else {
+    tmpdset = H5Dopen(group, groupName, H5P_DEFAULT);
+    HDF5_ERROR(tmpdset);
+  }
+
   status =
       H5Dwrite(tmpdset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, mem);
   HDF5_ERROR(status);
   status = H5Dclose(tmpdset);
   HDF5_ERROR(status);
+
   status = H5Sclose(tmpspace);
   HDF5_ERROR(status);
 
@@ -187,19 +198,31 @@ void HDF5RegionView::createDataSet(int totalElements, size_t ChunkRows) {
   hsize_t dims[NUM_DIMS] = {0, static_cast<hsize_t>(totalElements)};
   hsize_t maxDims[NUM_DIMS] = {H5S_UNLIMITED,
                                static_cast<hsize_t>(totalElements)};
-  hid_t fileSpace = H5Screate_simple(NUM_DIMS, dims, maxDims);
-  hid_t pList = H5Pcreate(H5P_DATASET_CREATE);
-  H5Pset_layout(pList, H5D_CHUNKED);
-  // CHUNK_DIMS impacts performance considerably.
-  // TODO: give an option to the config file
-  // for this option to work out.
-  hsize_t chunk_dims[NUM_DIMS] = {ChunkRows,
-                                  static_cast<hsize_t>(totalElements)};
-  H5Pset_chunk(pList, NUM_DIMS, chunk_dims);
-  dset = H5Dcreate(group, "data", H5T_NATIVE_DOUBLE, fileSpace, H5P_DEFAULT,
-                   pList, H5P_DEFAULT);
-  H5Sclose(fileSpace);
-  H5Pclose(pList);
+
+  if (!componentExist("data", group)) {
+    hid_t fileSpace = H5Screate_simple(NUM_DIMS, dims, maxDims);
+    hid_t pList = H5Pcreate(H5P_DATASET_CREATE);
+    H5Pset_layout(pList, H5D_CHUNKED);
+    // CHUNK_DIMS impacts performance considerably.
+    // TODO: give an option to the config file
+    // for this option to work out.
+    hsize_t chunk_dims[NUM_DIMS] = {ChunkRows,
+                                    static_cast<hsize_t>(totalElements)};
+    H5Pset_chunk(pList, NUM_DIMS, chunk_dims);
+    dset = H5Dcreate(group, "data", H5T_NATIVE_DOUBLE, fileSpace, H5P_DEFAULT,
+                     pList, H5P_DEFAULT);
+
+    H5Sclose(fileSpace);
+    H5Pclose(pList);
+  } else {
+    dset = H5Dopen(group, "data", H5P_DEFAULT);
+    // existing dataset dimensions
+    hsize_t existing_dims[NUM_DIMS];
+    hid_t dataspace = H5Dget_space(dset);
+    H5Sget_simple_extent_dims(dataspace, existing_dims, NULL);
+    totalNumRows = existing_dims[0];
+    memSpace = dataspace;
+  }
   return;
 }
 
