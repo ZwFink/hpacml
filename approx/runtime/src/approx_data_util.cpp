@@ -374,3 +374,10 @@ void dist_error_var(void *ptr, ApproxType Type,
     }
   }
 }
+
+size_t computeNumElements(approx_var_info_t *vars, int numVars){
+  size_t elements = 0;
+  for (int i = 0; i < numVars; i++)
+    elements+=vars[i].num_elem; 
+  return elements;
+}
