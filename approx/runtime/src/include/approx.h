@@ -10,12 +10,23 @@
 ///
 //===----------------------------------------------------------------------===//
 
-
+#ifndef __APPROX_INC__
+#define __APPROX_INC__
+#include <stdint.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef enum __aprox_datatype_hdf5{
+    HUINT8 = 0,
+    HINT8,
+    HINT, 
+    HFLOAT,
+    HDOUBLE
+}HPACDType;
+
 bool __approx_skip_iteration(unsigned int i, float pr);
 void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
                         void *arg, bool cond, const char *region_name,
@@ -30,4 +41,6 @@ extern int __approx_perfo_step__;
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

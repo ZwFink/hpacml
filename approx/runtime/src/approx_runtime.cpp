@@ -23,8 +23,10 @@
 
 #include "approx.h"
 #include "approx_data_util.h"
+#include "approx_pack.h"
 #include "approx_internal.h"
-#include "approx_io.h"
+#include "thread_storage.h"
+#include "database/database.h"
 
 
 using namespace std;
@@ -56,7 +58,6 @@ enum ExecuteMode: uint8_t{
 class ApproxRuntimeConfiguration{
   ExecuteMode Mode;
 public:
-  HDF5DataWriter *DataProfiler;
   bool ExecuteBoth;
   int tableSize;
   float threshold;
@@ -66,16 +67,24 @@ public:
   float perfoRate;
   float *randomNumbers;
   int count;
+  BaseDB *db;
 
   ApproxRuntimeConfiguration() {
       ExecuteBoth = false;
       count = 0;
 
-    DataProfiler = new HDF5DataWriter("test.h5");
+    // DataProfiler = new HDF5DataWriter("test.h5");
 
     const char *env_p = std::getenv("EXECUTE_BOTH");
     if (env_p){
       ExecuteBoth = true;
+    }
+
+    env_p = std::getenv("HPAC_DB_FILE");
+    if (env_p) {
+      db = new HDF5DB(env_p);
+    } else {
+      db = new HDF5DB("test.h5");
     }
 
     env_p = std::getenv("EXECUTE_MODE");
@@ -145,7 +154,7 @@ public:
 
   ~ApproxRuntimeConfiguration(){
     delete [] randomNumbers;
-    delete DataProfiler;
+    delete db;
     deinitPetrubate();
   }
 
@@ -156,6 +165,9 @@ public:
 };
 
 ApproxRuntimeConfiguration RTEnv;
+ThreadMemoryPool<HPACRegion> HPACRegions;
+
+#define NUM_CHUNKS 8
 
 
 int getPredictionSize() { return RTEnv.predictionSize;}
@@ -180,6 +192,72 @@ bool __approx_skip_iteration(unsigned int i, float pr) {
     index = (index+1)%RAND_SIZE;
     return false;
 }
+
+static inline void
+create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *),
+                       const char *region_name, approx_var_info_t *inputs,
+                       int num_inputs, approx_var_info_t *outputs,
+                       int num_outputs) {
+  thread_local int threadId = -1;
+  thread_local HPACRegion *curr;
+  if(region_name == nullptr) {
+    region_name = "unknown";
+  }
+  if (threadId == -1) {
+    if (omp_in_parallel())
+      threadId = omp_get_thread_num();
+    else
+      threadId = 0;
+  }
+
+  if (curr && (curr->accurate != (unsigned long)user_fn ||
+               curr->getName() != region_name))
+    curr = HPACRegions.findMemo(threadId, (unsigned long)user_fn, region_name);
+
+  if (!curr) {
+    int IElem = computeNumElements(inputs, num_inputs);
+    int OElem = computeNumElements(outputs, num_outputs);
+    if (RTEnv.db != nullptr) {
+      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
+                            region_name);
+      void *dbRId =
+          RTEnv.db->InstantiateRegion((uintptr_t)user_fn, region_name, inputs,
+                                      num_inputs, outputs, num_outputs, curr->getNumRows());
+      curr->setDB(RTEnv.db);
+      curr->setDBRegionId(dbRId);
+      HPACRegions.addNew(threadId, curr);
+    } else {
+      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
+                            region_name);
+      HPACRegions.addNew(threadId, curr);
+    }
+  }
+
+  double *dPtr = reinterpret_cast<double *>(curr->allocate());
+  dP.inputs = dPtr;
+  dP.outputs = dPtr + curr->IElem;
+  dP.feature = curr;
+  return;
+}
+
+// This is the main driver of the HPAC approach.
+void __snapshot_call__(void (*_user_fn_)(void *), void *args,
+                       const char *region_name, void *inputs, int num_inputs,
+                       void *outputs, int num_outputs) {
+  HPACPacket dP;
+  approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
+  approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
+
+  create_snapshot_packet(dP, _user_fn_, region_name, input_vars, num_inputs,
+                         output_vars, num_outputs);
+
+  packVarToVec(input_vars, num_inputs, dP.inputs); // Copy from application
+                                                   // space to library space
+  // When true we will use HPAC Model for this output
+  _user_fn_(args);
+  packVarToVec(output_vars, num_outputs, dP.outputs);
+}
+
 
 void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
                         void *arg, bool cond, const char *region_name,
@@ -207,13 +285,13 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
     accurateFN(arg);
   }
   else if ( (MLType) ml_type == ML_OFFLINETRAIN ){
-    // I need to write the files here
-    RTEnv.DataProfiler->record_start(region_name, input_vars, 
-                        num_inputs, output_vars, num_outputs);
-
-    accurateFN(arg);
-
-    RTEnv.DataProfiler->record_end(region_name, output_vars, num_outputs);
+    if (num_outputs == 0) {
+      __snapshot_call__(accurateFN, arg, region_name, inputs, num_inputs,
+                        nullptr, 0);
+    } else {
+      __snapshot_call__(accurateFN, arg, region_name, inputs, num_inputs,
+                        outputs, num_outputs);
+    }
   }
   else if ( (MLType) ml_type == ML_INFER ){
     // I have not implemented this part
