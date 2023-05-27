@@ -27,6 +27,7 @@
 #include "approx_internal.h"
 #include "thread_storage.h"
 #include "database/database.h"
+#include "approx_surrogate.h"
 
 
 using namespace std;
@@ -68,6 +69,7 @@ public:
   float *randomNumbers;
   int count;
   BaseDB *db;
+  SurrogateModel<float> Model{"/usr/workspace/fink12/torch/model.pt", false};
 
   ApproxRuntimeConfiguration() {
       ExecuteBoth = false;
@@ -295,7 +297,18 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
   }
   else if ( (MLType) ml_type == ML_INFER ){
     // I have not implemented this part
-    accurateFN(arg);
+    float **ipts = new float*[num_inputs];
+    float **opts = new float*[num_outputs];
+    for(int i = 0; i < num_inputs; i++){
+      ipts[i] = static_cast<float*>(input_vars[i].ptr);
+    }
+    for(int i = 0; i < num_outputs; i++){
+      opts[i] = static_cast<float*>(output_vars[i].ptr);
+    }
+    RTEnv.Model.evaluate(1, num_inputs, output_vars->num_elem, ipts, 
+    opts);
+    delete [] ipts;
+    delete [] opts;
   }
   else {
     accurateFN(arg);
