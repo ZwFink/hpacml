@@ -1,4 +1,4 @@
-// Copyright (c) Lawrence Livermore National Security, LLC and other AMS
+//Copyright (c) Lawrence Livermore National Security, LLC and other AMS
 // Project developers. See top-level LICENSE AND COPYRIGHT files for dates and
 // other details. No copyright assignment is required to contribute
 
@@ -66,9 +66,8 @@ private:
   {
     c10::SmallVector<at::Tensor, 8> Tensors;
     for (int i = 0; i < numCols; i++) {
-      Tensors.push_back(torch::from_blob((TypeInValue*)array[i],
-                                         {numRows, 1}
-                                         ));
+      Tensors.push_back(torch::from_blob((TypeInValue *)array[i], {numRows, 1},
+                                         tensorOptions));
     }
     at::Tensor tensor = at::reshape(at::cat(Tensors, 1), {numRows, numCols});
     // temporary hack: using the TensorOptions caused a CUDA error
@@ -124,7 +123,8 @@ private:
       module = torch::jit::load(model_path);
       module.to(device);
       module.to(dType);
-      tensorOptions = torch::TensorOptions().dtype(dType).device(device);
+      module.eval();
+      tensorOptions = torch::TensorOptions().dtype(dType);
     } catch (const c10::Error& e) {
         std::cerr << "error loading the model\n";
     }
@@ -143,7 +143,7 @@ private:
   inline void _load(const std::string& model_path,
                     const std::string& device_name)
   {
-    _load_torch(model_path, torch::Device(device_name), torch::kFloat32);
+    _load_torch(model_path, torch::Device(device_name), torch::kFloat64);
   }
 
   // -------------------------------------------------------------------------
@@ -157,7 +157,6 @@ private:
   {
     auto input = arrayToTensor(num_elements, num_in, inputs);
     at::Tensor output = module.forward({input}).toTensor();
-
     tensorToArray(output, num_elements, num_out, outputs);
   }
 
