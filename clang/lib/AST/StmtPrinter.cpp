@@ -1166,6 +1166,7 @@ void StmtPrinter::VisitDeclRefExpr(DeclRefExpr *Node) {
   if (const auto *TPOD = dyn_cast<TemplateParamObjectDecl>(Node->getDecl())) {
     TPOD->printAsExpr(OS, Policy);
     return;
+  }
   if (const auto *OCED = dyn_cast<ApproxCapturedExprDecl>(Node->getDecl())) {
     OCED->getInit()->IgnoreImpCasts()->printPretty(OS, nullptr, Policy);
     return;
