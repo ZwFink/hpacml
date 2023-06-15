@@ -1911,11 +1911,16 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
                       .get();
 #endif
 
-          B.PerfoSkip = ActOnIfStmt(SourceLocation(), false, nullptr,
-                      ConditionResult(*this, nullptr, FullExprArg(PerfoCond.get()), false),
-                      new (Context) ContinueStmt(SourceLocation()),
-                      SourceLocation(), nullptr).get();
-
+          // FIXME: How do we get l/r paren of if statememt?
+          B.PerfoSkip =
+              ActOnIfStmt(SourceLocation(), IfStatementKind::Ordinary,
+                          PC->getBeginLoc(), nullptr,
+                          ConditionResult(*this, nullptr,
+                                          FullExprArg(PerfoCond.get()), false),
+                          PC->getEndLoc(),
+                          new (Context) ContinueStmt(SourceLocation()),
+                          SourceLocation(), nullptr)
+                  .get();
           break;
         }
         case PT_LARGE: {
@@ -1951,10 +1956,16 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
               /*Action=*/Sema::AA_Casting,
               /*AllowExplicit=*/true);
 
-          B.PerfoSkip = ActOnIfStmt(SourceLocation(), false, nullptr,
-                      ConditionResult(*this, nullptr, FullExprArg(PerfoCond.get()), false),
-                      new (Context) ContinueStmt(SourceLocation()),
-                      SourceLocation(), nullptr).get();
+          // FIXME: How do we get l/r paren of if statememt?
+          B.PerfoSkip =
+              ActOnIfStmt(SourceLocation(), IfStatementKind::Ordinary,
+                          PC->getBeginLoc(), nullptr,
+                          ConditionResult(*this, nullptr,
+                                          FullExprArg(PerfoCond.get()), false),
+                          PC->getEndLoc(),
+                          new (Context) ContinueStmt(SourceLocation()),
+                          SourceLocation(), nullptr)
+                  .get();
           break;
         }
         case PT_SINIT: {
@@ -2032,14 +2043,14 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
           ExprResult CallRes = ActOnCallExpr(getCurScope(), DRE, SourceLocation(), ArgExprs, SourceLocation());
 
           B.PerfoSkip =
-              ActOnIfStmt(
-                  SourceLocation(), false, nullptr,
-                  ConditionResult(*this, nullptr, FullExprArg(CallRes.get()),
-                                  false),
-                  new (Context) ContinueStmt(SourceLocation()),
-                  SourceLocation(), nullptr)
+              ActOnIfStmt(SourceLocation(), IfStatementKind::Ordinary,
+                          PC->getBeginLoc(), nullptr,
+                          ConditionResult(*this, nullptr,
+                                          FullExprArg(CallRes.get()), false),
+                          PC->getEndLoc(),
+                          new (Context) ContinueStmt(SourceLocation()),
+                          SourceLocation(), nullptr)
                   .get();
-
           break;
         }
         default:
