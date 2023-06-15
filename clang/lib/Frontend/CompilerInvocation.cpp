@@ -312,7 +312,7 @@ int getApproxRuntime(const ArgList &Args, DiagnosticsEngine &Diag) {
   return RT;
 }
 
-static llvm::Optional<unsigned> normalizeSimpleEnum(OptSpecifier Opt,
+static std::optional<unsigned> normalizeSimpleEnum(OptSpecifier Opt,
                                                     unsigned TableIndex,
                                                     const ArgList &Args,
                                                     DiagnosticsEngine &Diags) {

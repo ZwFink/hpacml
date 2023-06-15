@@ -2306,7 +2306,7 @@ ApproxClause *Sema::ActOnApproxVarList(ClauseKind Kind,
       Expr::EvalResult Result;
       if (Length && !Length->isValueDependent() &&
           Length->EvaluateAsInt(Result, Context) &&
-          Result.Val.getInt().isNullValue()) {
+          Result.Val.getInt().isZero(0) ) {
         Diag(ELoc,
               diag::err_approx_depend_zero_length_array_section_not_allowed)
             << SimpleExpr->getSourceRange();
