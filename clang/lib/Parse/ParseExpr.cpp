@@ -2005,14 +2005,16 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       if (!LHS.isInvalid() && !HasError && !Length.isInvalid() &&
           !Stride.isInvalid() && Tok.is(tok::r_square)) {
         if (ColonLocFirst.isValid() || ColonLocSecond.isValid()) {
-          if (inApproxScope){
+          if (inApproxScope) {
+            // TODO: Re-add stride to this
             LHS = Actions.ActOnApproxArraySectionExpr(
-                LHS.get(), Loc, ArgExprs.empty() ? nullptr: ArgExprs[0],
-                ColonLocFirst, ColonLocSecond, Length.get(), Stride.get(), RLoc);
+                LHS.get(), Loc, ArgExprs.empty() ? nullptr : ArgExprs[0],
+                ColonLocFirst, Length.get(), RLoc);
           } else {
-          LHS = Actions.ActOnOMPArraySectionExpr(
-              LHS.get(), Loc, ArgExprs.empty() ? nullptr : ArgExprs[0],
-              ColonLocFirst, ColonLocSecond, Length.get(), Stride.get(), RLoc);
+            LHS = Actions.ActOnOMPArraySectionExpr(
+                LHS.get(), Loc, ArgExprs.empty() ? nullptr : ArgExprs[0],
+                ColonLocFirst, ColonLocSecond, Length.get(), Stride.get(),
+                RLoc);
           }
         } else {
           LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
