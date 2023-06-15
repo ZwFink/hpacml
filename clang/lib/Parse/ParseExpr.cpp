@@ -1946,7 +1946,6 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       ExprVector ArgExprs;
       bool HasError = false;
       PreferredType.enterSubscript(Actions, Tok.getLocation(), LHS.get());
-<<<<<<< HEAD
 
       // We try to parse a list of indexes in all language mode first
       // and, in we find 0 or one index, we try to parse an OpenMP array
@@ -1973,21 +1972,10 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             LHS = Actions.CorrectDelayedTyposInExpr(LHS);
             HasError = true;
           }
-=======
-      if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {
-        Diag(Tok, diag::warn_cxx98_compat_generalized_initializer_lists);
-        Idx = ParseBraceInitializer();
-      } else if (getLangOpts().OpenMP || inApproxScope ) {
-        ColonProtectionRAIIObject RAII(*this);
-        // Parse [: or [ expr or [ expr :
-        if (!Tok.is(tok::colon)) {
-          // [ expr
-          Idx = ParseExpression();
->>>>>>> c289206fd97f (Add support for memoization and in/out/inout clause)
         }
       }
 
-      if (ArgExprs.size() <= 1 && getLangOpts().OpenMP) {
+      if (ArgExprs.size() <= 1 && (getLangOpts().OpenMP || inApproxScope) ) {
         ColonProtectionRAIIObject RAII(*this);
         if (Tok.is(tok::colon)) {
           // Consume ':'
@@ -1999,9 +1987,9 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             Length = Actions.CorrectDelayedTyposInExpr(Length);
           }
         }
-        if (getLangOpts().OpenMP >= 50 &&
+        if ((inApproxScope || (getLangOpts().OpenMP >= 50 &&
             (OMPClauseKind == llvm::omp::Clause::OMPC_to ||
-             OMPClauseKind == llvm::omp::Clause::OMPC_from) &&
+             OMPClauseKind == llvm::omp::Clause::OMPC_from))) &&
             Tok.is(tok::colon)) {
           // Consume ':'
           ColonLocSecond = ConsumeToken();
@@ -2013,28 +2001,19 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
 
       SourceLocation RLoc = Tok.getLocation();
       LHS = Actions.CorrectDelayedTyposInExpr(LHS);
-<<<<<<< HEAD
 
       if (!LHS.isInvalid() && !HasError && !Length.isInvalid() &&
           !Stride.isInvalid() && Tok.is(tok::r_square)) {
         if (ColonLocFirst.isValid() || ColonLocSecond.isValid()) {
+          if (inApproxScope){
+            LHS = Actions.ActOnApproxArraySectionExpr(
+                LHS.get(), Loc, ArgExprs.empty() ? nullptr: ArgExprs[0],
+                ColonLocFirst, ColonLocSecond, Length.get(), Stride.get(), RLoc);
+          } else {
           LHS = Actions.ActOnOMPArraySectionExpr(
               LHS.get(), Loc, ArgExprs.empty() ? nullptr : ArgExprs[0],
               ColonLocFirst, ColonLocSecond, Length.get(), Stride.get(), RLoc);
-=======
-      Idx = Actions.CorrectDelayedTyposInExpr(Idx);
-      Length = Actions.CorrectDelayedTyposInExpr(Length);
-      if (!LHS.isInvalid() && !Idx.isInvalid() && !Length.isInvalid() &&
-          Tok.is(tok::r_square)) {
-        if (ColonLoc.isValid()) {
-          if (inApproxScope){
-            LHS = Actions.ActOnApproxArraySectionExpr(LHS.get(), Loc, Idx.get(),
-                                                   ColonLoc, Length.get(), RLoc);
-          }else{
-            LHS = Actions.ActOnOMPArraySectionExpr(LHS.get(), Loc, Idx.get(),
-                                                   ColonLoc, Length.get(), RLoc);
           }
->>>>>>> c289206fd97f (Add support for memoization and in/out/inout clause)
         } else {
           LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
                                                 ArgExprs, RLoc);
