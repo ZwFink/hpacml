@@ -2136,8 +2136,9 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
       for(Stmt *S : cast<CompoundStmt>(LoopBody)->body())
         StmtList.push_back(S);
 
-      CompoundStmt *ExtLoopBody = CompoundStmt::Create(
-          Context, StmtList, SourceLocation(), SourceLocation());
+      CompoundStmt *ExtLoopBody =
+          CompoundStmt::Create(Context, StmtList, FPOptionsOverride(),
+                               SourceLocation(), SourceLocation());
 
       StmtResult NewForStmtRes =
           ActOnForStmt(SourceLocation(), SourceLocation(), B.Init,
