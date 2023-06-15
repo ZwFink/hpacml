@@ -40,9 +40,6 @@ if("${isSystemDir}" STREQUAL "-1")
     set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 endif("${isSystemDir}" STREQUAL "-1")
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native")
-
 set(APPROX_INSTALL_LIBDIR "lib${LLVM_LIBDIR_SUFFIX}")
 set(APPROX_LIBDIR_SUFFIX "" CACHE STRING
 "Suffix of lib installation directory, e.g. 64 => lib64")
