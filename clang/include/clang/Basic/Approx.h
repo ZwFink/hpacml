@@ -35,6 +35,7 @@ enum ClauseKind : uint {
   CK_PERFO = 0,
   CK_MEMO,
   CK_DT,
+  CK_DECL,
   CK_NN,
   CK_USER,
   CK_IF,
@@ -57,8 +58,15 @@ enum PerfoType : uint {
   PT_SFINAL,
   PT_END
 };
-
 const unsigned PT_START = PT_SMALL;
+
+enum DeclType : uint {
+  DT_TENSOR_fUNCTOR = 0,
+  DT_TENSOR,
+  DT_END
+};
+const unsigned DT_START = DT_TENSOR_fUNCTOR;
+
 
 enum MemoType : uint {
   MT_IN = 0,

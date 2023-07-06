@@ -35,7 +35,11 @@ if [ ! -f $clang_bin ]; then
     -DCMAKE_EXPORT_COMPILE_COMMANDS='On'\
     -DCMAKE_BUILD_TYPE='RelWithDebInfo' \
     -DLLVM_FORCE_ENABLE_STATS='On' \
-    -DLLVM_ENABLE_PROJECTS='clang;openmp' \
+    -DLLVM_ENABLE_PROJECTS='clang' \
+    -DLLVM_ENABLE_RUNTIMES='openmp' \
+    -DLLVM_USE_LINKER='lld' \
+    -DCMAKE_C_COMPILER='gcc' \
+    -DCMAKE_CXX_COMPILER='g++' \
     -DLLVM_OPTIMIZED_TABLEGEN='On' \
     -DCLANG_BUILD_EXAMPLES='On' \
     -DBUILD_SHARED_LIBS='On' \
@@ -51,6 +55,8 @@ if [ ! -f $clang_bin ]; then
     echo "export CC=clang" >> hpac_env.sh
     echo "export CPP=clang++" >> hpac_env.sh
 fi
+
+exit
 
 source hpac_env.sh
 

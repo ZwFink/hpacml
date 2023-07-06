@@ -2236,6 +2236,15 @@ ApproxClause *Sema::ActOnApproxDTClause(ClauseKind Kind,
   return new (Context) ApproxDTClause(StartLoc, EndLoc);
 }
 
+ApproxClause *Sema::ActOnApproxDeclClause(ClauseKind Kind,
+                                          ApproxVarListLocTy &Locs) {
+  SourceLocation StartLoc = Locs.StartLoc;
+  SourceLocation EndLoc = Locs.EndLoc;
+
+  llvm::dbgs() << "Identified an ApproxDeclClause\n";
+  return new (Context) ApproxNNClause(StartLoc, EndLoc);
+}
+
 ApproxClause *Sema::ActOnApproxNNClause(ClauseKind Kind,
                                         ApproxVarListLocTy &Locs) {
   SourceLocation StartLoc = Locs.StartLoc;
@@ -2306,7 +2315,7 @@ ApproxClause *Sema::ActOnApproxVarList(ClauseKind Kind,
       Expr::EvalResult Result;
       if (Length && !Length->isValueDependent() &&
           Length->EvaluateAsInt(Result, Context) &&
-          Result.Val.getInt().isZero(0) ) {
+          Result.Val.getInt().isZero() ) {
         Diag(ELoc,
               diag::err_approx_depend_zero_length_array_section_not_allowed)
             << SimpleExpr->getSourceRange();

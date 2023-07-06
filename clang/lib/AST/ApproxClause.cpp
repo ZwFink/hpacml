@@ -22,10 +22,13 @@ using namespace approx;
 using namespace llvm;
 
 const std::string ApproxClause::Name[approx::CK_END] = {
-    "perfo", "memo", "dt", "nn", "user", "if", "in", "out", "inout", "label", "petrubate", "ml"};
+    "perfo", "memo", "dt", "declare", "nn", "user", "if", "in", "out", "inout", "label", "petrubate", "ml"};
 
 const std::string ApproxPerfoClause::PerfoName[approx::PT_END] = {
     "small", "large", "rand", "init", "fini"};
+
+const std::string ApproxDeclClause::DeclName[approx::DT_END] = {
+    "tensor_functor", "tensor"};
 
 const std::string ApproxMemoClause::MemoName[approx::MT_END] = {
     "in", "out"};

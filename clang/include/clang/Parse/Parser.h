@@ -3514,6 +3514,7 @@ private:
   ParseApproxClauseFn ParseApproxMLClause;
   ParseApproxClauseFn ParseApproxPetrubateClause;
   ParseApproxClauseFn ParseApproxDTClause;
+  ParseApproxClauseFn ParseApproxDeclClause;
   ParseApproxClauseFn ParseApproxNNClause;
   ParseApproxClauseFn ParseApproxUserClause;
   ParseApproxClauseFn ParseApproxIfClause;

@@ -813,3 +813,8 @@ void CGApproxRuntime::CGApproxRuntimeEmitMLInit(
         llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 3);
   }
 }
+
+void CGApproxRuntime::CGApproxRuntimeEmitDeclInit(
+    CodeGenFunction &CGF, ApproxDeclClause &DeclClause) {
+      // raise an error that says we hav enot implemented this yet
+    }

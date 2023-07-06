@@ -170,6 +170,19 @@ public:
   Stmt *getPreInit() { return PreInit; }
 };
 
+class ApproxDeclClause : public ApproxClause {
+  approx::DeclType Type;
+  SourceLocation LParenLoc;
+
+  public:
+  static const std::string DeclName[approx::DT_END];
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ApproxDeclClause(approx::DeclType DT, SourceLocation StartLoc,
+                    SourceLocation EndLoc, SourceLocation LParenLoc)
+      : ApproxClause(approx::CK_DECL, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){}
+};
+
 class ApproxPetrubateClause final : public ApproxClause {
   approx::PetrubateType Type;
   SourceLocation LParenLoc;

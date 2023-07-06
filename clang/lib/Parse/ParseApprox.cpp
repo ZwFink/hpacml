@@ -67,6 +67,17 @@ static bool isPetrubateType(Token &Tok, PetrubateType &Kind) {
   return false;
 }
 
+static bool isDeclType(Token &Tok, DeclType &Kind) {
+  for (unsigned i = DT_START; i < DT_END; i++) {
+    enum DeclType DT = (enum DeclType)i;
+    if (Tok.getIdentifierInfo()->getName().equals(ApproxDeclClause::DeclName[DT])) {
+      Kind = DT;
+      return true;
+    }
+  }
+  return false;
+}
+
 bool Parser::ParseApproxVarList(SmallVectorImpl<Expr *> &Vars,
                                 SourceLocation &ELoc) {
   BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
@@ -203,6 +214,35 @@ ApproxClause *Parser::ParseApproxDTClause(ClauseKind CK) {
   return Actions.ActOnApproxDTClause(CK, Locs);
 }
 
+ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
+  
+  // Consume 'declare'
+  ConsumeAnyToken();
+  SourceLocation Loc = Tok.getLocation();
+  // Are we declaring a tensor_functor or a tensor?
+  SourceLocation DeclaredType = ConsumeAnyToken();
+  SourceLocation LParenLoc = Tok.getLocation();
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after, ApproxClause::Name[CK].c_str()))
+    return nullptr;
+
+  DeclType DT;
+  if(!isDeclType(Tok, DT)){
+    return nullptr;
+  }
+
+  // Consume Decl Type (Note: This might be something we want to recurse on later)
+  ConsumeAnyToken();
+
+  SourceLocation ELoc = Tok.getLocation();
+  if (!T.consumeClose())
+    ELoc = T.getCloseLocation();
+
+  // Do we need to pass in the declared type?
+  ApproxVarListLocTy Locs(Loc, LParenLoc, ELoc);
+  return Actions.ActOnApproxDeclClause(CK, Locs);
+}
+
 ApproxClause *Parser::ParseApproxNNClause(ClauseKind CK) {
   SourceLocation Loc = Tok.getLocation();
   SourceLocation ELoc = ConsumeAnyToken();
@@ -303,6 +343,7 @@ bool isApproxClause(Token &Tok, ClauseKind &Kind) {
   for (unsigned i = CK_START; i < CK_END; i++) {
     enum ClauseKind CK = (enum ClauseKind)i;
     if (Tok.getIdentifierInfo()->getName().equals(ApproxClause::Name[CK])) {
+      dbgs() << "Found approx clause " << ApproxClause::Name[CK] << "\n";
       Kind = CK;
       return true;
     }
