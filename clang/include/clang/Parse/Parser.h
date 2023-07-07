@@ -3524,6 +3524,12 @@ private:
   ParseApproxClauseFn ParseApproxLabelClause;
   
 
+
+  ApproxClause *ParseApproxTensorFunctorDeclClause(approx::ClauseKind CK, SourceLocation Loc, 
+  SourceLocation LParenLoc, BalancedDelimiterTracker T);
+
+  ApproxClause *ParseApproxTensorDeclClause(approx::ClauseKind CK, SourceLocation Loc, 
+  SourceLocation LParenLoc, BalancedDelimiterTracker T);
   bool ParseApproxVarList(SmallVectorImpl<Expr*> &Vars, SourceLocation &ELoc);
 
 public:

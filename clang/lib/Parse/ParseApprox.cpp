@@ -217,29 +217,71 @@ ApproxClause *Parser::ParseApproxDTClause(ClauseKind CK) {
 ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
   
   // Consume 'declare'
-  ConsumeAnyToken();
+  auto DeclareTokenLocation = ConsumeAnyToken();
   SourceLocation Loc = Tok.getLocation();
+
   // Are we declaring a tensor_functor or a tensor?
-  SourceLocation DeclaredType = ConsumeAnyToken();
-  SourceLocation LParenLoc = Tok.getLocation();
-  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
-  if (T.expectAndConsume(diag::err_expected_lparen_after, ApproxClause::Name[CK].c_str()))
-    return nullptr;
+  Token DeclaredTypeToken = Tok;
+  auto DeclTypeLoc = ConsumeAnyToken();
+  auto DeclaredTypeString = DeclaredTypeToken.getIdentifierInfo()->getName();
 
   DeclType DT;
-  if(!isDeclType(Tok, DT)){
+  if(!isDeclType(DeclaredTypeToken, DT)){
     return nullptr;
   }
 
+  SourceLocation LParenLoc = Tok.getLocation();
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after, DeclaredTypeString.data()))
+  {
+    return nullptr;
+  }
+
+  if(DT == approx::DeclType::DT_TENSOR) {
+    llvm::dbgs() << "Parsing Tensor Decl\n";
+    return ParseApproxTensorDeclClause(CK, Loc, LParenLoc, T);
+  }
+  else if(DT == approx::DeclType::DT_TENSOR_fUNCTOR) {
+    llvm::dbgs() << "Parsing Tensor Decl\n";
+    return ParseApproxTensorFunctorDeclClause(CK, Loc, LParenLoc, T);
+  }
+  else {
+    llvm_unreachable("Unknown DeclType");
+  }
   // Consume Decl Type (Note: This might be something we want to recurse on later)
+  auto FunctorName = Tok;
   ConsumeAnyToken();
 
-  SourceLocation ELoc = Tok.getLocation();
-  if (!T.consumeClose())
-    ELoc = T.getCloseLocation();
+  // Do we need to pass in the declared type?
+  ApproxVarListLocTy Locs(DeclTypeLoc, LParenLoc, DeclTypeLoc);
+  return Actions.ActOnApproxDeclClause(CK, Locs);
+}
+
+ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLocation Loc, SourceLocation LParenLoc, BalancedDelimiterTracker T) {
+  llvm::dbgs() << "Recognized a Tensor Functor Decl\n";
+
+  // get the name
+  SourceLocation NameLocation = ConsumeAnyToken();
+
+  // skip past the colon
+  ConsumeAnyToken();
+
+  if(T.consumeClose())
+    llvm_unreachable("Expected a close paren");
 
   // Do we need to pass in the declared type?
-  ApproxVarListLocTy Locs(Loc, LParenLoc, ELoc);
+  ApproxVarListLocTy Locs(Loc, LParenLoc, LParenLoc);
+  return Actions.ActOnApproxDeclClause(CK, Locs);
+}
+
+ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation Loc, SourceLocation LParenLoc, BalancedDelimiterTracker T) {
+  llvm::dbgs() << "Recognized a Tensor Decl\n";
+  // Consume Decl Type (Note: This might be something we want to recurse on later)
+  auto TensorName = Tok;
+  ConsumeAnyToken();
+
+  // Do we need to pass in the declared type?
+  ApproxVarListLocTy Locs(Loc, LParenLoc, LParenLoc);
   return Actions.ActOnApproxDeclClause(CK, Locs);
 }
 
