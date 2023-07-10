@@ -23,6 +23,7 @@ using namespace clang;
 using namespace llvm;
 using namespace approx;
 
+
 static bool isMLType(Token &Tok, MLType &Kind) {
   for (unsigned i = ML_START; i < ML_END; i++) {
     enum MLType MT = (enum MLType)i;
@@ -268,27 +269,30 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
 
   // parse the LHS of the tensor functor, looks like [...] = (...)
   auto Begin = Tok.getLocation();
-  ParseApproxNDTensorSlice(Begin, tok::r_square);
+  ApproxNDTensorSlice Slices;
+  ParseApproxNDTensorSlice(Slices, tok::r_square);
 
   // consume the token '='
   ConsumeAnyToken();
 
+  ApproxNDTensorSliceCollection RHSSlices;
+  // parse the RHS of the tensor functor, looks like ([...], [...], ...)
+  ParseApproxNDTensorSliceCollection(RHSSlices);
+
   if(T.consumeClose())
     llvm_unreachable("Expected a close paren");
 
+  ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
   // Do we need to pass in the declared type?
-  ApproxVarListLocTy Locs(Loc, LParenLoc, LParenLoc);
   return Actions.ActOnApproxDeclClause(CK, Locs);
 }
 
-ExprResult Parser::ParseApproxNDTensorSlice(SourceLocation Begin, tok::TokenKind EndToken) {
-  // BalancedDelimiter for bracket
+void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::TokenKind EndToken) {
   BalancedDelimiterTracker T(*this, tok::l_square, tok::r_square);
   if(T.expectAndConsume(diag::err_expected_lsquare_after, "NDTensorSlice"))
-    return ExprError();
+    llvm_unreachable("Expected a left bracket");
 
   SourceLocation LBLoc = T.getOpenLocation();
-  SmallVector<Expr *, 8> Slices;
 
   while (Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
     // Parse a slice expression
@@ -296,7 +300,6 @@ ExprResult Parser::ParseApproxNDTensorSlice(SourceLocation Begin, tok::TokenKind
 
     if (Expr.isInvalid()) {
       llvm::dbgs() << "The slide expression is invalid\n";
-      return ExprError();
     }
 
     Slices.push_back(Expr.get());
@@ -305,12 +308,16 @@ ExprResult Parser::ParseApproxNDTensorSlice(SourceLocation Begin, tok::TokenKind
       llvm::dbgs() << "Identified end token, breaking\n";
       break;
     }
+
+    if (Tok.isNot(tok::comma)) {
+      llvm::dbgs() << "Expected a comma\n";
+      llvm_unreachable("Expected a comma");
+    }
   }
 
   if(T.consumeClose())
   {
     llvm_unreachable("Expected a close bracket");
-    return ExprError();
   }
   SourceLocation RBLoc = T.getCloseLocation();
 
@@ -318,8 +325,43 @@ ExprResult Parser::ParseApproxNDTensorSlice(SourceLocation Begin, tok::TokenKind
   ApproxSliceExpr *LastSlice = dyn_cast<ApproxSliceExpr>(Slices.back());
   FirstSlice->setLBracketLoc(LBLoc);
   LastSlice->setRBracketLoc(RBLoc);
+}
 
-  return ExprResult();
+void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &Slices)
+{
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::r_paren);
+  if(T.expectAndConsume(diag::err_expected_lparen_after, "NDTensorSliceCollection"))
+    llvm_unreachable("Expected a left paren");
+
+  SourceLocation LParenLoc = T.getOpenLocation();
+
+  while (Tok.isNot(tok::r_paren)) {
+    // Parse a slice expression
+    ApproxNDTensorSlice Slice;
+    ParseApproxNDTensorSlice(Slice, tok::r_square);
+
+    Slices.push_back(Slice);
+
+    if (Tok.is(tok::r_paren)) {
+      llvm::dbgs() << "Identified end token, breaking\n";
+      break;
+    }
+
+    // If it's not right paren, should be comma
+    if(Tok.isNot(tok::comma))
+    {
+      llvm_unreachable("Expected a comma");
+    }
+
+    ConsumeAnyToken();
+  }
+
+  SourceLocation RParenLoc = T.getCloseLocation();
+  if(T.consumeClose())
+  {
+    llvm_unreachable("Expected a close paren");
+  }
+
 }
 
 ExprResult Parser::ParseSliceExpression()
@@ -335,6 +377,8 @@ ExprResult Parser::ParseSliceExpression()
   SourceLocation StepLocation = SourceLocation();
 
 
+  // TODO: Here we are potentially parsing OpenMP array section expression because
+  // We should only parse up to a colon or the ']'
   auto StartResult = ParseExpression();
   StartLocation = StartResult.get()->getBeginLoc();
   if (StartResult.isInvalid()) {
