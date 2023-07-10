@@ -953,6 +953,17 @@ void ASTStmtReader::VisitApproxArraySectionExpr(ApproxArraySectionExpr *E) {
   E->setRBracketLoc(readSourceLocation());
 }
 
+void ASTStmtReader::VisitApproxSliceExpr(ApproxSliceExpr *E) {
+  VisitExpr(E);
+  E->setStart(Record.readSubExpr());
+  E->setStop(Record.readSubExpr());
+  E->setStep(Record.readSubExpr());
+  E->setColonLocFirst(readSourceLocation());
+  E->setColonLocSecond(readSourceLocation());
+  E->setLBracketLoc(readSourceLocation());
+  E->setRBracketLoc(readSourceLocation());
+}
+
 void ASTStmtReader::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {
   VisitExpr(E);
   E->setBase(Record.readSubExpr());

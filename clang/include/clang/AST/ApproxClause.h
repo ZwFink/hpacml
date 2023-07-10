@@ -641,6 +641,7 @@ class ApproxClauseVisitorBase{
   RetTy VisitApproxMemoClause(PTR(ApproxMemoClause) S) {DISPATCH(ApproxMemoClause);}
   RetTy VisitApproxMLClause(PTR(ApproxMLClause) S) {DISPATCH(ApproxMLClause);}
   RetTy VisitApproxDTClause(PTR(ApproxDTClause) S) {DISPATCH(ApproxDTClause);}
+  RetTy VisitApproxDeclClause(PTR(ApproxDeclClause) S) {DISPATCH(ApproxDeclClause);}
   RetTy VisitApproxNNClause(PTR(ApproxNNClause) S) {DISPATCH(ApproxNNClause);}
   RetTy VisitApproxUserClause(PTR(ApproxUserClause) S) {DISPATCH(ApproxUserClause);}
   RetTy VisitApproxIfClause(PTR(ApproxIfClause) S) {DISPATCH(ApproxIfClause);}
@@ -660,6 +661,8 @@ class ApproxClauseVisitorBase{
         return VisitApproxMLClause(static_cast<PTR(ApproxMLClause)>(S));
       case approx::CK_DT:
         return VisitApproxDTClause(static_cast<PTR(ApproxDTClause)>(S));
+      case approx::CK_DECL:
+        return VisitApproxDeclClause(static_cast<PTR(ApproxDeclClause)>(S));
       case approx::CK_NN:
         return VisitApproxNNClause(static_cast<PTR(ApproxNNClause)>(S));
       case approx::CK_USER:
@@ -676,7 +679,6 @@ class ApproxClauseVisitorBase{
         return VisitApproxLabelClause(static_cast<PTR(ApproxLabelClause)>(S));
       case approx::CK_PETRUBATE:
         return VisitApproxPetrubateClause(static_cast<PTR(ApproxPetrubateClause)>(S));
-
     }
   }
 

@@ -2245,6 +2245,95 @@ ApproxClause *Sema::ActOnApproxDeclClause(ClauseKind Kind,
   return new (Context) ApproxNNClause(StartLoc, EndLoc);
 }
 
+ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
+                                         SourceLocation ColonLocFirst,
+                                         Expr *Stop,
+                                         SourceLocation ColonLocSecond,
+                                         Expr *Step, SourceLocation RBLoc) {
+  if(Start && Start->getType()->isNonOverloadPlaceholderType()){
+    ExprResult Result = CheckPlaceholderExpr(Start);
+    if(Result.isInvalid())
+      return ExprError();
+    Result = DefaultLvalueConversion(Result.get());
+    if(Result.isInvalid())
+      return ExprError();
+    Start = Result.get();
+  }
+
+  if(Stop && Stop->getType()->isNonOverloadPlaceholderType()){
+    ExprResult Result = CheckPlaceholderExpr(Stop);
+    if(Result.isInvalid())
+      return ExprError();
+    Result = DefaultLvalueConversion(Result.get());
+    if(Result.isInvalid())
+      return ExprError();
+    Stop = Result.get();
+  }
+
+  if(Step && Step->getType()->isNonOverloadPlaceholderType()){
+    ExprResult Result = CheckPlaceholderExpr(Step);
+    if(Result.isInvalid())
+      return ExprError();
+    Result = DefaultLvalueConversion(Result.get());
+    if(Result.isInvalid())
+      return ExprError();
+    Step = Result.get();
+  }
+
+  if (Start) {
+    auto Res =
+        PerformApproxImplicitIntegerConversion(Start->getExprLoc(), Start);
+    if (Res.isInvalid())
+      return ExprError(
+          (Diag(Start->getExprLoc(), diag::err_approx_slice_start_not_integer)
+           << 0 << Start->getSourceRange()));
+    Start = Res.get();
+
+    if (Start->getType()->isSpecificBuiltinType(BuiltinType::Char_S) ||
+        Start->getType()->isSpecificBuiltinType(BuiltinType::Char_U)) {
+      Diag(Start->getExprLoc(), diag::warn_approx_slice_is_char)
+          << 0 << Start->getSourceRange();
+    }
+  }
+
+  // TODO: This can be cleaned up a bit.
+  if (Stop) {
+    auto Res = PerformApproxImplicitIntegerConversion(Stop->getExprLoc(), Stop);
+    if (Res.isInvalid())
+      return ExprError(
+          (Diag(Stop->getExprLoc(), diag::err_approx_slice_start_not_integer)
+           << 1 << Stop->getSourceRange()));
+    Stop = Res.get();
+
+    if (Stop->getType()->isSpecificBuiltinType(BuiltinType::Char_S) ||
+        Stop->getType()->isSpecificBuiltinType(BuiltinType::Char_U)) {
+      Diag(Stop->getExprLoc(), diag::warn_approx_slice_is_char)
+          << 1 << Stop->getSourceRange();
+    }
+  }
+
+  if (Step) {
+    auto Res = PerformApproxImplicitIntegerConversion(Step->getExprLoc(), Step);
+    if (Res.isInvalid())
+      return ExprError(
+          (Diag(Step->getExprLoc(), diag::err_approx_slice_start_not_integer)
+           << 2 << Step->getSourceRange()));
+    Step = Res.get();
+
+    if (Step->getType()->isSpecificBuiltinType(BuiltinType::Char_S) ||
+        Step->getType()->isSpecificBuiltinType(BuiltinType::Char_U)) {
+      Diag(Step->getExprLoc(), diag::warn_approx_slice_is_char)
+          << 2 << Step->getSourceRange();
+    }
+  }
+
+  // TODO: Is 'DependentTy' correct here? I chose it because
+  // the type of the final sliced tensor is dependent.
+  return new (Context)
+      ApproxSliceExpr(Start, Stop, Step, Context.DependentTy, VK_LValue,
+                      OK_Ordinary, LBLoc, ColonLocFirst, ColonLocSecond, RBLoc);
+}
+
 ApproxClause *Sema::ActOnApproxNNClause(ClauseKind Kind,
                                         ApproxVarListLocTy &Locs) {
   SourceLocation StartLoc = Locs.StartLoc;

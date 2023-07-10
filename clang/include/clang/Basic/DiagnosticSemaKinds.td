@@ -10495,7 +10495,12 @@ def err_approx_array_section_use : Error<"Approx array section is not allowed he
 def err_approx_array_shaping_use : Error<"Approx array shaping operation is not allowed here">;
 def err_approx_iterator_use : Error<"Approx iterator is not allowed here">;
 def err_approx_typecheck_section_value : Error<"subscripted value is not an array or pointer">;
+def err_approx_slice_start_not_integer : Error<"slice start is not an integer">;
+def err_approx_slice_stop_not_integer : Error<"slice stop is not an integer">;
+def err_approx_slice_step_not_integer : Error<"slice step is not an integer">;
 def warn_approx_section_is_char : Warning<"array section %select{lower bound|length}0 is of type 'char'">,
+  InGroup<CharSubscript>, DefaultIgnore;
+def warn_approx_slice_is_char : Warning<"array slice %select{start|stop|step}0 is of type 'char'">,
   InGroup<CharSubscript>, DefaultIgnore;
 def err_approx_typecheck_section_not_integer : Error<
   "array section %select{lower bound|length}0 is not an integer">;

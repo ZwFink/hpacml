@@ -18,6 +18,78 @@
 
 namespace clang {
 
+class ApproxSliceExpr : public Expr {
+  enum { START, STOP, STEP, END_EXPR };
+  Stmt *SubExprs[END_EXPR];
+  SourceLocation ColonLocFirst;
+  SourceLocation ColonLocSecond;
+  SourceLocation LBracketLoc;
+  SourceLocation RBracketLoc;
+
+public:
+  ApproxSliceExpr(Expr *Start, Expr *Stop, Expr *Step, QualType Type,
+                        ExprValueKind VK, ExprObjectKind OK,
+                        SourceLocation LBracketLoc,
+                        SourceLocation ColonLocFirst,
+                        SourceLocation ColonLocSecond,
+                        SourceLocation RBracketLoc)
+      : Expr(ApproxSliceExprClass, Type, VK, OK),
+        ColonLocFirst(ColonLocFirst), ColonLocSecond(ColonLocSecond),
+        LBracketLoc(LBracketLoc), RBracketLoc(RBracketLoc) {
+    SubExprs[START] = Start;
+    SubExprs[STOP] = Stop;
+    SubExprs[STEP] = Step;
+    setDependence(computeDependence(this));
+  }
+
+  explicit ApproxSliceExpr(EmptyShell Empty)
+      : Expr(ApproxSliceExprClass, Empty) {}  
+
+
+  Expr *getStart() { return cast<Expr>(SubExprs[START]); }
+  const Expr *getStart() const { return cast<Expr>(SubExprs[START]); }
+  void setStart(Expr *E) { SubExprs[START] = E; }
+
+  Expr *getStop() { return cast<Expr>(SubExprs[STOP]); }
+  const Expr *getStop() const { return cast_or_null<Expr>(SubExprs[STOP]); }
+  void setStop(Expr *E) { SubExprs[STOP] = E; }
+
+  Expr *getStep() { return cast<Expr>(SubExprs[STEP]); }
+  const Expr *getStep() const { return cast_or_null<Expr>(SubExprs[STEP]); }
+  void setStep(Expr *E) { SubExprs[STEP] = E; }
+
+  SourceLocation getBeginLoc() const LLVM_READONLY {
+    return getStart()->getBeginLoc();
+  }
+
+  SourceLocation getEndLoc() const LLVM_READONLY { return RBracketLoc; }
+
+  SourceLocation getColonLocFirst() const { return ColonLocFirst; }
+  void setColonLocFirst(SourceLocation L) { ColonLocFirst = L; }
+  SourceLocation getColonLocSecond() const { return ColonLocSecond; }
+  void setColonLocSecond(SourceLocation L) { ColonLocSecond = L; }
+  SourceLocation getLBracketLoc() const { return LBracketLoc; }
+  void setLBracketLoc(SourceLocation L) { LBracketLoc = L; }
+  SourceLocation getRBracketLoc() const { return RBracketLoc; }
+  void setRBracketLoc(SourceLocation L) { RBracketLoc = L; }
+
+  SourceLocation getExprLoc() const LLVM_READONLY {
+    return getStart()->getExprLoc();
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ApproxSliceExprClass;
+  }
+
+  child_range children() {
+    return child_range(&SubExprs[0], &SubExprs[END_EXPR]);
+  }
+
+  const_child_range children() const {
+    return const_child_range(&SubExprs[0], &SubExprs[END_EXPR]);
+  }
+};
+
 class ApproxArraySectionExpr : public Expr {
   enum { BASE, LOWER_BOUND, LENGTH, END_EXPR };
   Stmt *SubExprs[END_EXPR];

@@ -1418,6 +1418,10 @@ void StmtProfiler::VisitApproxArraySectionExpr(const ApproxArraySectionExpr *S) 
   VisitExpr(S);
 }
 
+void StmtProfiler::VisitApproxSliceExpr(const ApproxSliceExpr *S) {
+  VisitExpr(S);
+}
+
 void StmtProfiler::VisitOMPArraySectionExpr(const OMPArraySectionExpr *S) {
   VisitExpr(S);
 }

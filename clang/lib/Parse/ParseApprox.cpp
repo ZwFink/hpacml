@@ -270,6 +270,9 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
   auto Begin = Tok.getLocation();
   ParseApproxNDTensorSlice(Begin, tok::r_square);
 
+  // consume the token '='
+  ConsumeAnyToken();
+
   if(T.consumeClose())
     llvm_unreachable("Expected a close paren");
 
@@ -284,73 +287,92 @@ ExprResult Parser::ParseApproxNDTensorSlice(SourceLocation Begin, tok::TokenKind
   if(T.expectAndConsume(diag::err_expected_lsquare_after, "NDTensorSlice"))
     return ExprError();
 
-  SmallVector<Expr *, 8> Exprs;
+  SourceLocation LBLoc = T.getOpenLocation();
+  SmallVector<Expr *, 8> Slices;
 
-  while(Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
+  while (Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
     // Parse a slice expression
     auto Expr = ParseSliceExpression();
 
-    if(Expr.isInvalid())
-    {
+    if (Expr.isInvalid()) {
       llvm::dbgs() << "The slide expression is invalid\n";
       return ExprError();
     }
 
-    Exprs.push_back(Expr.get());
+    Slices.push_back(Expr.get());
 
-    if(Tok.is(EndToken))
-    {
+    if (Tok.is(EndToken)) {
       llvm::dbgs() << "Identified end token, breaking\n";
       break;
     }
-
   }
-  
-  // if(T.expectAndConsume(diag::err_expected_rsquare_after, "NDTensorSlice"))
+
   if(T.consumeClose())
   {
     llvm_unreachable("Expected a close bracket");
     return ExprError();
   }
+  SourceLocation RBLoc = T.getCloseLocation();
 
+  ApproxSliceExpr *FirstSlice = dyn_cast<ApproxSliceExpr>(Slices.front());
+  ApproxSliceExpr *LastSlice = dyn_cast<ApproxSliceExpr>(Slices.back());
+  FirstSlice->setLBracketLoc(LBLoc);
+  LastSlice->setRBracketLoc(RBLoc);
 
   return ExprResult();
 }
 
 ExprResult Parser::ParseSliceExpression()
 {
-  auto Start = ParseExpression();
+  Expr *Start = nullptr;
+  Expr *Stop = nullptr;
+  Expr *Step = nullptr;
 
-  if (Start.isInvalid()) {
+  SourceLocation StartLocation = SourceLocation();
+  SourceLocation ColonLocFirst = SourceLocation();
+  SourceLocation StopLocation = SourceLocation();
+  SourceLocation ColonLocSecond = SourceLocation();
+  SourceLocation StepLocation = SourceLocation();
+
+
+  auto StartResult = ParseExpression();
+  StartLocation = StartResult.get()->getBeginLoc();
+  if (StartResult.isInvalid()) {
     llvm::dbgs() << "Invalid start expression\n";
     return ExprError();
   }
+  Start = StartResult.get();
 
-  if(Tok.isNot(tok::colon))
-    return Start;
-
-  ConsumeAnyToken();
-
-  // TOOD: Missing a case where we have start::stride
-  auto End = ParseExpression();
-  if(End.isInvalid())
+  if(Tok.is(tok::colon))
   {
-    llvm::dbgs() << "Invalid end expression\n";
-    return ExprError();
+    ColonLocFirst = Tok.getLocation();
+    ConsumeAnyToken();
+    auto StopResult = ParseExpression();
+    StopLocation = StopResult.get()->getBeginLoc();
+    if (StopResult.isInvalid()) {
+      llvm::dbgs() << "Invalid stop expression\n";
+      return ExprError();
+    }
+    Stop = StopResult.get();
+
   }
 
-  if(Tok.isNot(tok::colon))
-    return End;
-  ConsumeAnyToken();
-
-  auto Stride = ParseExpression();
-  if(Stride.isInvalid())
+  if(Tok.is(tok::colon))
   {
-    llvm::dbgs() << "Invalid stride expression\n";
-    return ExprError();
+    ColonLocSecond = Tok.getLocation();
+    ConsumeAnyToken();
+    auto StepResult = ParseExpression();
+    StepLocation = StepResult.get()->getBeginLoc();
+    if (StepResult.isInvalid()) {
+      llvm::dbgs() << "Invalid step expression\n";
+      return ExprError();
+    }
+    Step = StepResult.get();
   }
 
-  return ExprResult();
+  return Actions.ActOnApproxSliceExpr(SourceLocation(), Start, ColonLocFirst,
+                                      Stop, ColonLocSecond, Step,
+                                      SourceLocation());
 }
 
 ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation Loc, SourceLocation LParenLoc, BalancedDelimiterTracker T) {

@@ -2728,6 +2728,14 @@ public:
                                               ColonLoc, Length, RBracketLoc);
   }
 
+  ExprResult RebuildApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
+                                    SourceLocation ColonLocFirst, Expr *Stop,
+                                    SourceLocation ColonLocSecond, Expr *Step,
+                                    SourceLocation RBLoc) {
+    return getSema().ActOnApproxSliceExpr(LBLoc, Start, ColonLocFirst, Stop,
+                                          ColonLocSecond, Step, RBLoc);
+  }
+
   /// Build a new array section expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -11218,6 +11226,40 @@ TreeTransform<Derived>::TransformApproxArraySectionExpr(ApproxArraySectionExpr *
   return getDerived().RebuildApproxArraySectionExpr(
       Base.get(), E->getBase()->getEndLoc(), LowerBound.get(), E->getColonLoc(),
       Length.get(), E->getRBracketLoc());
+}
+
+template <typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformApproxSliceExpr(ApproxSliceExpr *E) {
+  ExprResult Start;
+  if (E->getStart()) {
+    Start = getDerived().TransformExpr(E->getStart());
+    if (Start.isInvalid())
+      return ExprError();
+  }
+
+  ExprResult Stop;
+  if(E->getStop()) {
+    Stop = getDerived().TransformExpr(E->getStop());
+    if (Stop.isInvalid())
+      return ExprError();
+  }
+
+  ExprResult Step;
+  if (E->getStep()) {
+    Step = getDerived().TransformExpr(E->getStep());
+    if (Step.isInvalid())
+      return ExprError();
+  }
+
+  if(!getDerived().AlwaysRebuild() && Start.get() == E->getStart() &&
+     Stop.get() == E->getStop() && Step.get() == E->getStep())
+    return E;
+
+  return getDerived().RebuildApproxSliceExpr(
+      E->getLBracketLoc(), Start.get(), E->getColonLocFirst(), Stop.get(),
+      E->getColonLocSecond(), Step.get(), E->getRBracketLoc());
+
 }
 
 template <typename Derived>

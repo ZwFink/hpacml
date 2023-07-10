@@ -824,6 +824,18 @@ void ASTStmtWriter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *E) {
   Code = serialization::EXPR_APPROX_ARRAY_SECTION;
 }
 
+void ASTStmtWriter::VisitApproxSliceExpr(ApproxSliceExpr *E) {
+  VisitExpr(E);
+  Record.AddStmt(E->getStart());
+  Record.AddStmt(E->getStop());
+  Record.AddStmt(E->getStep());
+  Record.AddSourceLocation(E->getColonLocFirst());
+  Record.AddSourceLocation(E->getColonLocSecond());
+  Record.AddSourceLocation(E->getLBracketLoc());
+  Record.AddSourceLocation(E->getRBracketLoc());
+  Code = serialization::EXPR_APPROX_SLICE;
+}
+
 void ASTStmtWriter::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {
   VisitExpr(E);
   Record.AddStmt(E->getBase());
