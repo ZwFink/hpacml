@@ -266,12 +266,91 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
   // skip past the colon
   ConsumeAnyToken();
 
+  // parse the LHS of the tensor functor, looks like [...] = (...)
+  auto Begin = Tok.getLocation();
+  ParseApproxNDTensorSlice(Begin, tok::r_square);
+
   if(T.consumeClose())
     llvm_unreachable("Expected a close paren");
 
   // Do we need to pass in the declared type?
   ApproxVarListLocTy Locs(Loc, LParenLoc, LParenLoc);
   return Actions.ActOnApproxDeclClause(CK, Locs);
+}
+
+ExprResult Parser::ParseApproxNDTensorSlice(SourceLocation Begin, tok::TokenKind EndToken) {
+  // BalancedDelimiter for bracket
+  BalancedDelimiterTracker T(*this, tok::l_square, tok::r_square);
+  if(T.expectAndConsume(diag::err_expected_lsquare_after, "NDTensorSlice"))
+    return ExprError();
+
+  SmallVector<Expr *, 8> Exprs;
+
+  while(Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
+    // Parse a slice expression
+    auto Expr = ParseSliceExpression();
+
+    if(Expr.isInvalid())
+    {
+      llvm::dbgs() << "The slide expression is invalid\n";
+      return ExprError();
+    }
+
+    Exprs.push_back(Expr.get());
+
+    if(Tok.is(EndToken))
+    {
+      llvm::dbgs() << "Identified end token, breaking\n";
+      break;
+    }
+
+  }
+  
+  // if(T.expectAndConsume(diag::err_expected_rsquare_after, "NDTensorSlice"))
+  if(T.consumeClose())
+  {
+    llvm_unreachable("Expected a close bracket");
+    return ExprError();
+  }
+
+
+  return ExprResult();
+}
+
+ExprResult Parser::ParseSliceExpression()
+{
+  auto Start = ParseExpression();
+
+  if (Start.isInvalid()) {
+    llvm::dbgs() << "Invalid start expression\n";
+    return ExprError();
+  }
+
+  if(Tok.isNot(tok::colon))
+    return Start;
+
+  ConsumeAnyToken();
+
+  // TOOD: Missing a case where we have start::stride
+  auto End = ParseExpression();
+  if(End.isInvalid())
+  {
+    llvm::dbgs() << "Invalid end expression\n";
+    return ExprError();
+  }
+
+  if(Tok.isNot(tok::colon))
+    return End;
+  ConsumeAnyToken();
+
+  auto Stride = ParseExpression();
+  if(Stride.isInvalid())
+  {
+    llvm::dbgs() << "Invalid stride expression\n";
+    return ExprError();
+  }
+
+  return ExprResult();
 }
 
 ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation Loc, SourceLocation LParenLoc, BalancedDelimiterTracker T) {

@@ -3530,6 +3530,13 @@ private:
 
   ApproxClause *ParseApproxTensorDeclClause(approx::ClauseKind CK, SourceLocation Loc, 
   SourceLocation LParenLoc, BalancedDelimiterTracker T);
+
+
+  // TODO: Probably refactor needed: We don't need the location shere, because we can get them
+  // We may want a later version that uses just the locations and not the cached tokens.
+  ExprResult ParseApproxNDTensorSlice(SourceLocation Begin,
+                                      tok::TokenKind EndToken);
+  ExprResult ParseSliceExpression();                                
   bool ParseApproxVarList(SmallVectorImpl<Expr*> &Vars, SourceLocation &ELoc);
 
 public:

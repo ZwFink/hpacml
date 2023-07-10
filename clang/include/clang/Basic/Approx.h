@@ -17,6 +17,8 @@
 
 #include "clang/Basic/SourceLocation.h"
 
+#include <optional>
+
 namespace clang {
 namespace approx {
 
@@ -102,6 +104,18 @@ struct ApproxVarListLocTy {
   ApproxVarListLocTy(SourceLocation StartLoc, SourceLocation LParenLoc,
                      SourceLocation EndLoc)
       : StartLoc(StartLoc), LParenLoc(LParenLoc), EndLoc(EndLoc) {}
+};
+
+struct ApproxSliceLocTy {
+  std::optional<SourceLocation> StartLoc;
+  std::optional<SourceLocation> StopLoc;
+  std::optional<SourceLocation> StepLoc;
+
+  ApproxSliceLocTy() = default;
+  ApproxSliceLocTy(std::optional<SourceLocation> StartLoc,
+                   std::optional<SourceLocation> StopLoc,
+                   std::optional<SourceLocation> StepLoc)
+      : StartLoc(StartLoc), StopLoc(StopLoc), StepLoc(StepLoc) {}
 };
 
 } // namespace approx
