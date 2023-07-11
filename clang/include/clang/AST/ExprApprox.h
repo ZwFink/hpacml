@@ -28,17 +28,16 @@ class ApproxSliceExpr : public Expr {
 
 public:
   ApproxSliceExpr(Expr *Start, Expr *Stop, Expr *Step, QualType Type,
-                        ExprValueKind VK, ExprObjectKind OK,
-                        SourceLocation LBracketLoc,
-                        SourceLocation ColonLocFirst,
-                        SourceLocation ColonLocSecond,
-                        SourceLocation RBracketLoc)
-      : Expr(ApproxSliceExprClass, Type, VK, OK),
-        ColonLocFirst(ColonLocFirst), ColonLocSecond(ColonLocSecond),
-        LBracketLoc(LBracketLoc), RBracketLoc(RBracketLoc) {
+                  ExprValueKind VK, ExprObjectKind OK,
+                  SourceLocation LBracketLoc, SourceLocation ColonLocFirst,
+                  SourceLocation ColonLocSecond, SourceLocation RBracketLoc)
+      : Expr(ApproxSliceExprClass, Type, VK, OK), ColonLocFirst(ColonLocFirst),
+        ColonLocSecond(ColonLocSecond), LBracketLoc(LBracketLoc),
+        RBracketLoc(RBracketLoc) {
     SubExprs[START] = Start;
     SubExprs[STOP] = Stop;
     SubExprs[STEP] = Step;
+
     setDependence(computeDependence(this));
   }
 
@@ -46,15 +45,15 @@ public:
       : Expr(ApproxSliceExprClass, Empty) {}  
 
 
-  Expr *getStart() { return cast<Expr>(SubExprs[START]); }
-  const Expr *getStart() const { return cast<Expr>(SubExprs[START]); }
+  Expr *getStart() { return cast_or_null<Expr>(SubExprs[START]); }
+  const Expr *getStart() const { return cast_or_null<Expr>(SubExprs[START]); }
   void setStart(Expr *E) { SubExprs[START] = E; }
 
   Expr *getStop() { return cast<Expr>(SubExprs[STOP]); }
-  const Expr *getStop() const { return cast_or_null<Expr>(SubExprs[STOP]); }
+  const Expr *getStop() const { return cast<Expr>(SubExprs[STOP]); }
   void setStop(Expr *E) { SubExprs[STOP] = E; }
 
-  Expr *getStep() { return cast<Expr>(SubExprs[STEP]); }
+  Expr *getStep() { return cast_or_null<Expr>(SubExprs[STEP]); }
   const Expr *getStep() const { return cast_or_null<Expr>(SubExprs[STEP]); }
   void setStep(Expr *E) { SubExprs[STEP] = E; }
 

@@ -1148,7 +1148,7 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
         }
       }
 
-      if ((!ColonIsSacred && Next.is(tok::colon)) ||
+      if ((!ColonIsSacred && Next. is(tok::colon)) ||
           Next.isOneOf(tok::coloncolon, tok::less, tok::l_paren,
                        tok::l_brace)) {
         // If TryAnnotateTypeOrScopeToken annotates the token, tail recurse.
@@ -1975,7 +1975,9 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         }
       }
 
-      if (ArgExprs.size() <= 1 && (getLangOpts().OpenMP || inApproxScope) ) {
+      if (ArgExprs.size() <= 1 &&
+          (getLangOpts().OpenMP ||
+           approxScope == ApproxScope::APPROX_ARRAY_SECTION)) {
         ColonProtectionRAIIObject RAII(*this);
         if (Tok.is(tok::colon)) {
           // Consume ':'
@@ -1987,7 +1989,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             Length = Actions.CorrectDelayedTyposInExpr(Length);
           }
         }
-        if ((inApproxScope || (getLangOpts().OpenMP >= 50 &&
+        if ((approxScope == ApproxScope::APPROX_ARRAY_SECTION || (getLangOpts().OpenMP >= 50 &&
             (OMPClauseKind == llvm::omp::Clause::OMPC_to ||
              OMPClauseKind == llvm::omp::Clause::OMPC_from))) &&
             Tok.is(tok::colon)) {
@@ -2005,7 +2007,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       if (!LHS.isInvalid() && !HasError && !Length.isInvalid() &&
           !Stride.isInvalid() && Tok.is(tok::r_square)) {
         if (ColonLocFirst.isValid() || ColonLocSecond.isValid()) {
-          if (inApproxScope) {
+          if (approxScope == ApproxScope::APPROX_ARRAY_SECTION) {
             // TODO: Re-add stride to this
             LHS = Actions.ActOnApproxArraySectionExpr(
                 LHS.get(), Loc, ArgExprs.empty() ? nullptr : ArgExprs[0],

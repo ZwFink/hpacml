@@ -239,11 +239,9 @@ ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
   }
 
   if(DT == approx::DeclType::DT_TENSOR) {
-    llvm::dbgs() << "Parsing Tensor Decl\n";
     return ParseApproxTensorDeclClause(CK, Loc, LParenLoc, T);
   }
   else if(DT == approx::DeclType::DT_TENSOR_fUNCTOR) {
-    llvm::dbgs() << "Parsing Tensor Decl\n";
     return ParseApproxTensorFunctorDeclClause(CK, Loc, LParenLoc, T);
   }
   else {
@@ -259,7 +257,7 @@ ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
 }
 
 ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLocation Loc, SourceLocation LParenLoc, BalancedDelimiterTracker T) {
-  llvm::dbgs() << "Recognized a Tensor Functor Decl\n";
+  approxScope = ApproxScope::APPROX_TENSOR_SLICE;
 
   // get the name
   SourceLocation NameLocation = ConsumeAnyToken();
@@ -305,12 +303,10 @@ void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::Toke
     Slices.push_back(Expr.get());
 
     if (Tok.is(EndToken)) {
-      llvm::dbgs() << "Identified end token, breaking\n";
       break;
     }
 
     if (Tok.isNot(tok::comma)) {
-      llvm::dbgs() << "Expected a comma\n";
       llvm_unreachable("Expected a comma");
     }
   }
@@ -343,7 +339,6 @@ void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &S
     Slices.push_back(Slice);
 
     if (Tok.is(tok::r_paren)) {
-      llvm::dbgs() << "Identified end token, breaking\n";
       break;
     }
 
@@ -379,13 +374,15 @@ ExprResult Parser::ParseSliceExpression()
 
   // TODO: Here we are potentially parsing OpenMP array section expression because
   // We should only parse up to a colon or the ']'
-  auto StartResult = ParseExpression();
-  StartLocation = StartResult.get()->getBeginLoc();
-  if (StartResult.isInvalid()) {
-    llvm::dbgs() << "Invalid start expression\n";
-    return ExprError();
+  if (Tok.isNot(tok::colon)) {
+    auto StartResult = ParseExpression();
+    StartLocation = StartResult.get()->getBeginLoc();
+    if (StartResult.isInvalid()) {
+      llvm::dbgs() << "Invalid start expression\n";
+      return ExprError();
+    }
+    Start = StartResult.get();
   }
-  Start = StartResult.get();
 
   if(Tok.is(tok::colon))
   {
@@ -541,7 +538,8 @@ bool isApproxClause(Token &Tok, ClauseKind &Kind) {
 StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_approx_start));
   /// This should be a function call;
-  inApproxScope = true;
+  // assume approx array section scope
+  approxScope = ApproxScope::APPROX_ARRAY_SECTION;
 #define PARSER_CALL(method) ((*this).*(method))
 
   StmtResult Directive = StmtError();
@@ -560,7 +558,7 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   if (Tok.is(tok::eod) || Tok.is(tok::eof)) {
     PP.Diag(Tok, diag::err_pragma_approx_expected_directive);
     ConsumeAnyToken();
-    inApproxScope = false;
+    approxScope = ApproxScope::APPROX_NONE;
     return Directive;
   }
 
@@ -570,14 +568,14 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
       ApproxClause *Clause = PARSER_CALL(ParseApproxClause[CK])(CK);
       if (!Clause) {
         SkipUntil(tok::annot_pragma_approx_end);
-        inApproxScope = false;
+        approxScope = ApproxScope::APPROX_NONE;
         return Directive;
       }
       Clauses.push_back(Clause);
     } else {
       PP.Diag(Tok, diag::err_pragma_approx_unrecognized_directive);
       SkipUntil(tok::annot_pragma_approx_end);
-      inApproxScope = false;
+      approxScope = ApproxScope::APPROX_NONE;
       return Directive;
     }
   }
@@ -591,6 +589,6 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   Actions.ActOnCapturedRegionStart(Tok.getEndLoc(), getCurScope(), CR_Default, /* NumParams = */1);
   StmtResult AssociatedStmt = (Sema::CompoundScopeRAII(Actions), ParseStatement());
   Directive = Actions.ActOnApproxDirective(AssociatedStmt.get(), Clauses, Locs);
-  inApproxScope = false;
+  approxScope = ApproxScope::APPROX_NONE;
   return Directive;
 }
