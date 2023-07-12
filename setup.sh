@@ -33,11 +33,9 @@ if [ ! -f $clang_bin ]; then
     -DCMAKE_INSTALL_PREFIX=$prefix \
     -DLLVM_CCACHE_BUILD='Off'\
     -DCMAKE_EXPORT_COMPILE_COMMANDS='On'\
-    -DCMAKE_BUILD_TYPE='RelWithDebInfo' \
+    -DCMAKE_BUILD_TYPE='Debug' \
     -DLLVM_FORCE_ENABLE_STATS='On' \
     -DLLVM_ENABLE_PROJECTS='clang' \
-    -DLLVM_ENABLE_RUNTIMES='openmp' \
-    -DLLVM_USE_LINKER='lld' \
     -DCMAKE_C_COMPILER='gcc' \
     -DCMAKE_CXX_COMPILER='g++' \
     -DLLVM_OPTIMIZED_TABLEGEN='On' \
