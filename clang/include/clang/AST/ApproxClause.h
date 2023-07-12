@@ -24,8 +24,13 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/TrailingObjects.h"
 
+
+// TOOD: This is a hack, this must match the definitions in Parser.h
+using ApproxNDTensorSlice = llvm::SmallVector<clang::Expr *, 8>;
+using ApproxNDTensorSliceCollection = llvm::SmallVector<ApproxNDTensorSlice, 16>;
 
 
 namespace clang {
@@ -180,7 +185,7 @@ class ApproxDeclClause : public ApproxClause {
   /// \param EndLoc Ending location of the clause.
   ApproxDeclClause(approx::DeclType DT, SourceLocation StartLoc,
                     SourceLocation EndLoc, SourceLocation LParenLoc)
-      : ApproxClause(approx::CK_DECL, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){}
+      : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){}
 };
 
 class ApproxPetrubateClause final : public ApproxClause {
@@ -289,6 +294,30 @@ public:
   static bool classof(const ApproxClause *T) {
     return T->getClauseKind() == approx::CK_DT;
   }
+};
+
+class ApproxTensorFunctorDeclClause final : public ApproxClause {
+
+  ApproxNDTensorSlice LHSSlice;
+  ApproxNDTensorSliceCollection RHSSlices;
+
+  public:
+    ApproxTensorFunctorDeclClause(SourceLocation StartLoc,
+                                  SourceLocation EndLoc,
+                                  ApproxNDTensorSlice LHSSlice,
+                                  ApproxNDTensorSliceCollection RHSSlices)
+        : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc),
+          LHSSlice{LHSSlice}, RHSSlices{RHSSlices} {}
+
+    // build an empty clause 
+    ApproxTensorFunctorDeclClause()
+        : ApproxClause(approx::CK_TF_DECL, SourceLocation(), SourceLocation()),
+        LHSSlice{}, RHSSlices{} {}
+
+
+    static bool classof(const ApproxClause *T) {
+      return T->getClauseKind() == approx::CK_TF_DECL;
+    }
 };
 
 class ApproxMLClause final : public ApproxClause {
@@ -661,7 +690,7 @@ class ApproxClauseVisitorBase{
         return VisitApproxMLClause(static_cast<PTR(ApproxMLClause)>(S));
       case approx::CK_DT:
         return VisitApproxDTClause(static_cast<PTR(ApproxDTClause)>(S));
-      case approx::CK_DECL:
+      case approx::CK_TF_DECL:
         return VisitApproxDeclClause(static_cast<PTR(ApproxDeclClause)>(S));
       case approx::CK_NN:
         return VisitApproxNNClause(static_cast<PTR(ApproxNNClause)>(S));

@@ -37,7 +37,7 @@ enum ClauseKind : uint {
   CK_PERFO = 0,
   CK_MEMO,
   CK_DT,
-  CK_DECL,
+  CK_TF_DECL,
   CK_NN,
   CK_USER,
   CK_IF,
