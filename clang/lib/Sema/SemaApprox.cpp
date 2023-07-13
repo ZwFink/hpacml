@@ -2238,15 +2238,16 @@ ApproxClause *Sema::ActOnApproxDTClause(ClauseKind Kind,
 }
 
 ApproxClause *
-Sema::ActOnApproxTFDeclClause(ClauseKind Kind, ApproxNDTensorSlice &LHSSlice,
-                              ApproxNDTensorSliceCollection &RHSSlices,
-                              ApproxVarListLocTy &Locs) {
-  SourceLocation StartLoc = Locs.StartLoc;
-  SourceLocation EndLoc = Locs.EndLoc;
+Sema::ActOnApproxTFDeclClause(ClauseKind Kind, llvm::StringRef TensorName,
+    ApproxNDTensorSlice &LHSSlice, ApproxNDTensorSliceCollection &RHSSlices,
+    ApproxVarListLocTy &Locs) {
+    SourceLocation StartLoc = Locs.StartLoc;
+    SourceLocation EndLoc = Locs.EndLoc;
 
-  llvm::dbgs() << "Identified an ApproxDeclClause\n";
-  return new (Context) ApproxTensorFunctorDeclClause(StartLoc, EndLoc, LHSSlice, RHSSlices);
-}
+    llvm::dbgs() << "Identified an ApproxDeclClause\n";
+    return new (Context) ApproxTensorFunctorDeclClause(
+        StartLoc, EndLoc, TensorName, LHSSlice, RHSSlices);
+  }
 
 ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
                                          SourceLocation ColonLocFirst,

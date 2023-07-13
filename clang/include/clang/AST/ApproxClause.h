@@ -299,22 +299,23 @@ public:
 
 class ApproxTensorFunctorDeclClause final : public ApproxClause {
 
+  std::string FunctorName;
   ApproxNDTensorSlice LHSSlice;
   ApproxNDTensorSliceCollection RHSSlices;
 
   public:
     ApproxTensorFunctorDeclClause(SourceLocation StartLoc,
                                   SourceLocation EndLoc,
+                                  llvm::StringRef FunctorName,
                                   ApproxNDTensorSlice LHSSlice,
                                   ApproxNDTensorSliceCollection RHSSlices)
         : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc),
-          LHSSlice{LHSSlice}, RHSSlices{RHSSlices} {}
+          FunctorName{FunctorName}, LHSSlice{LHSSlice}, RHSSlices{RHSSlices} {}
 
     // build an empty clause 
     ApproxTensorFunctorDeclClause()
         : ApproxClause(approx::CK_TF_DECL, SourceLocation(), SourceLocation()),
-        LHSSlice{}, RHSSlices{} {}
-
+        FunctorName{}, LHSSlice{}, RHSSlices{} {}
 
     static bool classof(const ApproxClause *T) {
       return T->getClauseKind() == approx::CK_TF_DECL;

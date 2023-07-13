@@ -253,8 +253,10 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
   approxScope = ApproxScope::APPROX_TENSOR_SLICE;
 
   // get the name
-  SourceLocation NameLocation = ConsumeAnyToken();
+  SourceLocation NameLocation = Tok.getLocation();
+  auto Name = Tok.getIdentifierInfo()->getName();
 
+  ConsumeAnyToken(); // skip past the name
   // skip past the colon
   ConsumeAnyToken();
 
@@ -275,7 +277,7 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
 
   ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
   // Do we need to pass in the declared type?
-  return Actions.ActOnApproxTFDeclClause(CK, Slices, RHSSlices, Locs);
+  return Actions.ActOnApproxTFDeclClause(CK, Name, Slices, RHSSlices, Locs);
 }
 
 void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::TokenKind EndToken) {

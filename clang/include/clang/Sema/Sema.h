@@ -11395,10 +11395,10 @@ public:
                                       approx::MLType MType,
                                       approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxDTClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
-  ApproxClause *
-  ActOnApproxTFDeclClause(approx::ClauseKind Kind, ApproxNDTensorSlice &LHSSlice,
-                                ApproxNDTensorSliceCollection &RHSSlices,
-                                approx::ApproxVarListLocTy &Locs);
+  ApproxClause *ActOnApproxTFDeclClause(
+      approx::ClauseKind Kind, llvm::StringRef TensorName, ApproxNDTensorSlice &LHSSlice,
+      ApproxNDTensorSliceCollection &RHSSlices,
+      approx::ApproxVarListLocTy &Locs);
 
   ApproxClause *ActOnApproxNNClause(approx::ClauseKind Kind,
                                     approx::ApproxVarListLocTy &Locs);
