@@ -11377,6 +11377,7 @@ public:
   /// Return the number of captured regions created for an OpenMP directive.
   static int getOpenMPCaptureLevels(OpenMPDirectiveKind Kind);
 
+
   /// Called after parsing the '\#pragma approx' directive.
   StmtResult ActOnApproxDirective(Stmt *AssociatedStmt, ArrayRef<ApproxClause *> Clauses, approx::ApproxVarListLocTy &Locs);
   //Called to process each approx clause respectively
@@ -11394,8 +11395,13 @@ public:
                                       approx::MLType MType,
                                       approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxDTClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
-  ApproxClause* ActOnApproxDeclClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
-  ApproxClause* ActOnApproxNNClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
+  ApproxClause *
+  ActOnApproxTFDeclClause(approx::ClauseKind Kind, ApproxNDTensorSlice &LHSSlice,
+                                ApproxNDTensorSliceCollection &RHSSlices,
+                                approx::ApproxVarListLocTy &Locs);
+
+  ApproxClause *ActOnApproxNNClause(approx::ClauseKind Kind,
+                                    approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxUserClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxIfClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs, Expr *Cond);
   ApproxClause* ActOnApproxVarList(approx::ClauseKind Kind, ArrayRef<Expr *> Vars, approx::ApproxVarListLocTy &Locs);

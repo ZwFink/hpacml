@@ -3042,6 +3042,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       S = new (Context) ApproxArraySectionExpr(Empty);
       break;
 
+    case EXPR_APPROX_SLICE:
+      S = new (Context) ApproxSliceExpr(Empty);
+      break;
+
     case EXPR_OMP_ARRAY_SECTION:
       S = new (Context) OMPArraySectionExpr(Empty);
       break;

@@ -247,13 +247,6 @@ ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
   else {
     llvm_unreachable("Unknown DeclType");
   }
-  // Consume Decl Type (Note: This might be something we want to recurse on later)
-  auto FunctorName = Tok;
-  ConsumeAnyToken();
-
-  // Do we need to pass in the declared type?
-  ApproxVarListLocTy Locs(DeclTypeLoc, LParenLoc, DeclTypeLoc);
-  return Actions.ActOnApproxDeclClause(CK, Locs);
 }
 
 ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLocation Loc, SourceLocation LParenLoc, BalancedDelimiterTracker T) {
@@ -282,7 +275,7 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
 
   ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
   // Do we need to pass in the declared type?
-  return Actions.ActOnApproxDeclClause(CK, Locs);
+  return Actions.ActOnApproxTFDeclClause(CK, Slices, RHSSlices, Locs);
 }
 
 void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::TokenKind EndToken) {
@@ -424,7 +417,9 @@ ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation 
 
   // Do we need to pass in the declared type?
   ApproxVarListLocTy Locs(Loc, LParenLoc, LParenLoc);
-  return Actions.ActOnApproxDeclClause(CK, Locs);
+  // return Actions.ActOnApproxDeclClause(CK, Locs);
+  llvm_unreachable("Not implemented yet");
+  return nullptr;
 }
 
 ApproxClause *Parser::ParseApproxNNClause(ClauseKind CK) {
@@ -523,11 +518,9 @@ ApproxClause *Parser::ParseApproxLabelClause(ClauseKind CK) {
 }
 
 bool isApproxClause(Token &Tok, ClauseKind &Kind) {
-  dbgs () << "Checking if clause is approx\n";
   for (unsigned i = CK_START; i < CK_END; i++) {
     enum ClauseKind CK = (enum ClauseKind)i;
     if (Tok.getIdentifierInfo()->getName().equals(ApproxClause::Name[CK])) {
-      dbgs() << "Found approx clause " << ApproxClause::Name[CK] << "\n";
       Kind = CK;
       return true;
     }

@@ -2170,6 +2170,7 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
   assert(CS && "Expected non-null CS");
   ApproxDirective *Stmt = ApproxDirective::Create(Context, Locs.StartLoc,
                                                   Locs.EndLoc, CS, Clauses, B);
+  // TODO: This should be implemented for declare tensor_functor
   Stmt->printPretty(dbgs(), nullptr, this->getPrintingPolicy());
   return Stmt;
 }
@@ -2236,13 +2237,15 @@ ApproxClause *Sema::ActOnApproxDTClause(ClauseKind Kind,
   return new (Context) ApproxDTClause(StartLoc, EndLoc);
 }
 
-ApproxClause *Sema::ActOnApproxDeclClause(ClauseKind Kind,
-                                          ApproxVarListLocTy &Locs) {
+ApproxClause *
+Sema::ActOnApproxTFDeclClause(ClauseKind Kind, ApproxNDTensorSlice &LHSSlice,
+                              ApproxNDTensorSliceCollection &RHSSlices,
+                              ApproxVarListLocTy &Locs) {
   SourceLocation StartLoc = Locs.StartLoc;
   SourceLocation EndLoc = Locs.EndLoc;
 
   llvm::dbgs() << "Identified an ApproxDeclClause\n";
-  return new (Context) ApproxNNClause(StartLoc, EndLoc);
+  return new (Context) ApproxTensorFunctorDeclClause(StartLoc, EndLoc, LHSSlice, RHSSlices);
 }
 
 ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
