@@ -412,6 +412,11 @@ Parser::ParseRHSOfBinaryExpression(ExprResult LHS, prec::Level MinPrec) {
     if (NextTokPrec < MinPrec)
       return LHS;
 
+    if(Tok.is(tok::comma) && approxScope == ApproxScope::APPROX_TENSOR_SLICE) {
+      // if we're parsing a tensor slice, then the comma indicates that we're done.
+      return LHS;
+    }
+
     // Consume the operator, saving the operator token for error reporting.
     Token OpToken = Tok;
     ConsumeToken();
@@ -1951,7 +1956,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       // and, in we find 0 or one index, we try to parse an OpenMP array
       // section. This allow us to support C++23 multi dimensional subscript and
       // OpenMp sections in the same language mode.
-      if (!getLangOpts().OpenMP || Tok.isNot(tok::colon)) {
+      if ( approxScope == ApproxScope::APPROX_NONE && (!getLangOpts().OpenMP || Tok.isNot(tok::colon))) {
         if (!getLangOpts().CPlusPlus23) {
           ExprResult Idx;
           if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {
@@ -1977,9 +1982,26 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
 
       if (ArgExprs.size() <= 1 &&
           (getLangOpts().OpenMP ||
-           approxScope == ApproxScope::APPROX_ARRAY_SECTION)) {
+           approxScope == ApproxScope::APPROX_ARRAY_SECTION 
+           || approxScope == ApproxScope::APPROX_TENSOR_SLICE_DECL)) {
         ColonProtectionRAIIObject RAII(*this);
-        if (Tok.is(tok::colon)) {
+        if(approxScope == ApproxScope::APPROX_TENSOR_SLICE_DECL) {
+          ApproxNDTensorSlice Slice;
+
+          approxScope = ApproxScope::APPROX_TENSOR_SLICE;
+          ParseApproxNDTensorSlice(Slice, tok::r_square);
+          approxScope = ApproxScope::APPROX_TENSOR_SLICE_DECL;
+
+          SourceLocation RLoc = Tok.getLocation();
+          LHS = Actions.ActOnApproxArraySliceExpr(LHS.get(), Loc, Slice, Tok.getLocation());
+          LHS = Actions.CorrectDelayedTyposInExpr(LHS);
+
+          // Match the ']'.
+          T.consumeClose();
+          break;
+
+        }
+        else if (Tok.is(tok::colon)) {
           // Consume ':'
           ColonLocFirst = ConsumeToken();
           if (Tok.isNot(tok::r_square) &&
@@ -1989,9 +2011,11 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             Length = Actions.CorrectDelayedTyposInExpr(Length);
           }
         }
-        if ((approxScope == ApproxScope::APPROX_ARRAY_SECTION || (getLangOpts().OpenMP >= 50 &&
-            (OMPClauseKind == llvm::omp::Clause::OMPC_to ||
-             OMPClauseKind == llvm::omp::Clause::OMPC_from))) &&
+        if ((approxScope == ApproxScope::APPROX_ARRAY_SECTION
+              ||
+             (getLangOpts().OpenMP >= 50 &&
+              (OMPClauseKind == llvm::omp::Clause::OMPC_to ||
+               OMPClauseKind == llvm::omp::Clause::OMPC_from))) &&
             Tok.is(tok::colon)) {
           // Consume ':'
           ColonLocSecond = ConsumeToken();

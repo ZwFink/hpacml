@@ -232,25 +232,27 @@ ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
   }
 
   SourceLocation LParenLoc = Tok.getLocation();
-  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
-  if (T.expectAndConsume(diag::err_expected_lparen_after, DeclaredTypeString.data()))
-  {
-    return nullptr;
-  }
 
   if(DT == approx::DeclType::DT_TENSOR) {
-    return ParseApproxTensorDeclClause(CK, Loc, LParenLoc, T);
+    return ParseApproxTensorDeclClause(CK, Loc);
   }
   else if(DT == approx::DeclType::DT_TENSOR_fUNCTOR) {
-    return ParseApproxTensorFunctorDeclClause(CK, Loc, LParenLoc, T);
+    return ParseApproxTensorFunctorDeclClause(CK, Loc);
   }
   else {
     llvm_unreachable("Unknown DeclType");
   }
 }
 
-ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLocation Loc, SourceLocation LParenLoc, BalancedDelimiterTracker T) {
+ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLocation Loc) {
   approxScope = ApproxScope::APPROX_TENSOR_SLICE;
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after, "tensor_functor"))
+  {
+    return nullptr;
+  }
+
+  auto LParenLoc = T.getOpenLocation();
 
   // get the name
   SourceLocation NameLocation = Tok.getLocation();
@@ -263,7 +265,13 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
   // parse the LHS of the tensor functor, looks like [...] = (...)
   auto Begin = Tok.getLocation();
   ApproxNDTensorSlice Slices;
+  BalancedDelimiterTracker T2(*this, tok::l_square);
+  if(T2.expectAndConsume(diag::err_expected_lsquare_after, "tensor_functor"))
+    return nullptr;
   ParseApproxNDTensorSlice(Slices, tok::r_square);
+
+  if(T2.consumeClose())
+    llvm_unreachable("Expected a close bracket");
 
   // consume the token '='
   ConsumeAnyToken();
@@ -281,18 +289,13 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
 }
 
 void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::TokenKind EndToken) {
-  BalancedDelimiterTracker T(*this, tok::l_square, tok::r_square);
-  if(T.expectAndConsume(diag::err_expected_lsquare_after, "NDTensorSlice"))
-    llvm_unreachable("Expected a left bracket");
-
-  SourceLocation LBLoc = T.getOpenLocation();
 
   while (Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
     // Parse a slice expression
     auto Expr = ParseSliceExpression();
 
     if (Expr.isInvalid()) {
-      llvm::dbgs() << "The slide expression is invalid\n";
+      llvm::dbgs() << "The stride expression is invalid\n";
     }
 
     Slices.push_back(Expr.get());
@@ -304,18 +307,11 @@ void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::Toke
     if (Tok.isNot(tok::comma)) {
       llvm_unreachable("Expected a comma");
     }
+    
+    // Consume the comma
+    ConsumeAnyToken();
   }
 
-  if(T.consumeClose())
-  {
-    llvm_unreachable("Expected a close bracket");
-  }
-  SourceLocation RBLoc = T.getCloseLocation();
-
-  ApproxSliceExpr *FirstSlice = dyn_cast<ApproxSliceExpr>(Slices.front());
-  ApproxSliceExpr *LastSlice = dyn_cast<ApproxSliceExpr>(Slices.back());
-  FirstSlice->setLBracketLoc(LBLoc);
-  LastSlice->setRBracketLoc(RBLoc);
 }
 
 void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &Slices)
@@ -329,7 +325,10 @@ void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &S
   while (Tok.isNot(tok::r_paren)) {
     // Parse a slice expression
     ApproxNDTensorSlice Slice;
+    BalancedDelimiterTracker T2(*this, tok::l_square, tok::r_square);
+    T2.consumeOpen();
     ParseApproxNDTensorSlice(Slice, tok::r_square);
+    T2.consumeClose();
 
     Slices.push_back(Slice);
 
@@ -343,6 +342,7 @@ void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &S
       llvm_unreachable("Expected a comma");
     }
 
+    // Consume the comma between slices: [...], [...], ...
     ConsumeAnyToken();
   }
 
@@ -411,15 +411,39 @@ ExprResult Parser::ParseSliceExpression()
                                       SourceLocation());
 }
 
-ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation Loc, SourceLocation LParenLoc, BalancedDelimiterTracker T) {
-  llvm::dbgs() << "Recognized a Tensor Decl\n";
-  // Consume Decl Type (Note: This might be something we want to recurse on later)
-  auto TensorName = Tok;
+ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation Loc) {
+  // TODO: This should probably get its own scope
+  // approxScope = ApproxScope::APPROX_TENSOR_SLICE;
+  approxScope = ApproxScope::APPROX_TENSOR_SLICE_DECL;
+  BalancedDelimiterTracker T(*this, tok::l_paren);
+  if(T.expectAndConsume(diag::err_expected_lparen_after, "tensor_decl"))
+    return nullptr;
+  
+  auto LParenLoc = T.getOpenLocation();
+  SourceLocation NameLocation = Tok.getLocation();
+  auto TensorName = Tok.getIdentifierInfo()->getName();
+
+  // Skip past the name
   ConsumeAnyToken();
 
-  // Do we need to pass in the declared type?
-  ApproxVarListLocTy Locs(Loc, LParenLoc, LParenLoc);
-  // return Actions.ActOnApproxDeclClause(CK, Locs);
+  if(Tok.isNot(tok::colon))
+    llvm_unreachable("Expected a colon");
+
+  ConsumeAnyToken();
+
+  SourceLocation TFNameLoc = Tok.getLocation();
+  auto TFName = Tok.getIdentifierInfo()->getName();
+
+  ConsumeAnyToken();
+
+  BalancedDelimiterTracker T2(*this, tok::l_paren);
+  T2.consumeOpen();
+
+  llvm::SmallVector<Expr *, 8> IptArrayExprs;
+  auto TFCall = ParseExpressionList(IptArrayExprs);
+
+  T.consumeClose();
+  ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
   llvm_unreachable("Not implemented yet");
   return nullptr;
 }

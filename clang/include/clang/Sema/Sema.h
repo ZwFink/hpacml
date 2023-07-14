@@ -5778,9 +5778,14 @@ public:
                                               Expr *ColumnIdx,
                                               SourceLocation RBLoc);
 
+  ExprResult ActOnApproxArraySliceExpr(Expr *Base, SourceLocation Loc,
+                                       ApproxNDTensorSlice &Slice,
+                                       SourceLocation RLOC);
+
   ExprResult ActOnApproxArraySectionExpr(Expr *Base, SourceLocation LBLoc,
-                                      Expr *LowerBound, SourceLocation ColonLoc,
-                                      Expr *Length, SourceLocation RBLoc);
+                                         Expr *LowerBound,
+                                         SourceLocation ColonLoc, Expr *Length,
+                                         SourceLocation RBLoc);
 
   ExprResult ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
                                       Expr *LowerBound,

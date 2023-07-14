@@ -446,6 +446,7 @@ class Parser : public CodeCompletionHandler {
   enum class ApproxScope {
     APPROX_NONE,
     APPROX_ARRAY_SECTION,
+    APPROX_TENSOR_SLICE_DECL,
     APPROX_TENSOR_SLICE
   };
 
@@ -3531,11 +3532,9 @@ private:
   
 
 
-  ApproxClause *ParseApproxTensorFunctorDeclClause(approx::ClauseKind CK, SourceLocation Loc, 
-  SourceLocation LParenLoc, BalancedDelimiterTracker T);
+  ApproxClause *ParseApproxTensorFunctorDeclClause(approx::ClauseKind CK, SourceLocation Loc);
 
-  ApproxClause *ParseApproxTensorDeclClause(approx::ClauseKind CK, SourceLocation Loc, 
-  SourceLocation LParenLoc, BalancedDelimiterTracker T);
+  ApproxClause *ParseApproxTensorDeclClause(approx::ClauseKind CK, SourceLocation Loc);
 
   using ApproxNDTensorSlice = SmallVector<Expr *, 8>;
   using ApproxNDTensorSliceCollection = SmallVector<ApproxNDTensorSlice, 16>;
