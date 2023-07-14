@@ -1080,7 +1080,8 @@ enum PredefinedTypeIDs {
   /// \brief The '__ibm128' type
   PREDEF_TYPE_IBM128_ID = 74,
 
-  PREDEF_TYPE_APPROX_ARRAY_SECTION = 75,
+  PREDEF_TYPE_APPROX_ARRAY_SLICE = 75,
+  PREDEF_TYPE_APPROX_ARRAY_SECTION = 76,
 
 /// OpenCL image types with auto numeration
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix)                   \
@@ -2006,6 +2007,7 @@ enum StmtCode {
   EXPR_OMP_ARRAY_SHAPING,
   EXPR_OMP_ITERATOR,
   EXPR_APPROX_ARRAY_SECTION,
+  EXPR_APPROX_ARRAY_SLICE,
   EXPR_APPROX_SLICE,
 
   // ARC

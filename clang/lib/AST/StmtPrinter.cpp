@@ -1529,6 +1529,10 @@ void StmtPrinter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *Node) {
   OS << "]";
 }
 
+void StmtPrinter::VisitApproxArraySliceExpr(ApproxArraySliceExpr *Node) {
+  llvm_unreachable("Not implemented");
+}
+
 void StmtPrinter::VisitApproxSliceExpr(ApproxSliceExpr *Node) {
   OS << "[";
   if (Node->getStart())

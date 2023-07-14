@@ -5779,7 +5779,7 @@ public:
                                               SourceLocation RBLoc);
 
   ExprResult ActOnApproxArraySliceExpr(Expr *Base, SourceLocation Loc,
-                                       ApproxNDTensorSlice &Slice,
+                                       ArrayRef<Expr *> Slice,
                                        SourceLocation RLOC);
 
   ExprResult ActOnApproxArraySectionExpr(Expr *Base, SourceLocation LBLoc,

@@ -7143,7 +7143,7 @@ ExprResult Sema::ActOnCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
   ExprResult Call =
       BuildCallExpr(Scope, Fn, LParenLoc, ArgExprs, RParenLoc, ExecConfig,
                     /*IsExecConfig=*/false, /*AllowRecovery=*/true);
-  if (Call.isInvalid())
+  if ( Call.isInvalid())
     return Call;
 
   // Diagnose uses of the C++20 "ADL-only template-id call" feature in earlier

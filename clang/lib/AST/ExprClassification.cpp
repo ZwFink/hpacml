@@ -146,6 +146,7 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::MSPropertyRefExprClass:
   case Expr::MSPropertySubscriptExprClass:
   case Expr::ApproxArraySectionExprClass:
+  case Expr::ApproxArraySliceExprClass:
   case Expr::ApproxSliceExprClass:
   case Expr::OMPArraySectionExprClass:
   case Expr::OMPArrayShapingExprClass:

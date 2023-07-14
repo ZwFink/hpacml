@@ -15,6 +15,7 @@
 
 #include "clang/AST/ComputeDependence.h"
 #include "clang/AST/Expr.h"
+#include "llvm/Support/Debug.h"
 
 namespace clang {
 
@@ -86,6 +87,69 @@ public:
 
   const_child_range children() const {
     return const_child_range(&SubExprs[0], &SubExprs[END_EXPR]);
+  }
+};
+
+class ApproxArraySliceExpr final
+: public Expr,
+private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
+  friend TrailingObjects;
+  unsigned numDims = 0;
+  SourceLocation RBracketLoc;
+
+  public:
+    ApproxArraySliceExpr(Expr *Base, llvm::ArrayRef<Expr *> DSlices,
+                         QualType Type, ExprValueKind VK, ExprObjectKind OK,
+                         SourceLocation RBLoc)
+        : Expr(ApproxArraySliceExprClass, Type, VK, OK), RBracketLoc{RBLoc} {
+      numDims = DSlices.size();
+      setBase(Base);
+      setDimensionSlices(DSlices);
+    setDependence(computeDependence(this));
+    }
+
+  explicit ApproxArraySliceExpr(EmptyShell Empty)
+      : Expr(ApproxArraySliceExprClass, Empty) {}
+
+  Expr *getBase() { return getTrailingObjects<Expr *>()[0];}
+  const Expr *getBase() const { return getTrailingObjects<Expr *>()[0];}
+
+
+  void setBase(Expr *E) {getTrailingObjects<Expr *>()[0] = E;}
+  void setDimensionSlices(llvm::ArrayRef<Expr *> DSlices) {
+    assert(DSlices.size() == numDims && "Wrong number of dimension slices");
+    llvm::copy(DSlices, getTrailingObjects<Expr *>() + 1);
+  }
+
+  unsigned getNumDimensionSlices() const { return numDims; }
+  void setNumDimensionSlices(unsigned N) { numDims = N; }
+
+  SourceLocation getBeginLoc() const LLVM_READONLY {
+    Expr *begin_expr = getTrailingObjects<Expr *>()[0];
+    begin_expr->dump();
+    return getTrailingObjects<Expr *>()[0]->getBeginLoc();
+  }
+
+  SourceLocation getEndLoc() const LLVM_READONLY {return RBracketLoc;}
+  void setEndLoc(SourceLocation L) { RBracketLoc = L; }
+
+  SourceLocation getExprLoc() const LLVM_READONLY {
+    return getTrailingObjects<Expr *>()[0]->getExprLoc();
+  }
+
+  ArrayRef<Expr *> getSlices() { return llvm::ArrayRef(getTrailingObjects<Expr *>() + 1, numDims); }
+
+  unsigned numTrailingObjects(OverloadToken<ApproxArraySliceExpr>) const { return numDims+1; }
+  unsigned numTrailingObjects(OverloadToken<Expr *>) const { return numDims; }
+
+  child_range children() {
+    Stmt **Begin = reinterpret_cast<Stmt **>(getTrailingObjects<Expr *>());
+    return child_range(Begin, Begin + numDims + 1);
+  }
+
+  const_child_range children() const { 
+    Stmt *const *Begin = reinterpret_cast<Stmt *const *>(getTrailingObjects<Expr *>());
+    return const_child_range(Begin, Begin + numDims + 1);
   }
 };
 

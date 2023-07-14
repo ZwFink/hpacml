@@ -4420,6 +4420,7 @@ recurse:
   case Expr::TypoExprClass: // This should no longer exist in the AST by now.
   case Expr::RecoveryExprClass:
   case Expr::ApproxArraySectionExprClass:
+  case Expr::ApproxArraySliceExprClass:
   case Expr::ApproxSliceExprClass:
   case Expr::OMPArraySectionExprClass:
   case Expr::OMPArrayShapingExprClass:

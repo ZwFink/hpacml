@@ -2252,20 +2252,14 @@ Sema::ActOnApproxTFDeclClause(ClauseKind Kind, llvm::StringRef TensorName,
 ExprResult
 Sema::ActOnApproxArraySliceExpr(Expr *Base,
 SourceLocation Loc,
-                                ApproxNDTensorSlice &Slice,
+                                ArrayRef<Expr *> Slice,
                                 SourceLocation RLOC
 ) {
   // SourceLocation StartLoc = Locs.StartLoc;
   llvm::dbgs() << "Identified an ApproxArraySliceExpr\n";
   // SourceLocation EndLoc = Locs.EndLoc;
-  ApproxSliceExpr *SliceExpr = cast<ApproxSliceExpr>(Slice[0]);
-  return ActOnApproxSliceExpr(Loc, SliceExpr->getStart(), SourceLocation(), SliceExpr->getStop(),
-                              SourceLocation(), SliceExpr->getStep(), RLOC);
-
-
-  // return ExprResult();
-  // return new (Context) ApproxDTClause(SourceLocation(), SourceLocation());
-  // return new (Context) Approx(StartLoc, EndLoc, Base, Slice);
+  return new (Context) ApproxArraySliceExpr(Base, Slice, Context.DependentTy,
+                                            VK_LValue, OK_Ordinary, RLOC);
 }
 
 ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,

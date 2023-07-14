@@ -38,6 +38,7 @@ enum ClauseKind : uint {
   CK_MEMO,
   CK_DT,
   CK_TF_DECL,
+  CK_T_DECL,
   CK_NN,
   CK_USER,
   CK_IF,

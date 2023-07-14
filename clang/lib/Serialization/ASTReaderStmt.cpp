@@ -953,6 +953,18 @@ void ASTStmtReader::VisitApproxArraySectionExpr(ApproxArraySectionExpr *E) {
   E->setRBracketLoc(readSourceLocation());
 }
 
+void ASTStmtReader::VisitApproxArraySliceExpr(ApproxArraySliceExpr *E) {
+  VisitExpr(E);
+  unsigned NumDims = Record.readInt();
+  E->setNumDimensionSlices(NumDims);
+  E->setBase(Record.readSubExpr());
+  SmallVector<Expr *, 8> Dims(NumDims);
+  for(unsigned i = 0; i < NumDims; ++i)
+    Dims[i] = Record.readSubExpr();
+  E->setDimensionSlices(Dims);
+  E->setEndLoc(readSourceLocation());
+}
+
 void ASTStmtReader::VisitApproxSliceExpr(ApproxSliceExpr *E) {
   VisitExpr(E);
   E->setStart(Record.readSubExpr());
@@ -3040,6 +3052,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case EXPR_APPROX_ARRAY_SECTION:
       S = new (Context) ApproxArraySectionExpr(Empty);
+      break;
+
+    case EXPR_APPROX_ARRAY_SLICE:
+      S = new (Context) ApproxArraySliceExpr(Empty);
       break;
 
     case EXPR_APPROX_SLICE:

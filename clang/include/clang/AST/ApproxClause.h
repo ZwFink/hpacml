@@ -185,7 +185,7 @@ class ApproxDeclClause : public ApproxClause {
   /// \param EndLoc Ending location of the clause.
   ApproxDeclClause(approx::DeclType DT, SourceLocation StartLoc,
                     SourceLocation EndLoc, SourceLocation LParenLoc)
-      : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){
+      : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){llvm_unreachable("This shouldn't be constructed");
       }
 };
 
@@ -339,6 +339,20 @@ class ApproxTensorFunctorDeclClause final : public ApproxClause {
       llvm_unreachable("Const used children not implemented for TFDeclClause");
       return const_child_range(const_child_iterator(), const_child_iterator());
     }
+};
+
+class ApproxTensorDeclClause final : public ApproxClause {
+  std::string TensorName;
+  public:
+  ApproxTensorDeclClause(SourceLocation StartLoc,
+                         SourceLocation EndLoc,
+                         llvm::StringRef TensorName)
+      : ApproxClause(approx::CK_T_DECL, StartLoc, EndLoc),
+        TensorName{TensorName} {}
+
+  static bool classof(const ApproxClause *T) {
+    return T->getClauseKind() == approx::CK_T_DECL;
+  }
 };
 
 class ApproxMLClause final : public ApproxClause {
@@ -692,6 +706,7 @@ class ApproxClauseVisitorBase{
   RetTy VisitApproxMLClause(PTR(ApproxMLClause) S) {DISPATCH(ApproxMLClause);}
   RetTy VisitApproxDTClause(PTR(ApproxDTClause) S) {DISPATCH(ApproxDTClause);}
   RetTy VisitApproxTensorFunctorDeclClause(PTR(ApproxTensorFunctorDeclClause) S) {DISPATCH(ApproxTensorFunctorDeclClause);}
+  RetTy VisitApproxTensorDeclClause(PTR(ApproxTensorDeclClause) S) {DISPATCH(ApproxTensorDeclClause);}
   RetTy VisitApproxNNClause(PTR(ApproxNNClause) S) {DISPATCH(ApproxNNClause);}
   RetTy VisitApproxUserClause(PTR(ApproxUserClause) S) {DISPATCH(ApproxUserClause);}
   RetTy VisitApproxIfClause(PTR(ApproxIfClause) S) {DISPATCH(ApproxIfClause);}
@@ -713,6 +728,8 @@ class ApproxClauseVisitorBase{
         return VisitApproxDTClause(static_cast<PTR(ApproxDTClause)>(S));
       case approx::CK_TF_DECL:
         return VisitApproxTensorFunctorDeclClause(static_cast<PTR(ApproxTensorFunctorDeclClause)>(S));
+      case approx::CK_T_DECL:
+        return VisitApproxTensorDeclClause(static_cast<PTR(ApproxTensorDeclClause)>(S));
       case approx::CK_NN:
         return VisitApproxNNClause(static_cast<PTR(ApproxNNClause)>(S));
       case approx::CK_USER:
