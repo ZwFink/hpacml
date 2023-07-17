@@ -2257,9 +2257,8 @@ SourceLocation Loc,
 ) {
   // SourceLocation StartLoc = Locs.StartLoc;
   llvm::dbgs() << "Identified an ApproxArraySliceExpr\n";
-  // SourceLocation EndLoc = Locs.EndLoc;
-  return new (Context) ApproxArraySliceExpr(Base, Slice, Context.DependentTy,
-                                            VK_LValue, OK_Ordinary, RLOC);
+  return ApproxArraySliceExpr::Create(Context, Base, Slice, Context.DependentTy,
+                                            RLOC);
 }
 
 ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,

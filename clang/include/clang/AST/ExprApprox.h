@@ -15,6 +15,7 @@
 
 #include "clang/AST/ComputeDependence.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/ASTContext.h"
 #include "llvm/Support/Debug.h"
 
 namespace clang {
@@ -97,7 +98,6 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   unsigned numDims = 0;
   SourceLocation RBracketLoc;
 
-  public:
     ApproxArraySliceExpr(Expr *Base, llvm::ArrayRef<Expr *> DSlices,
                          QualType Type, ExprValueKind VK, ExprObjectKind OK,
                          SourceLocation RBLoc)
@@ -108,14 +108,24 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
     setDependence(computeDependence(this));
     }
 
+  public:
   explicit ApproxArraySliceExpr(EmptyShell Empty)
       : Expr(ApproxArraySliceExprClass, Empty) {}
 
-  Expr *getBase() { return getTrailingObjects<Expr *>()[0];}
+  static ApproxArraySliceExpr *Create(const ASTContext &C, Expr *Base,
+                                      llvm::ArrayRef<Expr *> DSlices,
+                                      QualType Type, SourceLocation RBLoc) {
+    void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(1 + DSlices.size()),
+                           alignof(ApproxArraySliceExpr));
+    return new (Mem) ApproxArraySliceExpr(Base, DSlices, Type, VK_LValue,
+                                          OK_Ordinary, RBLoc);
+  }
+
   const Expr *getBase() const { return getTrailingObjects<Expr *>()[0];}
+  Expr *getBase() { return getTrailingObjects<Expr *>()[0];}
 
 
-  void setBase(Expr *E) {getTrailingObjects<Expr *>()[0] = E;}
+  void setBase(Expr *E) { getTrailingObjects<Expr *>()[0] = E;}
   void setDimensionSlices(llvm::ArrayRef<Expr *> DSlices) {
     assert(DSlices.size() == numDims && "Wrong number of dimension slices");
     llvm::copy(DSlices, getTrailingObjects<Expr *>() + 1);
@@ -125,22 +135,19 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   void setNumDimensionSlices(unsigned N) { numDims = N; }
 
   SourceLocation getBeginLoc() const LLVM_READONLY {
-    Expr *begin_expr = getTrailingObjects<Expr *>()[0];
-    begin_expr->dump();
     return getTrailingObjects<Expr *>()[0]->getBeginLoc();
   }
 
   SourceLocation getEndLoc() const LLVM_READONLY {return RBracketLoc;}
   void setEndLoc(SourceLocation L) { RBracketLoc = L; }
 
+  unsigned numTrailingObjects(OverloadToken<Expr *>) const { return numDims + 1; }
+
   SourceLocation getExprLoc() const LLVM_READONLY {
-    return getTrailingObjects<Expr *>()[0]->getExprLoc();
+    return getTrailingObjects<Expr *>()[0]->getBeginLoc();
   }
 
   ArrayRef<Expr *> getSlices() { return llvm::ArrayRef(getTrailingObjects<Expr *>() + 1, numDims); }
-
-  unsigned numTrailingObjects(OverloadToken<ApproxArraySliceExpr>) const { return numDims+1; }
-  unsigned numTrailingObjects(OverloadToken<Expr *>) const { return numDims; }
 
   child_range children() {
     Stmt **Begin = reinterpret_cast<Stmt **>(getTrailingObjects<Expr *>());

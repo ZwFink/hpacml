@@ -1992,7 +1992,6 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
           ParseApproxNDTensorSlice(Slice, tok::r_square);
           approxScope = ApproxScope::APPROX_TENSOR_SLICE_DECL;
 
-          SourceLocation RLoc = Tok.getLocation();
           LHS = Actions.ActOnApproxArraySliceExpr(LHS.get(), Loc, Slice, Tok.getLocation());
           LHS = Actions.CorrectDelayedTyposInExpr(LHS);
 
