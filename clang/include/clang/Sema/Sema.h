@@ -11405,6 +11405,12 @@ public:
       ApproxNDTensorSliceCollection &RHSSlices,
       approx::ApproxVarListLocTy &Locs);
 
+  ApproxClause *ActOnApproxTensorDeclClause(approx::ClauseKind CK,
+                                            llvm::StringRef TFName,
+                                            llvm::StringRef TensorName,
+                                            llvm::ArrayRef<Expr *> Arrays,
+                                            approx::ApproxVarListLocTy &Locs);
+
   ApproxClause *ActOnApproxNNClause(approx::ClauseKind Kind,
                                     approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxUserClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);

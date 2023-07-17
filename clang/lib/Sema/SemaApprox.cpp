@@ -2249,6 +2249,18 @@ Sema::ActOnApproxTFDeclClause(ClauseKind Kind, llvm::StringRef TensorName,
         StartLoc, EndLoc, TensorName, LHSSlice, RHSSlices);
   }
 
+ApproxClause *
+Sema::ActOnApproxTensorDeclClause(ClauseKind CK,
+llvm::StringRef TFName, llvm::StringRef TensorName, llvm::ArrayRef<Expr*> Arrays,
+ApproxVarListLocTy& Locs) {
+  SourceLocation StartLoc = Locs.StartLoc;
+  SourceLocation EndLoc = Locs.EndLoc;
+
+  llvm::dbgs() << "Identified an ApproxTensorDeclClause\n";
+  return new (Context) ApproxTensorDeclClause(StartLoc, EndLoc, TFName, TensorName, Arrays);
+}
+
+
 ExprResult
 Sema::ActOnApproxArraySliceExpr(Expr *Base,
 SourceLocation Loc,

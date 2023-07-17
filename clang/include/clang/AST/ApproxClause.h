@@ -342,16 +342,39 @@ class ApproxTensorFunctorDeclClause final : public ApproxClause {
 };
 
 class ApproxTensorDeclClause final : public ApproxClause {
+  std::string TFName;
   std::string TensorName;
+  llvm::SmallVector<Expr*, 8> ArraySlices;
   public:
   ApproxTensorDeclClause(SourceLocation StartLoc,
                          SourceLocation EndLoc,
-                         llvm::StringRef TensorName)
-      : ApproxClause(approx::CK_T_DECL, StartLoc, EndLoc),
-        TensorName{TensorName} {}
+                         llvm::StringRef TFName,
+                         llvm::StringRef TensorName,
+                         llvm::ArrayRef<Expr*> ArraySlices)
+      : ApproxClause(approx::CK_T_DECL, StartLoc, EndLoc), TFName{TFName},
+        TensorName{TensorName} {this->ArraySlices.append(ArraySlices.begin(), ArraySlices.end());}
 
   static bool classof(const ApproxClause *T) {
     return T->getClauseKind() == approx::CK_T_DECL;
+  }
+
+  child_range children() {
+    llvm_unreachable("Children not implemented for TensorDeclClause");
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  const_child_range children() const {
+    llvm_unreachable("Const children not implemented for TensorDeclClause");
+    return const_child_range(const_child_iterator(), const_child_iterator());
+  }
+
+  child_range used_children() {
+    llvm_unreachable("Used children not implemented for TensorDeclClause");
+    return child_range(child_iterator(), child_iterator());
+  }
+  const_child_range used_children() const {
+    llvm_unreachable("Const used children not implemented for TensorDeclClause");
+    return const_child_range(const_child_iterator(), const_child_iterator());
   }
 };
 

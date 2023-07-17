@@ -234,10 +234,10 @@ ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
   SourceLocation LParenLoc = Tok.getLocation();
 
   if(DT == approx::DeclType::DT_TENSOR) {
-    return ParseApproxTensorDeclClause(CK, Loc);
+    return ParseApproxTensorDeclClause(ClauseKind::CK_T_DECL, Loc);
   }
   else if(DT == approx::DeclType::DT_TENSOR_fUNCTOR) {
-    return ParseApproxTensorFunctorDeclClause(CK, Loc);
+    return ParseApproxTensorFunctorDeclClause(ClauseKind::CK_TF_DECL, Loc);
   }
   else {
     llvm_unreachable("Unknown DeclType");
@@ -406,16 +406,16 @@ ExprResult Parser::ParseSliceExpression()
     Step = StepResult.get();
   }
 
-  return Actions.ActOnApproxSliceExpr(SourceLocation(), Start, ColonLocFirst,
+  return Actions.ActOnApproxSliceExpr(StartLocation, Start, ColonLocFirst,
                                       Stop, ColonLocSecond, Step,
-                                      SourceLocation());
+                                      StopLocation);
 }
 
 ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation Loc) {
   // TODO: This should probably get its own scope
   // approxScope = ApproxScope::APPROX_TENSOR_SLICE;
   approxScope = ApproxScope::APPROX_TENSOR_SLICE_DECL;
-  BalancedDelimiterTracker T(*this, tok::l_paren);
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
   if(T.expectAndConsume(diag::err_expected_lparen_after, "tensor_decl"))
     return nullptr;
   
@@ -441,11 +441,11 @@ ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation 
 
   llvm::SmallVector<Expr *, 8> IptArrayExprs;
   auto TFCall = ParseExpressionList(IptArrayExprs);
+  T2.consumeClose();
 
   T.consumeClose();
   ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
-  llvm_unreachable("Not implemented yet");
-  return nullptr;
+  return Actions.ActOnApproxTensorDeclClause(CK, TFName, TensorName, IptArrayExprs, Locs);
 }
 
 ApproxClause *Parser::ParseApproxNNClause(ClauseKind CK) {

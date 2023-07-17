@@ -50,19 +50,21 @@ void CodeGenFunction::EmitApproxDirective(const ApproxDirective &AD) {
     }
     else if ( ApproxPetrubateClause *PetrubateClause = dyn_cast_or_null<ApproxPetrubateClause>(C)){
       RT.CGApproxRuntimeEmitPetrubateInit(*this, *PetrubateClause);
-    }
-    else if ( ApproxMLClause *MLClause = dyn_cast_or_null<ApproxMLClause>(C)){
+    } else if (ApproxMLClause *MLClause = dyn_cast_or_null<ApproxMLClause>(C)) {
       RT.CGApproxRuntimeEmitMLInit(*this, *MLClause);
+    } else if (ApproxTensorDeclClause *TDeclClause =
+                   dyn_cast_or_null<ApproxTensorDeclClause>(C)) {
+      llvm::dbgs() << "Reached unhandled codegen for TensorDeclClause\n";
+      // RT.CGApproxRuntimeEmitTensorDeclInit(*this, *TDeclClause);
     } else if (ApproxTensorFunctorDeclClause *TFDeclClause =
                    dyn_cast_or_null<ApproxTensorFunctorDeclClause>(C)) {
       llvm::dbgs() << "Reached unhandled ocdegen for TFTensorDeclClause\n";
-    }
-   else if ( ApproxDeclClause *DeclClause = dyn_cast_or_null<ApproxDeclClause>(C)){
+    } else if (ApproxDeclClause *DeclClause =
+                   dyn_cast_or_null<ApproxDeclClause>(C)) {
       RT.CGApproxRuntimeEmitDeclInit(*this, *DeclClause);
-      }
-      else {
+    } else {
       dbgs() << "Clause Not Handled Yet" << C->getAsString() << "\n";
-      }
+    }
   }
 
   RT.CGApproxRuntimeEmitDataValues(*this);
