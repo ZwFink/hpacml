@@ -339,6 +339,11 @@ class ApproxTensorFunctorDeclClause final : public ApproxClause {
       llvm_unreachable("Const used children not implemented for TFDeclClause");
       return const_child_range(const_child_iterator(), const_child_iterator());
     }
+
+    llvm::StringRef getFunctorName() const {return FunctorName;}
+
+    llvm::ArrayRef<Expr*> getLHSSlice() const {return LHSSlice;}
+    ApproxNDTensorSliceCollection &getRHSSlices() {return RHSSlices;}
 };
 
 class ApproxTensorDeclClause final : public ApproxClause {
@@ -376,6 +381,11 @@ class ApproxTensorDeclClause final : public ApproxClause {
     llvm_unreachable("Const used children not implemented for TensorDeclClause");
     return const_child_range(const_child_iterator(), const_child_iterator());
   }
+
+  llvm::StringRef getTensorName() const {return TensorName;} 
+  llvm::StringRef getTFName() const {return TFName;} 
+
+  llvm::ArrayRef<Expr*> getArraySlices() {return ArraySlices;}
 };
 
 class ApproxMLClause final : public ApproxClause {
@@ -804,6 +814,8 @@ class ApproxClausePrinter final : public ApproxClauseVisitor<ApproxClausePrinter
     void VisitApproxMLClause(ApproxMLClause *S);
     void VisitApproxDTClause(ApproxDTClause *S);
     void VisitApproxNNClause(ApproxNNClause *S);
+    void VisitApproxTensorFunctorDeclClause(ApproxTensorFunctorDeclClause *S);
+    void VisitApproxTensorDeclClause(ApproxTensorDeclClause *S);
     void VisitApproxUserClause(ApproxUserClause *S);
     void VisitApproxIfClause(ApproxIfClause *S);
     void VisitApproxInClause(ApproxInClause *S);

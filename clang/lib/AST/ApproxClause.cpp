@@ -95,6 +95,47 @@ void ApproxClausePrinter::VisitApproxPerfoClause(ApproxPerfoClause *Node) {
   OS << Node->getAsString() << " ";
 }
 
+void ApproxClausePrinter::VisitApproxTensorDeclClause(ApproxTensorDeclClause *Node) {
+  llvm::ArrayRef<Expr*> Slices = Node->getArraySlices();
+  OS << "declare tensor(" << Node->getTensorName() << ": " 
+  << Node->getTFName() << "(";
+  for(unsigned i = 0; i < Slices.size(); i++){
+    if(i != 0)
+      OS << ", ";
+    Slices[i]->printPretty(OS, nullptr, Policy, 0);
+  }
+  OS << "))";
+}
+
+void ApproxClausePrinter::VisitApproxTensorFunctorDeclClause(ApproxTensorFunctorDeclClause *Node) {
+  OS << "declare tensor_functor(" << Node->getFunctorName() << ": ";
+  OS << "[";
+  auto LHS = Node->getLHSSlice();
+  for(unsigned i = 0; i < LHS.size(); i++){
+    if(i != 0)
+      OS << ", ";
+    LHS[i]->printPretty(OS, nullptr, Policy, 0);
+  }
+  OS << "]";
+  OS << " = (";
+  ApproxNDTensorSliceCollection &RHS = Node->getRHSSlices();
+  for(unsigned j = 0 ; j < RHS.size(); j++){
+    auto &Slices = RHS[j];
+    if(j != 0)
+      OS << ", ";
+    OS << "[";
+    for(unsigned i = 0; i < Slices.size(); i++){
+      if(i != 0)
+        OS << ", ";
+      Slices[i]->printPretty(OS, nullptr, Policy, 0);
+    }
+    OS << "]";
+  }
+
+  OS << "))";
+
+}
+
 void ApproxClausePrinter::VisitApproxMemoClause(ApproxMemoClause *Node) {
   OS << Node->getAsString() << "(" << Node->getMemoTypeAsString() << ") ";
 }
