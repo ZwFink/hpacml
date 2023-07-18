@@ -412,7 +412,7 @@ Parser::ParseRHSOfBinaryExpression(ExprResult LHS, prec::Level MinPrec) {
     if (NextTokPrec < MinPrec)
       return LHS;
 
-    if(Tok.is(tok::comma) && approxScope == ApproxScope::APPROX_TENSOR_SLICE) {
+    if(Tok.is(tok::comma) && getCurScope()->isApproxSliceScope()) {
       // if we're parsing a tensor slice, then the comma indicates that we're done.
       return LHS;
     }
@@ -1286,7 +1286,6 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
     }
     if (!Res.isInvalid() && Tok.is(tok::less))
       checkPotentialAngleBracket(Res);
-    
     break;
   }
   case tok::char_constant:     // constant: character-constant
@@ -1769,6 +1768,8 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
   }
 #define TRANSFORM_TYPE_TRAIT_DEF(_, Trait) case tok::kw___##Trait:
 #include "clang/Basic/TransformTypeTraits.def"
+    // HACK: libstdc++ uses some of the transform-type-traits as alias
+    // templates, so we need to work around this.
     if (!NextToken().is(tok::l_paren)) {
       Tok.setKind(tok::identifier);
       Diag(Tok, diag::ext_keyword_as_ident)
@@ -1955,7 +1956,9 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       // and, in we find 0 or one index, we try to parse an OpenMP array
       // section. This allow us to support C++23 multi dimensional subscript and
       // OpenMp sections in the same language mode.
-      if ( approxScope == ApproxScope::APPROX_NONE && (!getLangOpts().OpenMP || Tok.isNot(tok::colon))) {
+
+      Scope *CurScope = getCurScope();
+      if ( !CurScope->isApproxScope() && (!getLangOpts().OpenMP || Tok.isNot(tok::colon))) {
         if (!getLangOpts().CPlusPlus23) {
           ExprResult Idx;
           if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {
@@ -1981,15 +1984,21 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
 
       if (ArgExprs.size() <= 1 &&
           (getLangOpts().OpenMP ||
-           approxScope == ApproxScope::APPROX_ARRAY_SECTION 
-           || approxScope == ApproxScope::APPROX_TENSOR_SLICE_DECL)) {
+           CurScope->isApproxArraySectionScope()
+           || CurScope->isApproxTensorDeclScope())) {
         ColonProtectionRAIIObject RAII(*this);
-        if(approxScope == ApproxScope::APPROX_TENSOR_SLICE_DECL) {
+        if(CurScope->isApproxTensorDeclScope()) {
           ApproxNDTensorSlice Slice;
 
-          approxScope = ApproxScope::APPROX_TENSOR_SLICE;
+          // Make sure the ONLY approx scope that's turned on is 
+          // ApproxTensorSliceScope
+          unsigned ScopeFlags =
+              Scope::ApproxSliceScope |
+              (CurScope->getFlags() & ~(Scope::ApproxArraySectionScope |
+               Scope::ApproxTensorDeclScope));
+          ParseScope ApproxScope(this, ScopeFlags);
           ParseApproxNDTensorSlice(Slice, tok::r_square);
-          approxScope = ApproxScope::APPROX_TENSOR_SLICE_DECL;
+          ApproxScope.Exit();
 
           LHS = Actions.ActOnApproxArraySliceExpr(LHS.get(), Loc, Slice, Tok.getLocation());
           LHS = Actions.CorrectDelayedTyposInExpr(LHS);
@@ -2009,7 +2018,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             Length = Actions.CorrectDelayedTyposInExpr(Length);
           }
         }
-        if ((approxScope == ApproxScope::APPROX_ARRAY_SECTION
+        if ((CurScope->isApproxArraySectionScope()
               ||
              (getLangOpts().OpenMP >= 50 &&
               (OMPClauseKind == llvm::omp::Clause::OMPC_to ||
@@ -2029,7 +2038,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       if (!LHS.isInvalid() && !HasError && !Length.isInvalid() &&
           !Stride.isInvalid() && Tok.is(tok::r_square)) {
         if (ColonLocFirst.isValid() || ColonLocSecond.isValid()) {
-          if (approxScope == ApproxScope::APPROX_ARRAY_SECTION) {
+          if (CurScope->isApproxArraySectionScope()) {
             // TODO: Re-add stride to this
             LHS = Actions.ActOnApproxArraySectionExpr(
                 LHS.get(), Loc, ArgExprs.empty() ? nullptr : ArgExprs[0],

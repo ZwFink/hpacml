@@ -443,17 +443,6 @@ class Parser : public CodeCompletionHandler {
   /// a statement expression and builds a suitable expression statement.
   StmtResult handleExprStmt(ExprResult E, ParsedStmtContext StmtCtx);
 
-  enum class ApproxScope {
-    APPROX_NONE,
-    APPROX_ARRAY_SECTION,
-    APPROX_TENSOR_SLICE_DECL,
-    APPROX_TENSOR_SLICE
-  };
-
-  // Are we parsing approx. pragmas? If so, we need to disambiguate 
-  // between regular approx and parsing tensor slices, which takes special cases
-  ApproxScope approxScope;
-
 public:
   Parser(Preprocessor &PP, Sema &Actions, bool SkipFunctionBodies);
   ~Parser() override;

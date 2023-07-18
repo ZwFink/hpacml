@@ -245,7 +245,6 @@ ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
 }
 
 ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLocation Loc) {
-  approxScope = ApproxScope::APPROX_TENSOR_SLICE;
   unsigned ScopeFlags = Scope::ApproxSliceScope | getCurScope()->getFlags();
   ParseScope ApproxScope(this, ScopeFlags);
   BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
@@ -288,7 +287,6 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
   ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
   // Do we need to pass in the declared type?
 
-  ApproxScope.Exit();
   return Actions.ActOnApproxTFDeclClause(CK, Name, Slices, RHSSlices, Locs);
 }
 
@@ -416,9 +414,8 @@ ExprResult Parser::ParseSliceExpression()
 }
 
 ApproxClause *Parser::ParseApproxTensorDeclClause(ClauseKind CK, SourceLocation Loc) {
-  // TODO: This should probably get its own scope
-  // approxScope = ApproxScope::APPROX_TENSOR_SLICE;
-  approxScope = ApproxScope::APPROX_TENSOR_SLICE_DECL;
+  unsigned ScopeFlags = getCurScope()->getFlags() | Scope::ApproxTensorDeclScope;
+  ParseScope ApproxScope(this, ScopeFlags);
   BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
   if(T.expectAndConsume(diag::err_expected_lparen_after, "tensor_decl"))
     return nullptr;
@@ -562,7 +559,8 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_approx_start));
   /// This should be a function call;
   // assume approx array section scope
-  approxScope = ApproxScope::APPROX_ARRAY_SECTION;
+  unsigned ScopeFlags = Scope::ApproxArraySectionScope | getCurScope()->getFlags();
+  ParseScope ApproxScope(this, ScopeFlags);
 #define PARSER_CALL(method) ((*this).*(method))
 
   StmtResult Directive = StmtError();
@@ -581,7 +579,7 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   if (Tok.is(tok::eod) || Tok.is(tok::eof)) {
     PP.Diag(Tok, diag::err_pragma_approx_expected_directive);
     ConsumeAnyToken();
-    approxScope = ApproxScope::APPROX_NONE;
+    ApproxScope.Exit();
     return Directive;
   }
 
@@ -591,14 +589,14 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
       ApproxClause *Clause = PARSER_CALL(ParseApproxClause[CK])(CK);
       if (!Clause) {
         SkipUntil(tok::annot_pragma_approx_end);
-        approxScope = ApproxScope::APPROX_NONE;
+        ApproxScope.Exit();
         return Directive;
       }
       Clauses.push_back(Clause);
     } else {
       PP.Diag(Tok, diag::err_pragma_approx_unrecognized_directive);
       SkipUntil(tok::annot_pragma_approx_end);
-      approxScope = ApproxScope::APPROX_NONE;
+      ApproxScope.Exit();
       return Directive;
     }
   }
@@ -612,6 +610,6 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   Actions.ActOnCapturedRegionStart(Tok.getEndLoc(), getCurScope(), CR_Default, /* NumParams = */1);
   StmtResult AssociatedStmt = (Sema::CompoundScopeRAII(Actions), ParseStatement());
   Directive = Actions.ActOnApproxDirective(AssociatedStmt.get(), Clauses, Locs);
-  approxScope = ApproxScope::APPROX_NONE;
+  ApproxScope.Exit();
   return Directive;
 }
