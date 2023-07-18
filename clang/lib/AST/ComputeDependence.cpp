@@ -437,10 +437,12 @@ ExprDependence clang::computeDependence(ApproxArraySliceExpr *E) {
 }
 
 ExprDependence clang::computeDependence(ApproxSliceExpr *E) {
-  ExprDependence D = E->getStop()->getDependence();
+  ExprDependence D = ExprDependence::None;
 
   if (Expr *Start = E->getStart())
     D |= Start->getDependence();
+  if (Expr *Stop = E->getStop())
+    D |= Stop->getDependence();
   if (Expr *Step = E->getStep())
     D |= Step->getDependence();
 

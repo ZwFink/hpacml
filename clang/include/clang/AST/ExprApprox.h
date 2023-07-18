@@ -51,8 +51,8 @@ public:
   const Expr *getStart() const { return cast_or_null<Expr>(SubExprs[START]); }
   void setStart(Expr *E) { SubExprs[START] = E; }
 
-  Expr *getStop() { return cast<Expr>(SubExprs[STOP]); }
-  const Expr *getStop() const { return cast<Expr>(SubExprs[STOP]); }
+  Expr *getStop() { return cast_or_null<Expr>(SubExprs[STOP]); }
+  const Expr *getStop() const { return cast_or_null<Expr>(SubExprs[STOP]); }
   void setStop(Expr *E) { SubExprs[STOP] = E; }
 
   Expr *getStep() { return cast_or_null<Expr>(SubExprs[STEP]); }
