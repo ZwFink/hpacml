@@ -2244,7 +2244,6 @@ Sema::ActOnApproxTFDeclClause(ClauseKind Kind, llvm::StringRef TensorName,
     SourceLocation StartLoc = Locs.StartLoc;
     SourceLocation EndLoc = Locs.EndLoc;
 
-    llvm::dbgs() << "Identified an ApproxDeclClause\n";
     return new (Context) ApproxTensorFunctorDeclClause(
         StartLoc, EndLoc, TensorName, LHSSlice, RHSSlices);
   }
@@ -2256,7 +2255,6 @@ ApproxVarListLocTy& Locs) {
   SourceLocation StartLoc = Locs.StartLoc;
   SourceLocation EndLoc = Locs.EndLoc;
 
-  llvm::dbgs() << "Identified an ApproxTensorDeclClause\n";
   return new (Context) ApproxTensorDeclClause(StartLoc, EndLoc, TFName, TensorName, Arrays);
 }
 
@@ -2267,8 +2265,6 @@ SourceLocation Loc,
                                 ArrayRef<Expr *> Slice,
                                 SourceLocation RLOC
 ) {
-  // SourceLocation StartLoc = Locs.StartLoc;
-  llvm::dbgs() << "Identified an ApproxArraySliceExpr\n";
   return ApproxArraySliceExpr::Create(Context, Base, Slice, Context.DependentTy,
                                             RLOC);
 }
@@ -2363,7 +2359,6 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
 }
 
 ExprResult Sema::ActOnApproxIndexVarRefExpr(IdentifierInfo *II, SourceLocation Loc) {
-  llvm::dbgs() << "Identified an ApproxIndexVarRefExpr\n";
   return new (Context)  ApproxIndexVarRefExpr(II, Context.getIntTypeForBitwidth(64, false), VK_LValue, OK_Ordinary, Loc);
 }
 
