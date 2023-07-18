@@ -150,6 +150,8 @@ public:
     /// template scope in between), the outer scope does not increase the
     /// depth of recursion.
     LambdaScope = 0x8000000,
+
+    ApproxSliceScope = 0x10000000,
   };
 
 private:
@@ -496,6 +498,10 @@ public:
   bool isOpenMPLoopScope() const {
     const Scope *P = getParent();
     return P && P->isOpenMPLoopDirectiveScope();
+  }
+
+  bool isApproxSliceScope() const {
+    return getFlags() & Scope::ApproxSliceScope;
   }
 
   /// Determine whether this scope is some OpenMP directive with

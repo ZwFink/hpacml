@@ -10492,6 +10492,9 @@ let CategoryName = "Approx Issue" in {
 def err_approx_expected_sema : Error<
   "Error In Sema Analysis">;
 def err_approx_array_section_use : Error<"Approx array section is not allowed here">;
+def err_approx_array_slice_use : Error<"Approx array slice is not allowed here">;
+def err_approx_slice_use : Error<"Approx slice is not allowed here">;
+def err_approx_index_var_ref_use : Error<"Approx index variable reference is not allowed here">;
 def err_approx_array_shaping_use : Error<"Approx array shaping operation is not allowed here">;
 def err_approx_iterator_use : Error<"Approx iterator is not allowed here">;
 def err_approx_typecheck_section_value : Error<"subscripted value is not an array or pointer">;

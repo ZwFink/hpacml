@@ -160,6 +160,44 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   }
 };
 
+class ApproxIndexVarRefExpr : public Expr {
+  IdentifierInfo *Identifier;
+  SourceLocation Loc;
+
+  public:
+  ApproxIndexVarRefExpr(IdentifierInfo *II, QualType Type, ExprValueKind VK,
+                      ExprObjectKind OK, SourceLocation Loc)
+      : Expr(ApproxIndexVarRefExprClass, Type, VK, OK), Loc(Loc) {
+    assert(II && "No identifier provided!");
+    Identifier = II;
+    setDependence(computeDependence(this));
+    }
+
+    explicit ApproxIndexVarRefExpr(EmptyShell Shell)
+        : Expr(ApproxIndexVarRefExprClass, Shell) {}
+
+    child_range children() { return child_range(child_iterator(), child_iterator()); }
+    const_child_range children() const { return const_child_range(const_child_iterator(), const_child_iterator()); }
+
+    SourceLocation getBeginLoc() const LLVM_READONLY { return Loc; }
+    SourceLocation getEndLoc() const LLVM_READONLY { return Loc; }
+    SourceLocation getExprLoc() const LLVM_READONLY { return Loc; }
+
+    void setBeginLoc(SourceLocation L) { Loc = L; }
+    void setEndLoc(SourceLocation L) { Loc = L; }
+    void setExprLoc(SourceLocation L) { Loc = L; }
+
+    void setIdentifierInfo(IdentifierInfo *II) { Identifier = II; }
+    IdentifierInfo *getIdentifier() const { return Identifier; }
+
+    llvm::StringRef getName() const { return Identifier->getName(); }
+
+
+    static bool classof(const Stmt *T) {
+      return T->getStmtClass() == ApproxIndexVarRefExprClass;
+    }
+  };
+
 class ApproxArraySectionExpr : public Expr {
   enum { BASE, LOWER_BOUND, LENGTH, END_EXPR };
   Stmt *SubExprs[END_EXPR];

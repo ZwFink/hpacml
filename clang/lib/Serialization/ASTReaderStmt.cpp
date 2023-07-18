@@ -976,6 +976,14 @@ void ASTStmtReader::VisitApproxSliceExpr(ApproxSliceExpr *E) {
   E->setRBracketLoc(readSourceLocation());
 }
 
+void ASTStmtReader::VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
+  VisitExpr(E);
+  E->setIdentifierInfo(Record.readIdentifier());
+  E->setBeginLoc(readSourceLocation());
+  E->setEndLoc(E->getBeginLoc());
+  E->setExprLoc(E->getBeginLoc());
+}
+
 void ASTStmtReader::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {
   VisitExpr(E);
   E->setBase(Record.readSubExpr());
@@ -3060,6 +3068,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case EXPR_APPROX_SLICE:
       S = new (Context) ApproxSliceExpr(Empty);
+      break;
+
+    case EXPR_APPROX_INDEX_VAR_REF:
+      S = new (Context) ApproxIndexVarRefExpr(Empty);
       break;
 
     case EXPR_OMP_ARRAY_SECTION:

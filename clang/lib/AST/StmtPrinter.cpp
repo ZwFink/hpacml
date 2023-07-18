@@ -1559,6 +1559,10 @@ void StmtPrinter::VisitApproxSliceExpr(ApproxSliceExpr *Node) {
   }
 }
 
+void StmtPrinter::VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *Node) {
+  OS << Node->getName();
+}
+
 void StmtPrinter::VisitOMPArraySectionExpr(OMPArraySectionExpr *Node) {
   PrintExpr(Node->getBase());
   OS << "[";

@@ -429,6 +429,9 @@ TypeSpecifierType BuiltinTypeLoc::getWrittenTypeSpec() const {
   case BuiltinType::BuiltinFn:
   case BuiltinType::IncompleteMatrixIdx:
   case BuiltinType::ApproxArraySection:
+  case BuiltinType::ApproxArraySlice:
+  case BuiltinType::ApproxIndexVarRef:
+  case BuiltinType::ApproxSlice:
   case BuiltinType::OMPArraySection:
   case BuiltinType::OMPArrayShaping:
   case BuiltinType::OMPIterator:

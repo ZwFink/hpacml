@@ -74,6 +74,7 @@ def MatrixSubscriptExpr : StmtNode<Expr>;
 def ApproxArraySectionExpr : StmtNode<Expr>;
 def ApproxArraySliceExpr : StmtNode<Expr>;
 def ApproxSliceExpr : StmtNode<Expr>;
+def ApproxIndexVarRefExpr : StmtNode<Expr>;
 def OMPArraySectionExpr : StmtNode<Expr>;
 def OMPIteratorExpr : StmtNode<Expr>;
 def CallExpr : StmtNode<Expr>;

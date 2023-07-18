@@ -1286,6 +1286,7 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
     }
     if (!Res.isInvalid() && Tok.is(tok::less))
       checkPotentialAngleBracket(Res);
+    
     break;
   }
   case tok::char_constant:     // constant: character-constant
@@ -1768,8 +1769,6 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
   }
 #define TRANSFORM_TYPE_TRAIT_DEF(_, Trait) case tok::kw___##Trait:
 #include "clang/Basic/TransformTypeTraits.def"
-    // HACK: libstdc++ uses some of the transform-type-traits as alias
-    // templates, so we need to work around this.
     if (!NextToken().is(tok::l_paren)) {
       Tok.setKind(tok::identifier);
       Diag(Tok, diag::ext_keyword_as_ident)

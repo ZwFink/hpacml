@@ -2742,6 +2742,11 @@ public:
                                           ColonLocSecond, Step, RBLoc);
   }
 
+  ExprResult RebuildApproxIndexVarRefExpr(IdentifierInfo *II,
+                                          SourceLocation Loc) {
+    return getSema().ActOnApproxIndexVarRefExpr(II, Loc);
+  }
+
   /// Build a new array section expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -11332,6 +11337,13 @@ TreeTransform<Derived>::TransformApproxArraySliceExpr(ApproxArraySliceExpr *E) {
 
 template <typename Derived>
 ExprResult
+TreeTransform<Derived>::TransformApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
+  return getDerived().RebuildApproxIndexVarRefExpr(E->getIdentifier(),
+                                                   E->getBeginLoc());
+}
+
+template <typename Derived>
+ExprResult
 TreeTransform<Derived>::TransformOMPArrayShapingExpr(OMPArrayShapingExpr *E) {
   ExprResult Base = getDerived().TransformExpr(E->getBase());
   if (Base.isInvalid())
@@ -11354,6 +11366,7 @@ TreeTransform<Derived>::TransformOMPArrayShapingExpr(OMPArrayShapingExpr *E) {
                                                  E->getRParenLoc(), Dims,
                                                  E->getBracketsRanges());
 }
+
 
 template <typename Derived>
 ExprResult

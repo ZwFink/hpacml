@@ -1114,6 +1114,9 @@ public:
   CanQualType OCLQueueTy, OCLReserveIDTy;
   CanQualType IncompleteMatrixIdxTy;
   CanQualType ApproxArraySectionTy;
+  CanQualType ApproxArraySliceTy;
+  CanQualType ApproxSliceTy;
+  CanQualType ApproxIndexVarRefTy;
   CanQualType OMPArraySectionTy, OMPArrayShapingTy, OMPIteratorTy;
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   CanQualType Id##Ty;

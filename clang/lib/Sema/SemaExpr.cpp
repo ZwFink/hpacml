@@ -2670,6 +2670,9 @@ Sema::ActOnIdExpression(Scope *S, CXXScopeSpec &SS,
     if (IsInlineAsmIdentifier)
       return ExprError();
 
+    if (S->isApproxSliceScope())
+      return ActOnApproxIndexVarRefExpr(II, NameLoc);
+
     // If this name wasn't predeclared and if this is not a function
     // call, diagnose the problem.
     TypoExpr *TE = nullptr;
@@ -6889,6 +6892,9 @@ static bool isPlaceholderToRemoveAsArg(QualType type) {
   case BuiltinType::BuiltinFn:
   case BuiltinType::IncompleteMatrixIdx:
   case BuiltinType::ApproxArraySection:
+  case BuiltinType::ApproxArraySlice:
+  case BuiltinType::ApproxSlice:
+  case BuiltinType::ApproxIndexVarRef:
   case BuiltinType::OMPArraySection:
   case BuiltinType::OMPArrayShaping:
   case BuiltinType::OMPIterator:
@@ -21701,6 +21707,18 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
 
   case BuiltinType::ApproxArraySection:
     Diag(E->getBeginLoc(), diag::err_approx_array_section_use);
+    return ExprError();
+
+  case BuiltinType::ApproxArraySlice:
+    Diag(E->getBeginLoc(), diag::err_approx_array_slice_use);
+    return ExprError();
+
+  case BuiltinType::ApproxSlice:
+    Diag(E->getBeginLoc(), diag::err_approx_slice_use);
+    return ExprError();
+
+  case BuiltinType::ApproxIndexVarRef:
+    Diag(E->getBeginLoc(), diag::err_approx_index_var_ref_use);
     return ExprError();
 
  // Expressions of unknown type.

@@ -3650,6 +3650,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case ApproxArraySectionExprClass:
   case ApproxArraySliceExprClass:
   case ApproxSliceExprClass:
+  case ApproxIndexVarRefExprClass:
   case OMPArraySectionExprClass:
   case OMPArrayShapingExprClass:
   case OMPIteratorExprClass:

@@ -5787,6 +5787,9 @@ public:
                                          SourceLocation ColonLoc, Expr *Length,
                                          SourceLocation RBLoc);
 
+  ExprResult ActOnApproxIndexVarRefExpr(IdentifierInfo *II,
+                                        SourceLocation ILoc);
+
   ExprResult ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
                                       Expr *LowerBound,
                                       SourceLocation ColonLocFirst,

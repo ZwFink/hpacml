@@ -322,6 +322,12 @@ PLACEHOLDER_TYPE(IncompleteMatrixIdx, IncompleteMatrixIdxTy)
 // A placeholder type for Approx array sections.
 PLACEHOLDER_TYPE(ApproxArraySection, ApproxArraySectionTy)
 
+PLACEHOLDER_TYPE(ApproxArraySlice, ApproxArraySliceTy)
+
+PLACEHOLDER_TYPE(ApproxSlice, ApproxSliceTy)
+
+PLACEHOLDER_TYPE(ApproxIndexVarRef, ApproxIndexVarRefTy)
+
 // A placeholder type for OpenMP array sections.
 PLACEHOLDER_TYPE(OMPArraySection, OMPArraySectionTy)
 

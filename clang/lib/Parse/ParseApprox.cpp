@@ -246,6 +246,8 @@ ApproxClause *Parser::ParseApproxDeclClause(ClauseKind CK) {
 
 ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLocation Loc) {
   approxScope = ApproxScope::APPROX_TENSOR_SLICE;
+  unsigned ScopeFlags = Scope::ApproxSliceScope | getCurScope()->getFlags();
+  ParseScope ApproxScope(this, ScopeFlags);
   BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
   if (T.expectAndConsume(diag::err_expected_lparen_after, "tensor_functor"))
   {
@@ -285,6 +287,8 @@ ApproxClause *Parser::ParseApproxTensorFunctorDeclClause(ClauseKind CK, SourceLo
 
   ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
   // Do we need to pass in the declared type?
+
+  ApproxScope.Exit();
   return Actions.ActOnApproxTFDeclClause(CK, Name, Slices, RHSSlices, Locs);
 }
 

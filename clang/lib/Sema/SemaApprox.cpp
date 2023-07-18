@@ -2362,6 +2362,11 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
                       OK_Ordinary, LBLoc, ColonLocFirst, ColonLocSecond, RBLoc);
 }
 
+ExprResult Sema::ActOnApproxIndexVarRefExpr(IdentifierInfo *II, SourceLocation Loc) {
+  llvm::dbgs() << "Identified an ApproxIndexVarRefExpr\n";
+  return new (Context)  ApproxIndexVarRefExpr(II, Context.getIntTypeForBitwidth(64, false), VK_LValue, OK_Ordinary, Loc);
+}
+
 ApproxClause *Sema::ActOnApproxNNClause(ClauseKind Kind,
                                         ApproxVarListLocTy &Locs) {
   SourceLocation StartLoc = Locs.StartLoc;

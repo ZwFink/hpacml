@@ -847,6 +847,14 @@ void ASTStmtWriter::VisitApproxSliceExpr(ApproxSliceExpr *E) {
   Code = serialization::EXPR_APPROX_SLICE;
 }
 
+
+void ASTStmtWriter::VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
+  VisitExpr(E);
+  Record.AddIdentifierRef(E->getIdentifier());
+  Record.AddSourceLocation(E->getBeginLoc());
+  Code = serialization::EXPR_APPROX_INDEX_VAR_REF;
+}
+
 void ASTStmtWriter::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {
   VisitExpr(E);
   Record.AddStmt(E->getBase());

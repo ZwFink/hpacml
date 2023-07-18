@@ -1376,6 +1376,9 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
     InitBuiltinType(IncompleteMatrixIdxTy, BuiltinType::IncompleteMatrixIdx);
 
   InitBuiltinType(ApproxArraySectionTy, BuiltinType::ApproxArraySection);
+  InitBuiltinType(ApproxArraySliceTy, BuiltinType::ApproxArraySlice);
+  InitBuiltinType(ApproxSliceTy, BuiltinType::ApproxSlice);
+  InitBuiltinType(ApproxIndexVarRefTy, BuiltinType::ApproxIndexVarRef);
 
   // Builtin types for 'id', 'Class', and 'SEL'.
   InitBuiltinType(ObjCBuiltinIdTy, BuiltinType::ObjCId);
