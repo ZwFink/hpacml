@@ -185,7 +185,7 @@ class ApproxDeclClause : public ApproxClause {
   /// \param EndLoc Ending location of the clause.
   ApproxDeclClause(approx::DeclType DT, SourceLocation StartLoc,
                     SourceLocation EndLoc, SourceLocation LParenLoc)
-      : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){llvm_unreachable("This shouldn't be constructed");
+      : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){Type = approx::DeclType::DT_END; llvm_unreachable("This shouldn't be constructed");
       }
 };
 

@@ -1993,9 +1993,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
           // Make sure the ONLY approx scope that's turned on is 
           // ApproxTensorSliceScope
           unsigned ScopeFlags =
-              Scope::ApproxSliceScope |
-              (CurScope->getFlags() & ~(Scope::ApproxArraySectionScope |
-               Scope::ApproxTensorDeclScope));
+              CurScope->getFlags() | Scope::ApproxSliceScope;
           ParseScope ApproxScope(this, ScopeFlags);
           ParseApproxNDTensorSlice(Slice, tok::r_square);
           ApproxScope.Exit();
