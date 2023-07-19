@@ -1836,9 +1836,6 @@ static unsigned checkApproxLoop(Stmt *AStmt, Sema &SemaRef,
 StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
                                       ArrayRef<ApproxClause *> Clauses,
                                       ApproxVarListLocTy &Locs) {
-  if(!AssociatedStmt)
-    return StmtError();
-
   CapturedStmt *CS = nullptr;
   ApproxLoopHelperExprs B;
   OMPLoopDirective *OMPLoopDir = nullptr;
@@ -2166,8 +2163,10 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
 
   }
 
-  CS = dyn_cast<CapturedStmt>(ActOnCapturedRegionEnd(AssociatedStmt).get());
-  assert(CS && "Expected non-null CS");
+  if (AssociatedStmt) {
+    CS = dyn_cast<CapturedStmt>(ActOnCapturedRegionEnd(AssociatedStmt).get());
+    assert(CS && "Expected non-null CS");
+  }
   ApproxDirective *Stmt = ApproxDirective::Create(Context, Locs.StartLoc,
                                                   Locs.EndLoc, CS, Clauses, B);
   // TODO: This should be implemented for declare tensor_functor

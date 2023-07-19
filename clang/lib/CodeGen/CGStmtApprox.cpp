@@ -23,9 +23,9 @@ using namespace llvm;
 
 void CodeGenFunction::EmitApproxDirective(const ApproxDirective &AD) {
   CGApproxRuntime &RT = CGM.getApproxRuntime();
-  CapturedStmt *CStmt = cast<CapturedStmt>(AD.getAssociatedStmt());
+  CapturedStmt *CStmt = cast_or_null<CapturedStmt>(AD.getAssociatedStmt());
 
-  RT.CGApproxRuntimeEnterRegion(*this, *CStmt);
+  // RT.CGApproxRuntimeEnterRegion(*this, *CStmt);
   for (auto C : AD.clauses()) {
     if (ApproxIfClause *IfClause = dyn_cast_or_null<ApproxIfClause>(C)) {
       RT.CGApproxRuntimeEmitIfInit(*this, *IfClause);
@@ -67,6 +67,6 @@ void CodeGenFunction::EmitApproxDirective(const ApproxDirective &AD) {
     }
   }
 
-  RT.CGApproxRuntimeEmitDataValues(*this);
-  RT.CGApproxRuntimeExitRegion(*this);
+  // RT.CGApproxRuntimeEmitDataValues(*this);
+  // RT.CGApproxRuntimeExitRegion(*this);
 }

@@ -51,6 +51,8 @@ protected:
   ApproxClause(approx::ClauseKind Kind, SourceLocation StartLoc, SourceLocation EndLoc)
       : StartLoc(StartLoc), EndLoc(EndLoc), Kind(Kind) {}
 
+  virtual ~ApproxClause() = default;
+
 public:
   static const std::string Name[approx::CK_END];
 
@@ -67,6 +69,8 @@ public:
   std::string getAsString() const { return Name[Kind]; }
 
   bool isImplicit() const { return StartLoc.isInvalid(); }
+
+  virtual bool requiresCapturedRegion() const { return true; }
 
   using child_iterator = StmtIterator;
   using const_child_iterator = ConstStmtIterator;
@@ -344,6 +348,8 @@ class ApproxTensorFunctorDeclClause final : public ApproxClause {
 
     llvm::ArrayRef<Expr*> getLHSSlice() const {return LHSSlice;}
     ApproxNDTensorSliceCollection &getRHSSlices() {return RHSSlices;}
+
+    bool requiresCapturedRegion() const override { return false; }
 };
 
 class ApproxTensorDeclClause final : public ApproxClause {

@@ -583,6 +583,7 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
     return Directive;
   }
 
+  bool AnyCaptures = false;
   ClauseKind CK;
   while (Tok.isNot(tok::annot_pragma_approx_end)) {
     if (isApproxClause(Tok, CK)) {
@@ -593,6 +594,8 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
         return Directive;
       }
       Clauses.push_back(Clause);
+      if(Clause->requiresCapturedRegion())
+        AnyCaptures = true;
     } else {
       PP.Diag(Tok, diag::err_pragma_approx_unrecognized_directive);
       SkipUntil(tok::annot_pragma_approx_end);
@@ -606,10 +609,17 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   ConsumeAnnotationToken();
   ApproxVarListLocTy Locs(DirectiveStart, ClauseStartLocation, DirectiveEnd);
 
-  // Start captured region sema, will end withing ActOnApproxDirective.
-  Actions.ActOnCapturedRegionStart(Tok.getEndLoc(), getCurScope(), CR_Default, /* NumParams = */1);
-  StmtResult AssociatedStmt = (Sema::CompoundScopeRAII(Actions), ParseStatement());
-  Directive = Actions.ActOnApproxDirective(AssociatedStmt.get(), Clauses, Locs);
+  Stmt *AssociatedStmtPtr = nullptr;
+
+  if (AnyCaptures) {
+    // Start captured region sema, will end withing ActOnApproxDirective.
+    Actions.ActOnCapturedRegionStart(Tok.getEndLoc(), getCurScope(), CR_Default,
+                                     /* NumParams = */ 1);
+    StmtResult AssociatedStmt =
+        (Sema::CompoundScopeRAII(Actions), ParseStatement());
+    AssociatedStmtPtr = AssociatedStmt.get();
+  }
+  Directive = Actions.ActOnApproxDirective(AssociatedStmtPtr, Clauses, Locs);
   ApproxScope.Exit();
   return Directive;
 }
