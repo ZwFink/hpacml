@@ -3510,7 +3510,6 @@ private:
   ParseApproxClauseFn ParseApproxMLClause;
   ParseApproxClauseFn ParseApproxPetrubateClause;
   ParseApproxClauseFn ParseApproxDTClause;
-  ParseApproxClauseFn ParseApproxDeclClause;
   ParseApproxClauseFn ParseApproxNNClause;
   ParseApproxClauseFn ParseApproxUserClause;
   ParseApproxClauseFn ParseApproxIfClause;
@@ -3520,10 +3519,9 @@ private:
   ParseApproxClauseFn ParseApproxLabelClause;
   
 
-
-  ApproxClause *ParseApproxTensorFunctorDeclClause(approx::ClauseKind CK, SourceLocation Loc);
-
-  ApproxClause *ParseApproxTensorDeclClause(approx::ClauseKind CK, SourceLocation Loc);
+  StmtResult ParseApproxDecl(approx::DeclKind DK);
+  ApproxDeclareTensorDecl *ParseApproxTensorDecl(approx::DeclKind DK, SourceLocation Loc);
+  ApproxDeclareTensorFunctorDecl *ParseApproxTensorFunctorDecl(approx::DeclKind DK, SourceLocation Loc);
 
   using ApproxNDTensorSlice = SmallVector<Expr *, 8>;
   using ApproxNDTensorSliceCollection = SmallVector<ApproxNDTensorSlice, 16>;

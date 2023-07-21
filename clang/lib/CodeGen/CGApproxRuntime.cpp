@@ -818,3 +818,11 @@ void CGApproxRuntime::CGApproxRuntimeEmitDeclInit(
     CodeGenFunction &CGF, ApproxDeclClause &DeclClause) {
       // raise an error that says we hav enot implemented this yet
     }
+
+
+  void CGApproxRuntime::emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D) {
+    llvm::dbgs() << "Emitting approx declare tensor functor";
+  }
+  void CGApproxRuntime::emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
+    llvm::dbgs() << "Emitting approx declare tensor functor";
+  }

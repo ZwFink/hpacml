@@ -37,8 +37,6 @@ enum ClauseKind : uint {
   CK_PERFO = 0,
   CK_MEMO,
   CK_DT,
-  CK_TF_DECL,
-  CK_T_DECL,
   CK_NN,
   CK_USER,
   CK_IF,
@@ -52,6 +50,15 @@ enum ClauseKind : uint {
 };
 
 const unsigned CK_START = CK_PERFO;
+
+enum DeclKind : uint {
+  DK_TF = 0,
+  DK_T,
+  DK_END
+};
+
+const unsigned DK_START = DK_TF;
+
 
 enum PerfoType : uint {
   PT_SMALL = 0,

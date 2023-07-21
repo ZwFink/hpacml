@@ -40,6 +40,8 @@ def Named : DeclNode<Decl, "named declarations", 1>;
     def Binding : DeclNode<Value>;
     def OMPDeclareReduction : DeclNode<Value>, DeclContext;
     def OMPDeclareMapper : DeclNode<Value>, DeclContext;
+    def ApproxDeclareTensor : DeclNode<Value>;
+    def ApproxDeclareTensorFunctor : DeclNode<Value>;
     def MSGuid : DeclNode<Value>;
     def UnnamedGlobalConstant : DeclNode<Value>;
     def TemplateParamObject : DeclNode<Value>;

@@ -23,6 +23,7 @@
 #include "clang/Serialization/ASTRecordWriter.h"
 #include "llvm/Bitstream/BitstreamWriter.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Debug.h"
 #include <optional>
 using namespace clang;
 using namespace serialization;
@@ -160,6 +161,8 @@ namespace clang {
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
     void VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D);
     void VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D);
+    void VisitApproxDeclareTensorDecl(ApproxDeclareTensorDecl *D);
+    void VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *D);
     void VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D);
 
     /// Add an Objective-C type parameter list to the given record.
@@ -2018,6 +2021,18 @@ void ASTDeclWriter::VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D) {
 void ASTDeclWriter::VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D) {
   VisitVarDecl(D);
   Code = serialization::DECL_OMP_CAPTUREDEXPR;
+}
+
+void ASTDeclWriter::VisitApproxDeclareTensorDecl(ApproxDeclareTensorDecl *D) {
+  llvm::dbgs() << "Visit approx tensor decl in ASTWriterDecl, this isn't actually implemented\n";
+  VisitValueDecl(D);
+  Code = serialization::DECL_APPROX_TENSOR;
+}
+
+void ASTDeclWriter::VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *D) {
+  llvm::dbgs() << "Visit approx tensor functor decl in ASTWriterDecl, this isn't actually implemented\n";
+  VisitValueDecl(D);
+  Code = serialization::DECL_APPROX_TENSOR_FUNCTOR;
 }
 
 void ASTDeclWriter::VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D){

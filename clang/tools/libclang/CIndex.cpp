@@ -6789,6 +6789,8 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::OMPDeclareReduction:
   case Decl::OMPDeclareMapper:
   case Decl::OMPRequires:
+  case Decl::ApproxDeclareTensor:
+  case Decl::ApproxDeclareTensorFunctor:
   case Decl::ObjCTypeParam:
   case Decl::BuiltinTemplate:
   case Decl::PragmaComment:

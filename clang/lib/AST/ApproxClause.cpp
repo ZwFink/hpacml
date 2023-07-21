@@ -22,13 +22,13 @@ using namespace approx;
 using namespace llvm;
 
 const std::string ApproxClause::Name[approx::CK_END] = {
-    "perfo", "memo", "dt", "declare", "nn", "user", "if", "in", "out", "inout", "label", "petrubate", "ml"};
+    "perfo", "memo", "dt", "nn", "user", "if", "in", "out", "inout", "label", "petrubate", "ml"};
+
+const std::string ApproxDecl::Name[approx::DK_END] = {
+    "tensor_functor", "tensor"};
 
 const std::string ApproxPerfoClause::PerfoName[approx::PT_END] = {
     "small", "large", "rand", "init", "fini"};
-
-const std::string ApproxDeclClause::DeclName[approx::DT_END] = {
-    "tensor_functor", "tensor"};
 
 const std::string ApproxMemoClause::MemoName[approx::MT_END] = {
     "in", "out"};
@@ -93,47 +93,6 @@ ApproxInOutClause *ApproxInOutClause::CreateEmpty(const ASTContext &C,
 
 void ApproxClausePrinter::VisitApproxPerfoClause(ApproxPerfoClause *Node) {
   OS << Node->getAsString() << " ";
-}
-
-void ApproxClausePrinter::VisitApproxTensorDeclClause(ApproxTensorDeclClause *Node) {
-  llvm::ArrayRef<Expr*> Slices = Node->getArraySlices();
-  OS << "declare tensor(" << Node->getTensorName() << ": " 
-  << Node->getTFName() << "(";
-  for(unsigned i = 0; i < Slices.size(); i++){
-    if(i != 0)
-      OS << ", ";
-    Slices[i]->printPretty(OS, nullptr, Policy, 0);
-  }
-  OS << "))";
-}
-
-void ApproxClausePrinter::VisitApproxTensorFunctorDeclClause(ApproxTensorFunctorDeclClause *Node) {
-  OS << "declare tensor_functor(" << Node->getFunctorName() << ": ";
-  OS << "[";
-  auto LHS = Node->getLHSSlice();
-  for(unsigned i = 0; i < LHS.size(); i++){
-    if(i != 0)
-      OS << ", ";
-    LHS[i]->printPretty(OS, nullptr, Policy, 0);
-  }
-  OS << "]";
-  OS << " = (";
-  ApproxNDTensorSliceCollection &RHS = Node->getRHSSlices();
-  for(unsigned j = 0 ; j < RHS.size(); j++){
-    auto &Slices = RHS[j];
-    if(j != 0)
-      OS << ", ";
-    OS << "[";
-    for(unsigned i = 0; i < Slices.size(); i++){
-      if(i != 0)
-        OS << ", ";
-      Slices[i]->printPretty(OS, nullptr, Policy, 0);
-    }
-    OS << "]";
-  }
-
-  OS << "))";
-
 }
 
 void ApproxClausePrinter::VisitApproxMemoClause(ApproxMemoClause *Node) {

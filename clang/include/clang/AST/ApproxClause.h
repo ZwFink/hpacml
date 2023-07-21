@@ -26,14 +26,12 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/TrailingObjects.h"
+#include "DeclApprox.h"
 
-
-// TOOD: This is a hack, this must match the definitions in Parser.h
-using ApproxNDTensorSlice = llvm::SmallVector<clang::Expr *, 8>;
-using ApproxNDTensorSliceCollection = llvm::SmallVector<ApproxNDTensorSlice, 16>;
 
 
 namespace clang {
+
 
 /// This is a basic class for representing a
 /// single Approx Clause.
@@ -189,7 +187,7 @@ class ApproxDeclClause : public ApproxClause {
   /// \param EndLoc Ending location of the clause.
   ApproxDeclClause(approx::DeclType DT, SourceLocation StartLoc,
                     SourceLocation EndLoc, SourceLocation LParenLoc)
-      : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){Type = approx::DeclType::DT_END; llvm_unreachable("This shouldn't be constructed");
+      : ApproxClause(approx::CK_END, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){Type = approx::DeclType::DT_END; llvm_unreachable("This shouldn't be constructed");
       }
 };
 
@@ -299,99 +297,6 @@ public:
   static bool classof(const ApproxClause *T) {
     return T->getClauseKind() == approx::CK_DT;
   }
-};
-
-class ApproxTensorFunctorDeclClause final : public ApproxClause {
-
-  std::string FunctorName;
-  ApproxNDTensorSlice LHSSlice;
-  ApproxNDTensorSliceCollection RHSSlices;
-
-  public:
-    ApproxTensorFunctorDeclClause(SourceLocation StartLoc,
-                                  SourceLocation EndLoc,
-                                  llvm::StringRef FunctorName,
-                                  ApproxNDTensorSlice LHSSlice,
-                                  ApproxNDTensorSliceCollection RHSSlices)
-        : ApproxClause(approx::CK_TF_DECL, StartLoc, EndLoc),
-          FunctorName{FunctorName}, LHSSlice{LHSSlice}, RHSSlices{RHSSlices} {}
-
-    // build an empty clause 
-    ApproxTensorFunctorDeclClause()
-        : ApproxClause(approx::CK_TF_DECL, SourceLocation(), SourceLocation()),
-        FunctorName{}, LHSSlice{}, RHSSlices{} {}
-
-    static bool classof(const ApproxClause *T) {
-      return T->getClauseKind() == approx::CK_TF_DECL;
-    }
-
-    child_range children() {
-      llvm_unreachable("Children not implemented for TFDeclClause");
-      return child_range(child_iterator(), child_iterator());
-    }
-
-    const_child_range children() const {
-      llvm_unreachable("Const children not implemented for TFDeclClause");
-      return const_child_range(const_child_iterator(), const_child_iterator());
-    }
-
-    child_range used_children() {
-      llvm_unreachable("Used children not implemented for TFDeclClause");
-      return child_range(child_iterator(), child_iterator());
-    }
-    const_child_range used_children() const {
-      llvm_unreachable("Const used children not implemented for TFDeclClause");
-      return const_child_range(const_child_iterator(), const_child_iterator());
-    }
-
-    llvm::StringRef getFunctorName() const {return FunctorName;}
-
-    llvm::ArrayRef<Expr*> getLHSSlice() const {return LHSSlice;}
-    ApproxNDTensorSliceCollection &getRHSSlices() {return RHSSlices;}
-
-    bool requiresCapturedRegion() const override { return false; }
-};
-
-class ApproxTensorDeclClause final : public ApproxClause {
-  std::string TFName;
-  std::string TensorName;
-  llvm::SmallVector<Expr*, 8> ArraySlices;
-  public:
-  ApproxTensorDeclClause(SourceLocation StartLoc,
-                         SourceLocation EndLoc,
-                         llvm::StringRef TFName,
-                         llvm::StringRef TensorName,
-                         llvm::ArrayRef<Expr*> ArraySlices)
-      : ApproxClause(approx::CK_T_DECL, StartLoc, EndLoc), TFName{TFName},
-        TensorName{TensorName} {this->ArraySlices.append(ArraySlices.begin(), ArraySlices.end());}
-
-  static bool classof(const ApproxClause *T) {
-    return T->getClauseKind() == approx::CK_T_DECL;
-  }
-
-  child_range children() {
-    llvm_unreachable("Children not implemented for TensorDeclClause");
-    return child_range(child_iterator(), child_iterator());
-  }
-
-  const_child_range children() const {
-    llvm_unreachable("Const children not implemented for TensorDeclClause");
-    return const_child_range(const_child_iterator(), const_child_iterator());
-  }
-
-  child_range used_children() {
-    llvm_unreachable("Used children not implemented for TensorDeclClause");
-    return child_range(child_iterator(), child_iterator());
-  }
-  const_child_range used_children() const {
-    llvm_unreachable("Const used children not implemented for TensorDeclClause");
-    return const_child_range(const_child_iterator(), const_child_iterator());
-  }
-
-  llvm::StringRef getTensorName() const {return TensorName;} 
-  llvm::StringRef getTFName() const {return TFName;} 
-
-  llvm::ArrayRef<Expr*> getArraySlices() {return ArraySlices;}
 };
 
 class ApproxMLClause final : public ApproxClause {
@@ -744,8 +649,6 @@ class ApproxClauseVisitorBase{
   RetTy VisitApproxMemoClause(PTR(ApproxMemoClause) S) {DISPATCH(ApproxMemoClause);}
   RetTy VisitApproxMLClause(PTR(ApproxMLClause) S) {DISPATCH(ApproxMLClause);}
   RetTy VisitApproxDTClause(PTR(ApproxDTClause) S) {DISPATCH(ApproxDTClause);}
-  RetTy VisitApproxTensorFunctorDeclClause(PTR(ApproxTensorFunctorDeclClause) S) {DISPATCH(ApproxTensorFunctorDeclClause);}
-  RetTy VisitApproxTensorDeclClause(PTR(ApproxTensorDeclClause) S) {DISPATCH(ApproxTensorDeclClause);}
   RetTy VisitApproxNNClause(PTR(ApproxNNClause) S) {DISPATCH(ApproxNNClause);}
   RetTy VisitApproxUserClause(PTR(ApproxUserClause) S) {DISPATCH(ApproxUserClause);}
   RetTy VisitApproxIfClause(PTR(ApproxIfClause) S) {DISPATCH(ApproxIfClause);}
@@ -765,10 +668,6 @@ class ApproxClauseVisitorBase{
         return VisitApproxMLClause(static_cast<PTR(ApproxMLClause)>(S));
       case approx::CK_DT:
         return VisitApproxDTClause(static_cast<PTR(ApproxDTClause)>(S));
-      case approx::CK_TF_DECL:
-        return VisitApproxTensorFunctorDeclClause(static_cast<PTR(ApproxTensorFunctorDeclClause)>(S));
-      case approx::CK_T_DECL:
-        return VisitApproxTensorDeclClause(static_cast<PTR(ApproxTensorDeclClause)>(S));
       case approx::CK_NN:
         return VisitApproxNNClause(static_cast<PTR(ApproxNNClause)>(S));
       case approx::CK_USER:
@@ -820,8 +719,8 @@ class ApproxClausePrinter final : public ApproxClauseVisitor<ApproxClausePrinter
     void VisitApproxMLClause(ApproxMLClause *S);
     void VisitApproxDTClause(ApproxDTClause *S);
     void VisitApproxNNClause(ApproxNNClause *S);
-    void VisitApproxTensorFunctorDeclClause(ApproxTensorFunctorDeclClause *S);
-    void VisitApproxTensorDeclClause(ApproxTensorDeclClause *S);
+    void VisitApproxTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *S);
+    void VisitApproxTensorDecl(ApproxDeclareTensorDecl *S);
     void VisitApproxUserClause(ApproxUserClause *S);
     void VisitApproxIfClause(ApproxIfClause *S);
     void VisitApproxInClause(ApproxInClause *S);

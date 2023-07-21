@@ -1768,6 +1768,8 @@ DEF_TRAVERSE_DECL(OMPDeclareMapperDecl, {
 })
 
 DEF_TRAVERSE_DECL(OMPCapturedExprDecl, { TRY_TO(TraverseVarHelper(D)); })
+DEF_TRAVERSE_DECL(ApproxDeclareTensorDecl, { llvm_unreachable("This isn't implemented yet"); })
+DEF_TRAVERSE_DECL(ApproxDeclareTensorFunctorDecl, { llvm_unreachable("This isn't implemented yet"); })
 DEF_TRAVERSE_DECL(ApproxCapturedExprDecl, { TRY_TO(TraverseVarHelper(D)); })
 
 DEF_TRAVERSE_DECL(OMPAllocateDecl, {

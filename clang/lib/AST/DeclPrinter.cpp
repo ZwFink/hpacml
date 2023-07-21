@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/ApproxClause.h" // For ApproxClausePrinter
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
@@ -107,6 +108,8 @@ namespace {
     void VisitOMPDeclareReductionDecl(OMPDeclareReductionDecl *D);
     void VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D);
     void VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D);
+    void VisitApproxDeclareTensorDecl(ApproxDeclareTensorDecl *D);
+    void VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *D);
     void VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D);
     void VisitTemplateTypeParmDecl(const TemplateTypeParmDecl *TTP);
     void VisitNonTypeTemplateParmDecl(const NonTypeTemplateParmDecl *NTTP);
@@ -1771,6 +1774,53 @@ void DeclPrinter::VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D) {
 
 void DeclPrinter::VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D) {
   D->getInit()->printPretty(Out, nullptr, Policy, Indentation, "\n", &Context);
+}
+
+void DeclPrinter::VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *D) {
+  Out << "#pragma approx declare tensor_functor(";
+    Out << D->getFunctorName() << ": ";
+  Out << "[";
+  auto LHS = D->getLHSSlice();
+  for(unsigned i = 0; i < LHS.size(); i++){
+    if(i != 0)
+      Out << ", ";
+    LHS[i]->printPretty(Out, nullptr, Policy, 0);
+  }
+  Out << "]";
+  Out << " = (";
+  ApproxNDTensorSliceCollection &RHS = D->getRHSSlices();
+  for(unsigned j = 0 ; j < RHS.size(); j++){
+    auto &Slices = RHS[j];
+    if(j != 0)
+      Out << ", ";
+    Out << "[";
+    for(unsigned i = 0; i < Slices.size(); i++){
+      if(i != 0)
+        Out << ", ";
+      Slices[i]->printPretty(Out, nullptr, Policy, 0);
+    }
+    Out << "]";
+  }
+
+  Out << ")";
+
+
+  Out << ")";
+}
+
+void DeclPrinter::VisitApproxDeclareTensorDecl(ApproxDeclareTensorDecl *D) {
+  Out << "#pragma approx declare tensor(";
+  llvm::ArrayRef<Expr*> Slices = D->getArraySlices();
+  Out <<  D->getTensorName() << ": " 
+  << D->getTFName() << "(";
+  for(unsigned i = 0; i < Slices.size(); i++){
+    if(i != 0)
+      Out << ", ";
+    Slices[i]->printPretty(Out, nullptr, Policy, 0);
+  }
+  Out << ")";
+
+  Out << ")";
 }
 
 void DeclPrinter::VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D) {

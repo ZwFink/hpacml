@@ -27,6 +27,7 @@
 #include "clang/AST/DeclContextInternals.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclOpenMP.h"
+#include "clang/AST/DeclApprox.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclarationName.h"
 #include "clang/AST/DependenceFlags.h"
@@ -11865,6 +11866,8 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
   else if (isa<OMPAllocateDecl>(D))
     return !D->getDeclContext()->isDependentContext();
   else if (isa<OMPDeclareReductionDecl>(D) || isa<OMPDeclareMapperDecl>(D))
+    return !D->getDeclContext()->isDependentContext();
+  else if(isa<ApproxDeclareTensorDecl>(D) || isa<ApproxDeclareTensorFunctorDecl>(D))
     return !D->getDeclContext()->isDependentContext();
   else if (isa<ImportDecl>(D))
     return true;

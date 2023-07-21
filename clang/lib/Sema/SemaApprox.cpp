@@ -2169,7 +2169,6 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
   }
   ApproxDirective *Stmt = ApproxDirective::Create(Context, Locs.StartLoc,
                                                   Locs.EndLoc, CS, Clauses, B);
-  // TODO: This should be implemented for declare tensor_functor
   Stmt->printPretty(dbgs(), nullptr, this->getPrintingPolicy());
   return Stmt;
 }
@@ -2236,25 +2235,30 @@ ApproxClause *Sema::ActOnApproxDTClause(ClauseKind Kind,
   return new (Context) ApproxDTClause(StartLoc, EndLoc);
 }
 
-ApproxClause *
-Sema::ActOnApproxTFDeclClause(ClauseKind Kind, llvm::StringRef TensorName,
+ApproxDeclareTensorFunctorDecl *
+Sema::ActOnApproxTFDecl(DeclKind Kind, IdentifierInfo *TensorName,
     ApproxNDTensorSlice &LHSSlice, ApproxNDTensorSliceCollection &RHSSlices,
     ApproxVarListLocTy &Locs) {
     SourceLocation StartLoc = Locs.StartLoc;
     SourceLocation EndLoc = Locs.EndLoc;
+    SourceRange SR = SourceRange(StartLoc, EndLoc);
+    DeclarationName DeclName{TensorName};
+    ASTContext &Context = getASTContext();
 
-    return new (Context) ApproxTensorFunctorDeclClause(
-        StartLoc, EndLoc, TensorName, LHSSlice, RHSSlices);
-  }
+    return ApproxDeclareTensorFunctorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, LHSSlice, RHSSlices);
+}
 
-ApproxClause *
-Sema::ActOnApproxTensorDeclClause(ClauseKind CK,
-llvm::StringRef TFName, llvm::StringRef TensorName, llvm::ArrayRef<Expr*> Arrays,
+ApproxDeclareTensorDecl *
+Sema::ActOnApproxTensorDecl(DeclKind CK,
+IdentifierInfo *TFName, IdentifierInfo *TensorName, llvm::ArrayRef<Expr*> Arrays,
 ApproxVarListLocTy& Locs) {
   SourceLocation StartLoc = Locs.StartLoc;
   SourceLocation EndLoc = Locs.EndLoc;
+  SourceRange SR = SourceRange(StartLoc, EndLoc);
+  DeclarationName DeclName(TensorName);
+  ASTContext &Context = getASTContext();
 
-  return new (Context) ApproxTensorDeclClause(StartLoc, EndLoc, TFName, TensorName, Arrays);
+  return ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, TFName, Arrays);
 }
 
 

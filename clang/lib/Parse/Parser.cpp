@@ -499,8 +499,6 @@ void Parser::Initialize() {
     ParseApproxClause[CK_PERFO] = &Parser::ParseApproxPerfoClause;
     ParseApproxClause[CK_MEMO] = &Parser::ParseApproxMemoClause;
     ParseApproxClause[CK_DT] = &Parser::ParseApproxDTClause;
-    ParseApproxClause[CK_TF_DECL] = &Parser::ParseApproxDeclClause;
-    ParseApproxClause[CK_T_DECL] = &Parser::ParseApproxDeclClause;
     ParseApproxClause[CK_NN] = &Parser::ParseApproxNNClause;
     ParseApproxClause[CK_USER] = &Parser::ParseApproxUserClause;
     ParseApproxClause[CK_IF] = &Parser::ParseApproxIfClause;

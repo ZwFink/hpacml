@@ -22,6 +22,7 @@
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/TypeTraits.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Debug.h"
 
 #include <algorithm>
 #include <utility>
@@ -1942,6 +1943,17 @@ void TextNodeDumper::VisitOMPCapturedExprDecl(const OMPCapturedExprDecl *D) {
 void TextNodeDumper::VisitApproxCapturedExprDecl(const ApproxCapturedExprDecl *D) {
   dumpName(D);
   dumpType(D->getType());
+}
+
+void TextNodeDumper::VisitApproxDeclareTensorDecl(const ApproxDeclareTensorDecl *D) {
+  dumpName(D);
+  dumpType(D->getType());
+}
+
+void TextNodeDumper::VisitApproxDeclareTensorFunctorDecl(const ApproxDeclareTensorFunctorDecl *D) {
+  dumpName(D);
+  llvm::dbgs() << "ApproxDeclareTensorFunctorDecl not yet implemlented\n";
+  // dumpType(D->getType());
 }
 
 void TextNodeDumper::VisitNamespaceDecl(const NamespaceDecl *D) {

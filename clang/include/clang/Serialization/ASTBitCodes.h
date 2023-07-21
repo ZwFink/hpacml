@@ -1514,6 +1514,9 @@ enum DeclCode {
   /// An ApproxDecl record.
   DECL_APPROX_CAPTUREDEXPR,
 
+  DECL_APPROX_TENSOR,
+  DECL_APPROX_TENSOR_FUNCTOR,
+
   /// A PragmaCommentDecl record.
   DECL_PRAGMA_COMMENT,
 

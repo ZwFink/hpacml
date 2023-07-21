@@ -20,6 +20,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclOpenMP.h"
+#include "clang/AST/DeclApprox.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
@@ -660,6 +661,10 @@ ItaniumMangleContextImpl::getEffectiveDeclContext(const Decl *D) {
   if (isa<CapturedDecl>(DC) || isa<OMPDeclareReductionDecl>(DC) ||
       isa<OMPDeclareMapperDecl>(DC)) {
     return getEffectiveDeclContext(cast<Decl>(DC));
+  }
+
+  if(isa<ApproxDeclareTensorDecl>(D) || isa<ApproxDeclareTensorFunctorDecl>(D)) {
+    return DC->getRedeclContext();
   }
 
   if (const auto *VD = dyn_cast<VarDecl>(D))

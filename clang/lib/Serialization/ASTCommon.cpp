@@ -445,6 +445,8 @@ bool serialization::isRedeclarableDeclKind(unsigned Kind) {
   case Decl::OMPCapturedExpr:
   case Decl::OMPDeclareReduction:
   case Decl::OMPDeclareMapper:
+  case Decl::ApproxDeclareTensor:
+  case Decl::ApproxDeclareTensorFunctor:
   case Decl::BuiltinTemplate:
   case Decl::Decomposition:
   case Decl::Binding:

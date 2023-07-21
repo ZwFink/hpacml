@@ -171,6 +171,8 @@ namespace clang {
   class OMPDeclareReductionDecl;
   class OMPDeclareSimdDecl;
   class OMPClause;
+  class ApproxDeclareTensorDecl;
+  class ApproxDeclareTensorFunctorDecl;
   struct OMPVarListLocTy;
   struct OverloadCandidate;
   enum class OverloadCandidateParamOrder : char;
@@ -11403,14 +11405,14 @@ public:
                                       approx::MLType MType,
                                       approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxDTClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
-  ApproxClause *ActOnApproxTFDeclClause(
-      approx::ClauseKind Kind, llvm::StringRef TensorName, ApproxNDTensorSlice &LHSSlice,
+  ApproxDeclareTensorFunctorDecl *ActOnApproxTFDecl(
+      approx::DeclKind Kind, IdentifierInfo *TensorName, ApproxNDTensorSlice &LHSSlice,
       ApproxNDTensorSliceCollection &RHSSlices,
       approx::ApproxVarListLocTy &Locs);
 
-  ApproxClause *ActOnApproxTensorDeclClause(approx::ClauseKind CK,
-                                            llvm::StringRef TFName,
-                                            llvm::StringRef TensorName,
+  ApproxDeclareTensorDecl *ActOnApproxTensorDecl(approx::DeclKind CK,
+                                            IdentifierInfo *TFName,
+                                            IdentifierInfo *TensorName,
                                             llvm::ArrayRef<Expr *> Arrays,
                                             approx::ApproxVarListLocTy &Locs);
 

@@ -3407,6 +3407,9 @@ ExprResult Sema::BuildDeclarationNameExpr(
   case Decl::UnresolvedUsingValue:
   case Decl::OMPDeclareReduction:
   case Decl::OMPDeclareMapper:
+  // TODO: I think this is correct
+  case Decl::ApproxDeclareTensor:
+  case Decl::ApproxDeclareTensorFunctor:
     valueKind = VK_PRValue;
     break;
 

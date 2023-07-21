@@ -116,6 +116,10 @@ public:
   void CGApproxRuntimeRegisterInputsOutputs(ApproxInOutClause &InOutClause);
   void CGApproxRuntimeEmitDataValues(CodeGenFunction &CG);
   llvm::Constant* getOrCreateName(StringRef Name, CodeGenFunction &CGF);
+
+
+  void emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D);
+  void emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D);
 };
 
 } // namespace CodeGen
