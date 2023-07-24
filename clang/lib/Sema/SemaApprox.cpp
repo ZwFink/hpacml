@@ -2270,16 +2270,28 @@ ApproxVarListLocTy& Locs) {
   ASTContext &Context = getASTContext();
   Decl *FunctorDecl = nullptr;
 
-  LookupResult Lookup(*this, FunctorName, SourceLocation(), LookupOrdinaryName);
-  LookupName(Lookup, S);
-  if(Lookup.getResultKind() == LookupResult::NotFound) {
+  // Ensure TensorName wasn't already declared
+  LookupResult LookupTensor(*this, DeclName, SourceLocation(), LookupOrdinaryName);
+  LookupName(LookupTensor, S);
+  if(LookupTensor.getResultKind() == LookupResult::Found) {
+    Diag(StartLoc, diag::err_approx_tensor_already_declared) << TensorName;
+    return nullptr;
+  }
+
+  // Ensure functor exists
+  LookupResult LookupFunctor(*this, FunctorName, SourceLocation(), LookupOrdinaryName);
+  LookupName(LookupFunctor, S);
+  if(LookupFunctor.getResultKind() == LookupResult::NotFound) {
     Diag(StartLoc, diag::err_approx_tensor_functor_not_found) << FunctorName;
     return nullptr;
   }
 
-  FunctorDecl = Lookup.getFoundDecl();
+  FunctorDecl = LookupFunctor.getFoundDecl();
 
-  return ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, FunctorDecl, Arrays);
+  auto *Decl = ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, FunctorDecl, Arrays);
+  IdResolver.AddDecl(Decl);
+  S->AddDecl(Decl);
+  return Decl;
 }
 
 

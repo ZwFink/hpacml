@@ -10503,6 +10503,7 @@ def err_approx_slice_stop_not_integer : Error<"slice stop is not an integer">;
 def err_approx_slice_step_not_integer : Error<"slice step is not an integer">;
 def err_approx_tensor_functor_not_found : Error<"approx tensor functor %0 not found">;
 def err_approx_tensor_functor_already_declared : Error<"approx tensor functor %0 already declared">;
+def err_approx_tensor_already_declared : Error<"approx tensor %0 already declared">;
 def warn_approx_section_is_char : Warning<"array section %select{lower bound|length}0 is of type 'char'">,
   InGroup<CharSubscript>, DefaultIgnore;
 def warn_approx_slice_is_char : Warning<"array slice %select{start|stop|step}0 is of type 'char'">,
