@@ -11406,11 +11406,12 @@ public:
                                       approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxDTClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
   ApproxDeclareTensorFunctorDecl *ActOnApproxTFDecl(
-      approx::DeclKind Kind, IdentifierInfo *TensorName, ApproxNDTensorSlice &LHSSlice,
+      approx::DeclKind Kind, Scope *S, IdentifierInfo *TensorName, ApproxNDTensorSlice &LHSSlice,
       ApproxNDTensorSliceCollection &RHSSlices,
       approx::ApproxVarListLocTy &Locs);
 
   ApproxDeclareTensorDecl *ActOnApproxTensorDecl(approx::DeclKind CK,
+                                            Scope *S,
                                             IdentifierInfo *TFName,
                                             IdentifierInfo *TensorName,
                                             llvm::ArrayRef<Expr *> Arrays,

@@ -47,13 +47,13 @@ SourceRange ApproxCapturedExprDecl::getSourceRange() const {
 
 ApproxDeclareTensorDecl *ApproxDeclareTensorDecl::Create(
     ASTContext &C, DeclContext *DC, SourceRange SR, DeclarationName TensorName,
-    QualType T, IdentifierInfo *TFName, llvm::ArrayRef<Expr *> ArraySlices) {
+    QualType T, Decl *TensorFunctor, llvm::ArrayRef<Expr *> ArraySlices) {
 
   SourceLocation Begin = SR.getBegin();
   SourceLocation End = SR.getEnd();
 
   return new (C, DC)
-  ApproxDeclareTensorDecl(Begin, End, TensorName, DC, T, TFName, ArraySlices);
+  ApproxDeclareTensorDecl(Begin, End, TensorName, DC, T, TensorFunctor, ArraySlices);
 }
 
 ApproxDeclareTensorFunctorDecl *ApproxDeclareTensorFunctorDecl::Create(
@@ -63,6 +63,7 @@ ApproxDeclareTensorFunctorDecl *ApproxDeclareTensorFunctorDecl::Create(
 
   SourceLocation Begin = SR.getBegin();
   SourceLocation End = SR.getEnd();
-  return new (C, DC)
+  auto * Ret = new (C, DC)
   ApproxDeclareTensorFunctorDecl( Begin, End, FunctorName, DC, T, LHSSlice, RHSSlices);
+  return Ret;
 }

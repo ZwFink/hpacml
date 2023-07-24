@@ -2236,7 +2236,7 @@ ApproxClause *Sema::ActOnApproxDTClause(ClauseKind Kind,
 }
 
 ApproxDeclareTensorFunctorDecl *
-Sema::ActOnApproxTFDecl(DeclKind Kind, IdentifierInfo *TensorName,
+Sema::ActOnApproxTFDecl(DeclKind Kind, Scope *S, IdentifierInfo *TensorName,
     ApproxNDTensorSlice &LHSSlice, ApproxNDTensorSliceCollection &RHSSlices,
     ApproxVarListLocTy &Locs) {
     SourceLocation StartLoc = Locs.StartLoc;
@@ -2245,20 +2245,41 @@ Sema::ActOnApproxTFDecl(DeclKind Kind, IdentifierInfo *TensorName,
     DeclarationName DeclName{TensorName};
     ASTContext &Context = getASTContext();
 
-    return ApproxDeclareTensorFunctorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, LHSSlice, RHSSlices);
+    LookupResult Lookup(*this, DeclName, SourceLocation(), LookupOrdinaryName);
+    LookupName(Lookup, S);
+    if(Lookup.getResultKind() == LookupResult::Found) {
+      Diag(StartLoc, diag::err_approx_tensor_functor_already_declared) << TensorName;
+      return nullptr;
+    }
+
+    auto *Decl = ApproxDeclareTensorFunctorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, LHSSlice, RHSSlices);
+    IdResolver.AddDecl(Decl);
+    S->AddDecl(Decl);
+    return Decl;
 }
 
 ApproxDeclareTensorDecl *
-Sema::ActOnApproxTensorDecl(DeclKind CK,
+Sema::ActOnApproxTensorDecl(DeclKind CK, Scope *S,
 IdentifierInfo *TFName, IdentifierInfo *TensorName, llvm::ArrayRef<Expr*> Arrays,
 ApproxVarListLocTy& Locs) {
   SourceLocation StartLoc = Locs.StartLoc;
   SourceLocation EndLoc = Locs.EndLoc;
   SourceRange SR = SourceRange(StartLoc, EndLoc);
   DeclarationName DeclName(TensorName);
+  DeclarationName FunctorName(TFName);
   ASTContext &Context = getASTContext();
+  Decl *FunctorDecl = nullptr;
 
-  return ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, TFName, Arrays);
+  LookupResult Lookup(*this, FunctorName, SourceLocation(), LookupOrdinaryName);
+  LookupName(Lookup, S);
+  if(Lookup.getResultKind() == LookupResult::NotFound) {
+    Diag(StartLoc, diag::err_approx_tensor_functor_not_found) << FunctorName;
+    return nullptr;
+  }
+
+  FunctorDecl = Lookup.getFoundDecl();
+
+  return ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, FunctorDecl, Arrays);
 }
 
 

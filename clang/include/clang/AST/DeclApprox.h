@@ -133,17 +133,17 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
 };
 
 class ApproxDeclareTensorDecl final : public ApproxDecl, public ValueDecl {
-  std::string TFName;
-  std::string TensorName;
+  Decl *TensorFunctor;
+  DeclarationName TensorName;
   llvm::SmallVector<Expr*, 8> ArraySlices;
     ApproxDeclareTensorDecl(SourceLocation StartLoc, SourceLocation EndLoc,
                             DeclarationName TensorName, DeclContext *DC,
-                            QualType T, IdentifierInfo *TFName,
+                            QualType T, Decl *FunctorDecl,
                             llvm::ArrayRef<Expr *> ArraySlices)
         : ApproxDecl(approx::DK_T, StartLoc, EndLoc),
           ValueDecl{Decl::Kind::ApproxDeclareTensor, DC, StartLoc, TensorName,
                     T},
-          TFName{TFName->getName()}, TensorName{TensorName.getAsString()} {
+          TensorFunctor{FunctorDecl}, TensorName{TensorName} {
       this->ArraySlices.append(ArraySlices.begin(), ArraySlices.end());
     }
 
@@ -151,13 +151,13 @@ class ApproxDeclareTensorDecl final : public ApproxDecl, public ValueDecl {
   ApproxDeclareTensorDecl()
       : ApproxDecl(approx::DK_T, SourceLocation(), SourceLocation()),
         ValueDecl{Decl::Kind::ApproxDeclareTensor, nullptr, SourceLocation(), DeclarationName(), QualType()},
-        TFName{}, TensorName{}, ArraySlices{} {}
+        TensorFunctor{nullptr}, TensorName{}, ArraySlices{} {}
 
   public:
   static ApproxDeclareTensorDecl *Create(ASTContext &C, DeclContext *DC,
                                          SourceRange SR,
                                          DeclarationName TensorName,
-                                         QualType T, IdentifierInfo *TFName,
+                                         QualType T, Decl *FunctorDecl,
                                          llvm::ArrayRef<Expr *> ArraySlices);
 
   static bool classof(const Decl *D) {
@@ -184,8 +184,14 @@ class ApproxDeclareTensorDecl final : public ApproxDecl, public ValueDecl {
     return const_child_range(const_child_iterator(), const_child_iterator());
   }
 
-  llvm::StringRef getTensorName() const {return TensorName;} 
-  llvm::StringRef getTFName() const {return TFName;} 
+  llvm::StringRef getTensorName() const {return TensorName.getAsIdentifierInfo()->getName();}
+  llvm::StringRef getTFName() const {
+    assert(TensorFunctor && "Attempt to get name of null Tensor Functor");
+    return cast<ApproxDeclareTensorFunctorDecl>(TensorFunctor)->getFunctorName();
+  }
+
+  Decl *getTensorFunctor() const {return TensorFunctor;}
+  void setTensorFunctor(Decl *Functor) {TensorFunctor = Functor;}
 
   llvm::ArrayRef<Expr*> getArraySlices() {return ArraySlices;}
 };

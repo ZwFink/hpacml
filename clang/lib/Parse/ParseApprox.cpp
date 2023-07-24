@@ -79,6 +79,16 @@ static bool isDeclType(Token &Tok, DeclKind &Kind) {
   return false;
 }
 
+Scope *getNonApproxScope(Scope *base) {
+  Scope *S = base;
+  while (S && S->isApproxScope())
+    S = S->getParent();
+
+  if(!S)
+    llvm_unreachable("Base scope is approx?");
+  return S;
+}
+
 bool Parser::ParseApproxVarList(SmallVectorImpl<Expr *> &Vars,
                                 SourceLocation &ELoc) {
   BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
@@ -290,7 +300,9 @@ ApproxDeclareTensorFunctorDecl *Parser::ParseApproxTensorFunctorDecl(DeclKind DK
   ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
   // Do we need to pass in the declared type?
 
-  return Actions.ActOnApproxTFDecl(DK, NameID, Slices, RHSSlices, Locs);
+  ApproxScope.Exit();
+  Scope *S = getNonApproxScope(getCurScope());
+  return Actions.ActOnApproxTFDecl(DK, S, NameID, Slices, RHSSlices, Locs);
 }
 
 void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::TokenKind EndToken) {
@@ -449,7 +461,8 @@ ApproxDeclareTensorDecl *Parser::ParseApproxTensorDecl(DeclKind DK, SourceLocati
 
   T.consumeClose();
   ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
-  return Actions.ActOnApproxTensorDecl(DK, TFName, TensorName, IptArrayExprs, Locs);
+  Scope *S = getNonApproxScope(getCurScope());
+  return Actions.ActOnApproxTensorDecl(DK, S, TFName, TensorName, IptArrayExprs, Locs);
 }
 
 ApproxClause *Parser::ParseApproxNNClause(ClauseKind CK) {
