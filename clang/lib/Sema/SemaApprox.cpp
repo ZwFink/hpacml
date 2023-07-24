@@ -2287,10 +2287,15 @@ ApproxVarListLocTy& Locs) {
   }
 
   FunctorDecl = LookupFunctor.getFoundDecl();
+  FunctorDecl->setIsUsed();
 
   auto *Decl = ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, FunctorDecl, Arrays);
   IdResolver.AddDecl(Decl);
   S->AddDecl(Decl);
+
+  // temporarily always set to used so we can do code generation, when we implement the input/output part,
+  // we should set the tensor to used there.
+  Decl->setIsUsed();
   return Decl;
 }
 

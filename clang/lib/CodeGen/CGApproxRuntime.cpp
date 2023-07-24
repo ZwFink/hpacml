@@ -821,8 +821,8 @@ void CGApproxRuntime::CGApproxRuntimeEmitDeclInit(
 
 
   void CGApproxRuntime::emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D) {
-    llvm::dbgs() << "Emitting approx declare tensor functor";
+    llvm::dbgs() << "Emitting tensor functor declaration for functor " << D->getName() << "\n";
   }
   void CGApproxRuntime::emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
-    llvm::dbgs() << "Emitting approx declare tensor functor";
+    llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName() << "\n";
   }

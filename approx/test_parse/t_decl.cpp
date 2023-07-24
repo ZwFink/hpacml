@@ -17,7 +17,7 @@ int main()
   	#pragma approx declare tensor_functor(functor_name3: [c:c+10:10] = ([0:2:2]))
 	{
 	#pragma approx declare tensor_functor(functor_name4: [c:j:10] = ([0:2:2]))
-  	#pragma approx declare tensor(third_tensor: functor_name(a[0:N], a[0:N], a[0:N], a[0:N], a[0:N], a[0:N]))
+  	#pragma approx declare tensor(third_tensor: functor_name4(a[0:N], a[0:N], a[0:N], a[0:N], a[0:N], a[0:N]))
 	}
 	#pragma approx declare tensor_functor(functor_name4: [c:j:10] = ([0:2:2]))
   	#pragma approx declare tensor(third_tensor: functor_name(a[0:N], a[0:N], a[0:N], a[0:N], a[0:N], a[0:N]))

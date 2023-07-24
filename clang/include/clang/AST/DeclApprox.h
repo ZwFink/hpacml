@@ -121,6 +121,7 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
     }
 
     llvm::StringRef getFunctorName() const {return FunctorName;}
+    llvm::StringRef getName() const { return getFunctorName(); }
 
     llvm::ArrayRef<Expr*> getLHSSlice() const {return LHSSlice;}
     ApproxNDTensorSliceCollection &getRHSSlices() {return RHSSlices;}
@@ -185,13 +186,14 @@ class ApproxDeclareTensorDecl final : public ApproxDecl, public ValueDecl {
   }
 
   llvm::StringRef getTensorName() const {return TensorName.getAsIdentifierInfo()->getName();}
-  llvm::StringRef getTFName() const {
+  llvm::StringRef getFunctorName() const {
     assert(TensorFunctor && "Attempt to get name of null Tensor Functor");
     return cast<ApproxDeclareTensorFunctorDecl>(TensorFunctor)->getFunctorName();
   }
+  llvm::StringRef getName() const { return getTensorName(); }
 
-  Decl *getTensorFunctor() const {return TensorFunctor;}
-  void setTensorFunctor(Decl *Functor) {TensorFunctor = Functor;}
+  Decl *getFunctor() const {return TensorFunctor;}
+  void setFunctor(Decl *Functor) {TensorFunctor = Functor;}
 
   llvm::ArrayRef<Expr*> getArraySlices() {return ArraySlices;}
 };

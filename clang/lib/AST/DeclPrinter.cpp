@@ -1812,7 +1812,7 @@ void DeclPrinter::VisitApproxDeclareTensorDecl(ApproxDeclareTensorDecl *D) {
   Out << "#pragma approx declare tensor(";
   llvm::ArrayRef<Expr*> Slices = D->getArraySlices();
   Out <<  D->getTensorName() << ": " 
-  << D->getTFName() << "(";
+  << D->getFunctorName() << "(";
   for(unsigned i = 0; i < Slices.size(); i++){
     if(i != 0)
       Out << ", ";
