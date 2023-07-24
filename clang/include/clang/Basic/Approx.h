@@ -17,6 +17,8 @@
 
 #include "clang/Basic/SourceLocation.h"
 
+#include <optional>
+
 namespace clang {
 namespace approx {
 
@@ -49,6 +51,15 @@ enum ClauseKind : uint {
 
 const unsigned CK_START = CK_PERFO;
 
+enum DeclKind : uint {
+  DK_TF = 0,
+  DK_T,
+  DK_END
+};
+
+const unsigned DK_START = DK_TF;
+
+
 enum PerfoType : uint {
   PT_SMALL = 0,
   PT_LARGE,
@@ -57,8 +68,15 @@ enum PerfoType : uint {
   PT_SFINAL,
   PT_END
 };
-
 const unsigned PT_START = PT_SMALL;
+
+enum DeclType : uint {
+  DT_TENSOR_fUNCTOR = 0,
+  DT_TENSOR,
+  DT_END
+};
+const unsigned DT_START = DT_TENSOR_fUNCTOR;
+
 
 enum MemoType : uint {
   MT_IN = 0,
@@ -94,6 +112,18 @@ struct ApproxVarListLocTy {
   ApproxVarListLocTy(SourceLocation StartLoc, SourceLocation LParenLoc,
                      SourceLocation EndLoc)
       : StartLoc(StartLoc), LParenLoc(LParenLoc), EndLoc(EndLoc) {}
+};
+
+struct ApproxSliceLocTy {
+  std::optional<SourceLocation> StartLoc;
+  std::optional<SourceLocation> StopLoc;
+  std::optional<SourceLocation> StepLoc;
+
+  ApproxSliceLocTy() = default;
+  ApproxSliceLocTy(std::optional<SourceLocation> StartLoc,
+                   std::optional<SourceLocation> StopLoc,
+                   std::optional<SourceLocation> StepLoc)
+      : StartLoc(StartLoc), StopLoc(StopLoc), StepLoc(StepLoc) {}
 };
 
 } // namespace approx

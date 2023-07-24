@@ -824,6 +824,37 @@ void ASTStmtWriter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *E) {
   Code = serialization::EXPR_APPROX_ARRAY_SECTION;
 }
 
+void ASTStmtWriter::VisitApproxArraySliceExpr(ApproxArraySliceExpr *E) {
+  VisitExpr(E);
+  Record.push_back(E->getNumDimensionSlices());
+  Record.AddStmt(E->getBase());
+  for(Expr *Dim : E->getSlices())
+    Record.AddStmt(Dim);
+
+  Record.AddSourceLocation(E->getEndLoc());
+  Code = serialization::EXPR_APPROX_ARRAY_SLICE;
+}
+
+void ASTStmtWriter::VisitApproxSliceExpr(ApproxSliceExpr *E) {
+  VisitExpr(E);
+  Record.AddStmt(E->getStart());
+  Record.AddStmt(E->getStop());
+  Record.AddStmt(E->getStep());
+  Record.AddSourceLocation(E->getColonLocFirst());
+  Record.AddSourceLocation(E->getColonLocSecond());
+  Record.AddSourceLocation(E->getLBracketLoc());
+  Record.AddSourceLocation(E->getRBracketLoc());
+  Code = serialization::EXPR_APPROX_SLICE;
+}
+
+
+void ASTStmtWriter::VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
+  VisitExpr(E);
+  Record.AddIdentifierRef(E->getIdentifier());
+  Record.AddSourceLocation(E->getBeginLoc());
+  Code = serialization::EXPR_APPROX_INDEX_VAR_REF;
+}
+
 void ASTStmtWriter::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {
   VisitExpr(E);
   Record.AddStmt(E->getBase());

@@ -23,6 +23,7 @@ using namespace clang;
 using namespace llvm;
 using namespace approx;
 
+
 static bool isMLType(Token &Tok, MLType &Kind) {
   for (unsigned i = ML_START; i < ML_END; i++) {
     enum MLType MT = (enum MLType)i;
@@ -65,6 +66,27 @@ static bool isPetrubateType(Token &Tok, PetrubateType &Kind) {
     }
   }
   return false;
+}
+
+static bool isDeclType(Token &Tok, DeclKind &Kind) {
+  for (unsigned i = DK_START; i < DK_END; i++) {
+    enum DeclKind DT = (enum DeclKind)i;
+    if (Tok.getIdentifierInfo()->getName().equals(ApproxDecl::Name[DT])) {
+      Kind = DT;
+      return true;
+    }
+  }
+  return false;
+}
+
+Scope *getNonApproxScope(Scope *base) {
+  Scope *S = base;
+  while (S && S->isApproxScope())
+    S = S->getParent();
+
+  if(!S)
+    llvm_unreachable("Base scope is approx?");
+  return S;
 }
 
 bool Parser::ParseApproxVarList(SmallVectorImpl<Expr *> &Vars,
@@ -203,6 +225,246 @@ ApproxClause *Parser::ParseApproxDTClause(ClauseKind CK) {
   return Actions.ActOnApproxDTClause(CK, Locs);
 }
 
+StmtResult Parser::ParseApproxDecl(DeclKind DK) {
+  
+  // Are we declaring a tensor_functor or a tensor?
+  Token DeclaredTypeToken = Tok;
+  auto DeclTypeLoc = ConsumeAnyToken();
+
+  if(!isDeclType(DeclaredTypeToken, DK)){
+    return StmtError();
+  }
+
+  SourceLocation LParenLoc = Tok.getLocation();
+
+  clang::Decl *DeclResult = nullptr;
+
+  if(DK == approx::DeclKind::DK_T) {
+    DeclResult = ParseApproxTensorDecl(DeclKind::DK_T, LParenLoc);
+  }
+  else if(DK == approx::DeclKind::DK_TF) {
+    DeclResult =  ParseApproxTensorFunctorDecl(DeclKind::DK_TF, LParenLoc);
+  }
+  else {
+    llvm_unreachable("Unknown DeclType");
+  }
+
+  DeclGroupPtrTy DG = Actions.ConvertDeclToDeclGroup(DeclResult);
+
+  StmtResult Res = Actions.ActOnDeclStmt(DG, LParenLoc, DeclResult->getEndLoc());
+
+  Res.get()->printPretty(dbgs(), nullptr, Actions.getPrintingPolicy());
+  return Res;
+}
+
+ApproxDeclareTensorFunctorDecl *Parser::ParseApproxTensorFunctorDecl(DeclKind DK, SourceLocation Loc) {
+  unsigned ScopeFlags = Scope::ApproxSliceScope | getCurScope()->getFlags();
+  ParseScope ApproxScope(this, ScopeFlags);
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after, "tensor_functor"))
+  {
+    return nullptr;
+  }
+
+  auto LParenLoc = T.getOpenLocation();
+
+  // get the name
+  SourceLocation NameLocation = Tok.getLocation();
+  auto NameID = Tok.getIdentifierInfo();
+
+  ConsumeAnyToken(); // skip past the name
+  // skip past the colon
+  ConsumeAnyToken();
+
+  // parse the LHS of the tensor functor, looks like [...] = (...)
+  auto Begin = Tok.getLocation();
+  ApproxNDTensorSlice Slices;
+  BalancedDelimiterTracker T2(*this, tok::l_square);
+  if(T2.expectAndConsume(diag::err_expected_lsquare_after, "tensor_functor"))
+    return nullptr;
+  ParseApproxNDTensorSlice(Slices, tok::r_square);
+
+  if(T2.consumeClose())
+    llvm_unreachable("Expected a close bracket");
+
+  // consume the token '='
+  ConsumeAnyToken();
+
+  ApproxNDTensorSliceCollection RHSSlices;
+  // parse the RHS of the tensor functor, looks like ([...], [...], ...)
+  ParseApproxNDTensorSliceCollection(RHSSlices);
+
+  if(T.consumeClose())
+    llvm_unreachable("Expected a close paren");
+
+  ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
+  // Do we need to pass in the declared type?
+
+  ApproxScope.Exit();
+  Scope *S = getNonApproxScope(getCurScope());
+  return Actions.ActOnApproxTFDecl(DK, S, NameID, Slices, RHSSlices, Locs);
+}
+
+void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::TokenKind EndToken) {
+
+  while (Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
+    // Parse a slice expression
+    auto Expr = ParseSliceExpression();
+
+    if (Expr.isInvalid()) {
+      llvm::dbgs() << "The stride expression is invalid\n";
+    }
+
+    Slices.push_back(Expr.get());
+
+    if (Tok.is(EndToken)) {
+      break;
+    }
+
+    if (Tok.isNot(tok::comma)) {
+      llvm_unreachable("Expected a comma");
+    }
+    
+    // Consume the comma
+    ConsumeAnyToken();
+  }
+
+}
+
+void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &Slices)
+{
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::r_paren);
+  if(T.expectAndConsume(diag::err_expected_lparen_after, "NDTensorSliceCollection"))
+    llvm_unreachable("Expected a left paren");
+
+  SourceLocation LParenLoc = T.getOpenLocation();
+
+  while (Tok.isNot(tok::r_paren)) {
+    // Parse a slice expression
+    ApproxNDTensorSlice Slice;
+    BalancedDelimiterTracker T2(*this, tok::l_square, tok::r_square);
+    T2.consumeOpen();
+    ParseApproxNDTensorSlice(Slice, tok::r_square);
+    T2.consumeClose();
+
+    Slices.push_back(Slice);
+
+    if (Tok.is(tok::r_paren)) {
+      break;
+    }
+
+    // If it's not right paren, should be comma
+    if(Tok.isNot(tok::comma))
+    {
+      llvm_unreachable("Expected a comma");
+    }
+
+    // Consume the comma between slices: [...], [...], ...
+    ConsumeAnyToken();
+  }
+
+  SourceLocation RParenLoc = T.getCloseLocation();
+  if(T.consumeClose())
+  {
+    llvm_unreachable("Expected a close paren");
+  }
+
+}
+
+ExprResult Parser::ParseSliceExpression()
+{
+  Expr *Start = nullptr;
+  Expr *Stop = nullptr;
+  Expr *Step = nullptr;
+
+  SourceLocation StartLocation = SourceLocation();
+  SourceLocation ColonLocFirst = SourceLocation();
+  SourceLocation StopLocation = SourceLocation();
+  SourceLocation ColonLocSecond = SourceLocation();
+  SourceLocation StepLocation = SourceLocation();
+
+
+  // TODO: Here we are potentially parsing OpenMP array section expression because
+  // We should only parse up to a colon or the ']'
+  if (Tok.isNot(tok::colon)) {
+    auto StartResult = ParseExpression();
+    StartLocation = StartResult.get()->getBeginLoc();
+    if (StartResult.isInvalid()) {
+      llvm::dbgs() << "Invalid start expression\n";
+      return ExprError();
+    }
+    Start = StartResult.get();
+  }
+
+  if(Tok.is(tok::colon))
+  {
+    ColonLocFirst = Tok.getLocation();
+    ConsumeAnyToken();
+    auto StopResult = ParseExpression();
+    StopLocation = StopResult.get()->getBeginLoc();
+    if (StopResult.isInvalid()) {
+      llvm::dbgs() << "Invalid stop expression\n";
+      return ExprError();
+    }
+    Stop = StopResult.get();
+
+  }
+
+  if(Tok.is(tok::colon))
+  {
+    ColonLocSecond = Tok.getLocation();
+    ConsumeAnyToken();
+    auto StepResult = ParseExpression();
+    StepLocation = StepResult.get()->getBeginLoc();
+    if (StepResult.isInvalid()) {
+      llvm::dbgs() << "Invalid step expression\n";
+      return ExprError();
+    }
+    Step = StepResult.get();
+  }
+
+  return Actions.ActOnApproxSliceExpr(StartLocation, Start, ColonLocFirst,
+                                      Stop, ColonLocSecond, Step,
+                                      StopLocation);
+}
+
+ApproxDeclareTensorDecl *Parser::ParseApproxTensorDecl(DeclKind DK, SourceLocation Loc) {
+  unsigned ScopeFlags = getCurScope()->getFlags() | Scope::ApproxTensorDeclScope;
+  ParseScope ApproxScope(this, ScopeFlags);
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
+  if(T.expectAndConsume(diag::err_expected_lparen_after, "tensor_decl"))
+    return nullptr;
+  
+  auto LParenLoc = T.getOpenLocation();
+  SourceLocation NameLocation = Tok.getLocation();
+  auto TensorName = Tok.getIdentifierInfo();
+
+  // Skip past the name
+  ConsumeAnyToken();
+
+  if(Tok.isNot(tok::colon))
+    llvm_unreachable("Expected a colon");
+
+  ConsumeAnyToken();
+
+  SourceLocation TFNameLoc = Tok.getLocation();
+  auto TFName = Tok.getIdentifierInfo();
+
+  ConsumeAnyToken();
+
+  BalancedDelimiterTracker T2(*this, tok::l_paren);
+  T2.consumeOpen();
+
+  llvm::SmallVector<Expr *, 8> IptArrayExprs;
+  auto TFCall = ParseExpressionList(IptArrayExprs);
+  T2.consumeClose();
+
+  T.consumeClose();
+  ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
+  Scope *S = getNonApproxScope(getCurScope());
+  return Actions.ActOnApproxTensorDecl(DK, S, TFName, TensorName, IptArrayExprs, Locs);
+}
+
 ApproxClause *Parser::ParseApproxNNClause(ClauseKind CK) {
   SourceLocation Loc = Tok.getLocation();
   SourceLocation ELoc = ConsumeAnyToken();
@@ -299,7 +561,6 @@ ApproxClause *Parser::ParseApproxLabelClause(ClauseKind CK) {
 }
 
 bool isApproxClause(Token &Tok, ClauseKind &Kind) {
-  dbgs () << "Checking if clause is approx\n";
   for (unsigned i = CK_START; i < CK_END; i++) {
     enum ClauseKind CK = (enum ClauseKind)i;
     if (Tok.getIdentifierInfo()->getName().equals(ApproxClause::Name[CK])) {
@@ -310,18 +571,37 @@ bool isApproxClause(Token &Tok, ClauseKind &Kind) {
   return false;
 }
 
+bool isApproxDecl(Token &Tok, DeclKind &Kind) {
+  for (unsigned i = DK_START; i < DK_END; i++) {
+    enum DeclKind DK = (enum DeclKind)i;
+    if (Tok.getIdentifierInfo()->getName().equals(ApproxDecl::Name[DK])) {
+      Kind = DK;
+      return true;
+    }
+  }
+  return false;
+}
+
 StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_approx_start));
   /// This should be a function call;
-  inApproxScope = true;
+  // assume approx array section scope
+  unsigned ScopeFlags = Scope::ApproxArraySectionScope | getCurScope()->getFlags();
+  ParseScope ApproxScope(this, ScopeFlags);
 #define PARSER_CALL(method) ((*this).*(method))
 
   StmtResult Directive = StmtError();
   SourceLocation DirectiveStart = Tok.getLocation();
   SmallVector<ApproxClause*, CK_END> Clauses;
+  SmallVector<StmtResult, DK_END> Decls;
 
   /// I am consuming the pragma identifier atm.
   ConsumeAnyToken();
+
+  if(Tok.is(tok::identifier)) {
+    if(Tok.getIdentifierInfo()->getName().equals("declare"))
+      ConsumeAnyToken();
+  }
 
   SourceLocation ClauseStartLocation = Tok.getLocation();
 
@@ -332,24 +612,34 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   if (Tok.is(tok::eod) || Tok.is(tok::eof)) {
     PP.Diag(Tok, diag::err_pragma_approx_expected_directive);
     ConsumeAnyToken();
-    inApproxScope = false;
+    ApproxScope.Exit();
     return Directive;
   }
 
   ClauseKind CK;
+  DeclKind DK;
   while (Tok.isNot(tok::annot_pragma_approx_end)) {
     if (isApproxClause(Tok, CK)) {
       ApproxClause *Clause = PARSER_CALL(ParseApproxClause[CK])(CK);
       if (!Clause) {
         SkipUntil(tok::annot_pragma_approx_end);
-        inApproxScope = false;
+        ApproxScope.Exit();
         return Directive;
       }
       Clauses.push_back(Clause);
-    } else {
+    } else if(isApproxDecl(Tok, DK)) {
+      auto Decl = ParseApproxDecl(DK);
+
+      if(!Decl.get()) {
+        SkipUntil(tok::annot_pragma_approx_end);
+        ApproxScope.Exit();
+        return Directive;
+      }
+      Decls.push_back(Decl);
+      }else {
       PP.Diag(Tok, diag::err_pragma_approx_unrecognized_directive);
       SkipUntil(tok::annot_pragma_approx_end);
-      inApproxScope = false;
+      ApproxScope.Exit();
       return Directive;
     }
   }
@@ -359,10 +649,21 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   ConsumeAnnotationToken();
   ApproxVarListLocTy Locs(DirectiveStart, ClauseStartLocation, DirectiveEnd);
 
-  // Start captured region sema, will end withing ActOnApproxDirective.
-  Actions.ActOnCapturedRegionStart(Tok.getEndLoc(), getCurScope(), CR_Default, /* NumParams = */1);
-  StmtResult AssociatedStmt = (Sema::CompoundScopeRAII(Actions), ParseStatement());
-  Directive = Actions.ActOnApproxDirective(AssociatedStmt.get(), Clauses, Locs);
-  inApproxScope = false;
+  if(Decls.size() > 0) {
+    assert(Decls.size() == 1 && "Only one decl is supported");
+    assert(Clauses.size() == 0 && "Clauses and decls are mutually exclusive");
+    return Decls[0];
+  }
+
+  Stmt *AssociatedStmtPtr = nullptr;
+
+    // Start captured region sema, will end withing ActOnApproxDirective.
+  Actions.ActOnCapturedRegionStart(Tok.getEndLoc(), getCurScope(), CR_Default,
+                                   /* NumParams = */ 1);
+  StmtResult AssociatedStmt =
+      (Sema::CompoundScopeRAII(Actions), ParseStatement());
+  AssociatedStmtPtr = AssociatedStmt.get();
+  Directive = Actions.ActOnApproxDirective(AssociatedStmtPtr, Clauses, Locs);
+  ApproxScope.Exit();
   return Directive;
 }

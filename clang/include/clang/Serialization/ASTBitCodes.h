@@ -1080,7 +1080,10 @@ enum PredefinedTypeIDs {
   /// \brief The '__ibm128' type
   PREDEF_TYPE_IBM128_ID = 74,
 
-  PREDEF_TYPE_APPROX_ARRAY_SECTION = 75,
+  PREDEF_TYPE_APPROX_ARRAY_SLICE = 75,
+  PREDEF_TYPE_APPROX_SLICE = 76,
+  PREDEF_TYPE_APPROX_ARRAY_SECTION = 77,
+  PREDEF_TYPE_APPROX_INDEX_VAR_REF = 78,
 
 /// OpenCL image types with auto numeration
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix)                   \
@@ -1510,6 +1513,9 @@ enum DeclCode {
 
   /// An ApproxDecl record.
   DECL_APPROX_CAPTUREDEXPR,
+
+  DECL_APPROX_TENSOR,
+  DECL_APPROX_TENSOR_FUNCTOR,
 
   /// A PragmaCommentDecl record.
   DECL_PRAGMA_COMMENT,
@@ -2006,6 +2012,9 @@ enum StmtCode {
   EXPR_OMP_ARRAY_SHAPING,
   EXPR_OMP_ITERATOR,
   EXPR_APPROX_ARRAY_SECTION,
+  EXPR_APPROX_ARRAY_SLICE,
+  EXPR_APPROX_INDEX_VAR_REF,
+  EXPR_APPROX_SLICE,
 
   // ARC
   EXPR_OBJC_BRIDGED_CAST, // ObjCBridgedCastExpr

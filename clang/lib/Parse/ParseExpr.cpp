@@ -412,6 +412,11 @@ Parser::ParseRHSOfBinaryExpression(ExprResult LHS, prec::Level MinPrec) {
     if (NextTokPrec < MinPrec)
       return LHS;
 
+    if(Tok.is(tok::comma) && getCurScope()->isApproxSliceScope()) {
+      // if we're parsing a tensor slice, then the comma indicates that we're done.
+      return LHS;
+    }
+
     // Consume the operator, saving the operator token for error reporting.
     Token OpToken = Tok;
     ConsumeToken();
@@ -1148,7 +1153,7 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
         }
       }
 
-      if ((!ColonIsSacred && Next.is(tok::colon)) ||
+      if ((!ColonIsSacred && Next. is(tok::colon)) ||
           Next.isOneOf(tok::coloncolon, tok::less, tok::l_paren,
                        tok::l_brace)) {
         // If TryAnnotateTypeOrScopeToken annotates the token, tail recurse.
@@ -1951,7 +1956,9 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       // and, in we find 0 or one index, we try to parse an OpenMP array
       // section. This allow us to support C++23 multi dimensional subscript and
       // OpenMp sections in the same language mode.
-      if (!getLangOpts().OpenMP || Tok.isNot(tok::colon)) {
+
+      Scope *CurScope = getCurScope();
+      if ( !CurScope->isApproxScope() && (!getLangOpts().OpenMP || Tok.isNot(tok::colon))) {
         if (!getLangOpts().CPlusPlus23) {
           ExprResult Idx;
           if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {
@@ -1975,9 +1982,31 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         }
       }
 
-      if (ArgExprs.size() <= 1 && (getLangOpts().OpenMP || inApproxScope) ) {
+      if (ArgExprs.size() <= 1 &&
+          (getLangOpts().OpenMP ||
+           CurScope->isApproxArraySectionScope()
+           || CurScope->isApproxTensorDeclScope())) {
         ColonProtectionRAIIObject RAII(*this);
-        if (Tok.is(tok::colon)) {
+        if(CurScope->isApproxTensorDeclScope()) {
+          ApproxNDTensorSlice Slice;
+
+          // Make sure the ONLY approx scope that's turned on is 
+          // ApproxTensorSliceScope
+          unsigned ScopeFlags =
+              CurScope->getFlags() | Scope::ApproxSliceScope;
+          ParseScope ApproxScope(this, ScopeFlags);
+          ParseApproxNDTensorSlice(Slice, tok::r_square);
+          ApproxScope.Exit();
+
+          LHS = Actions.ActOnApproxArraySliceExpr(LHS.get(), Loc, Slice, Tok.getLocation());
+          LHS = Actions.CorrectDelayedTyposInExpr(LHS);
+
+          // Match the ']'.
+          T.consumeClose();
+          break;
+
+        }
+        else if (Tok.is(tok::colon)) {
           // Consume ':'
           ColonLocFirst = ConsumeToken();
           if (Tok.isNot(tok::r_square) &&
@@ -1987,9 +2016,11 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             Length = Actions.CorrectDelayedTyposInExpr(Length);
           }
         }
-        if ((inApproxScope || (getLangOpts().OpenMP >= 50 &&
-            (OMPClauseKind == llvm::omp::Clause::OMPC_to ||
-             OMPClauseKind == llvm::omp::Clause::OMPC_from))) &&
+        if ((CurScope->isApproxArraySectionScope()
+              ||
+             (getLangOpts().OpenMP >= 50 &&
+              (OMPClauseKind == llvm::omp::Clause::OMPC_to ||
+               OMPClauseKind == llvm::omp::Clause::OMPC_from))) &&
             Tok.is(tok::colon)) {
           // Consume ':'
           ColonLocSecond = ConsumeToken();
@@ -2005,7 +2036,7 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       if (!LHS.isInvalid() && !HasError && !Length.isInvalid() &&
           !Stride.isInvalid() && Tok.is(tok::r_square)) {
         if (ColonLocFirst.isValid() || ColonLocSecond.isValid()) {
-          if (inApproxScope) {
+          if (CurScope->isApproxArraySectionScope()) {
             // TODO: Re-add stride to this
             LHS = Actions.ActOnApproxArraySectionExpr(
                 LHS.get(), Loc, ArgExprs.empty() ? nullptr : ArgExprs[0],

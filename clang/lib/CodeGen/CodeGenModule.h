@@ -1433,6 +1433,11 @@ public:
   /// Return the alignment specified in an allocate directive, if present.
   std::optional<CharUnits> getOMPAllocateAlignment(const VarDecl *VD);
 
+  void EmitApproxDeclareTensor(const ApproxDeclareTensorDecl *D,
+  CodeGenFunction *CGF = nullptr);
+  void EmitApproxDeclareTensorFunctor(const ApproxDeclareTensorFunctorDecl *D,
+  CodeGenFunction *CGF = nullptr);
+
   /// Returns whether the given record has hidden LTO visibility and therefore
   /// may participate in (single-module) CFI and whole-program vtable
   /// optimization.

@@ -345,6 +345,8 @@ public:
   void VisitOMPExecutableDirective(const OMPExecutableDirective *D);
   void VisitOMPDeclareReductionDecl(const OMPDeclareReductionDecl *D);
   void VisitOMPRequiresDecl(const OMPRequiresDecl *D);
+  void VisitApproxDeclareTensorDecl(const ApproxDeclareTensorDecl *D);
+  void VisitApproxDeclareTensorFunctorDecl(const ApproxDeclareTensorFunctorDecl *D);
   void VisitOMPCapturedExprDecl(const OMPCapturedExprDecl *D);
   void VisitApproxCapturedExprDecl(const ApproxCapturedExprDecl *D);
   void VisitNamespaceDecl(const NamespaceDecl *D);

@@ -105,6 +105,8 @@ public:
                                    ApproxPetrubateClause &PetrubateClause);
   void CGApproxRuntimeEmitMLInit( CodeGenFunction &CGF, 
                                   ApproxMLClause &MLClause);
+  void CGApproxRuntimeEmitDeclInit(CodeGenFunction &CGF,
+                                   ApproxDeclClause &DeclClause);
   void CGApproxRuntimeEmitIfInit(CodeGenFunction &CGF,
                                  ApproxIfClause &IfClause);
   void CGApproxRuntimeEmitLabelInit(CodeGenFunction &CGF, ApproxLabelClause &LabelCluse);
@@ -114,6 +116,10 @@ public:
   void CGApproxRuntimeRegisterInputsOutputs(ApproxInOutClause &InOutClause);
   void CGApproxRuntimeEmitDataValues(CodeGenFunction &CG);
   llvm::Constant* getOrCreateName(StringRef Name, CodeGenFunction &CGF);
+
+
+  void emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D);
+  void emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D);
 };
 
 } // namespace CodeGen

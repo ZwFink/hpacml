@@ -428,6 +428,31 @@ ExprDependence clang::computeDependence(ApproxArraySectionExpr *E) {
   return D;
 }
 
+ExprDependence clang::computeDependence(ApproxArraySliceExpr *E) {
+  auto D = E->getBase()->getDependence();
+  for(auto *DimSlice : E->getSlices())
+    D |= DimSlice->getDependence();
+
+  return D;
+}
+
+ExprDependence clang::computeDependence(ApproxSliceExpr *E) {
+  ExprDependence D = ExprDependence::None;
+
+  if (Expr *Start = E->getStart())
+    D |= Start->getDependence();
+  if (Expr *Stop = E->getStop())
+    D |= Stop->getDependence();
+  if (Expr *Step = E->getStep())
+    D |= Step->getDependence();
+
+  return D;
+}
+
+ExprDependence clang::computeDependence(ApproxIndexVarRefExpr *E) {
+  return ExprDependence::None;
+}
+
 ExprDependence clang::computeDependence(OMPArraySectionExpr *E) {
   auto D = E->getBase()->getDependence();
   if (auto *LB = E->getLowerBound())

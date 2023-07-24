@@ -20,6 +20,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclOpenMP.h"
+#include "clang/AST/DeclApprox.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
@@ -660,6 +661,10 @@ ItaniumMangleContextImpl::getEffectiveDeclContext(const Decl *D) {
   if (isa<CapturedDecl>(DC) || isa<OMPDeclareReductionDecl>(DC) ||
       isa<OMPDeclareMapperDecl>(DC)) {
     return getEffectiveDeclContext(cast<Decl>(DC));
+  }
+
+  if(isa<ApproxDeclareTensorDecl>(D) || isa<ApproxDeclareTensorFunctorDecl>(D)) {
+    return DC->getRedeclContext();
   }
 
   if (const auto *VD = dyn_cast<VarDecl>(D))
@@ -4420,6 +4425,9 @@ recurse:
   case Expr::TypoExprClass: // This should no longer exist in the AST by now.
   case Expr::RecoveryExprClass:
   case Expr::ApproxArraySectionExprClass:
+  case Expr::ApproxArraySliceExprClass:
+  case Expr::ApproxSliceExprClass:
+  case Expr::ApproxIndexVarRefExprClass:
   case Expr::OMPArraySectionExprClass:
   case Expr::OMPArrayShapingExprClass:
   case Expr::OMPIteratorExprClass:

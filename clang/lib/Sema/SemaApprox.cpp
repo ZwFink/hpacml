@@ -1836,9 +1836,6 @@ static unsigned checkApproxLoop(Stmt *AStmt, Sema &SemaRef,
 StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
                                       ArrayRef<ApproxClause *> Clauses,
                                       ApproxVarListLocTy &Locs) {
-  if(!AssociatedStmt)
-    return StmtError();
-
   CapturedStmt *CS = nullptr;
   ApproxLoopHelperExprs B;
   OMPLoopDirective *OMPLoopDir = nullptr;
@@ -2166,8 +2163,10 @@ StmtResult Sema::ActOnApproxDirective(Stmt *AssociatedStmt,
 
   }
 
-  CS = dyn_cast<CapturedStmt>(ActOnCapturedRegionEnd(AssociatedStmt).get());
-  assert(CS && "Expected non-null CS");
+  if (AssociatedStmt) {
+    CS = dyn_cast<CapturedStmt>(ActOnCapturedRegionEnd(AssociatedStmt).get());
+    assert(CS && "Expected non-null CS");
+  }
   ApproxDirective *Stmt = ApproxDirective::Create(Context, Locs.StartLoc,
                                                   Locs.EndLoc, CS, Clauses, B);
   Stmt->printPretty(dbgs(), nullptr, this->getPrintingPolicy());
@@ -2234,6 +2233,174 @@ ApproxClause *Sema::ActOnApproxDTClause(ClauseKind Kind,
   SourceLocation StartLoc = Locs.StartLoc;
   SourceLocation EndLoc = Locs.EndLoc;
   return new (Context) ApproxDTClause(StartLoc, EndLoc);
+}
+
+ApproxDeclareTensorFunctorDecl *
+Sema::ActOnApproxTFDecl(DeclKind Kind, Scope *S, IdentifierInfo *TensorName,
+    ApproxNDTensorSlice &LHSSlice, ApproxNDTensorSliceCollection &RHSSlices,
+    ApproxVarListLocTy &Locs) {
+    SourceLocation StartLoc = Locs.StartLoc;
+    SourceLocation EndLoc = Locs.EndLoc;
+    SourceRange SR = SourceRange(StartLoc, EndLoc);
+    DeclarationName DeclName{TensorName};
+    ASTContext &Context = getASTContext();
+
+    LookupResult Lookup(*this, DeclName, SourceLocation(), LookupOrdinaryName);
+    LookupName(Lookup, S);
+    if(Lookup.getResultKind() == LookupResult::Found) {
+      Diag(StartLoc, diag::err_approx_tensor_functor_already_declared) << TensorName;
+      return nullptr;
+    }
+
+    auto *Decl = ApproxDeclareTensorFunctorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, LHSSlice, RHSSlices);
+    IdResolver.AddDecl(Decl);
+    S->AddDecl(Decl);
+    return Decl;
+}
+
+ApproxDeclareTensorDecl *
+Sema::ActOnApproxTensorDecl(DeclKind CK, Scope *S,
+IdentifierInfo *TFName, IdentifierInfo *TensorName, llvm::ArrayRef<Expr*> Arrays,
+ApproxVarListLocTy& Locs) {
+  SourceLocation StartLoc = Locs.StartLoc;
+  SourceLocation EndLoc = Locs.EndLoc;
+  SourceRange SR = SourceRange(StartLoc, EndLoc);
+  DeclarationName DeclName(TensorName);
+  DeclarationName FunctorName(TFName);
+  ASTContext &Context = getASTContext();
+  Decl *FunctorDecl = nullptr;
+
+  // Ensure TensorName wasn't already declared
+  LookupResult LookupTensor(*this, DeclName, SourceLocation(), LookupOrdinaryName);
+  LookupName(LookupTensor, S);
+  if(LookupTensor.getResultKind() == LookupResult::Found) {
+    Diag(StartLoc, diag::err_approx_tensor_already_declared) << TensorName;
+    return nullptr;
+  }
+
+  // Ensure functor exists
+  LookupResult LookupFunctor(*this, FunctorName, SourceLocation(), LookupOrdinaryName);
+  LookupName(LookupFunctor, S);
+  if(LookupFunctor.getResultKind() == LookupResult::NotFound) {
+    Diag(StartLoc, diag::err_approx_tensor_functor_not_found) << FunctorName;
+    return nullptr;
+  }
+
+  FunctorDecl = LookupFunctor.getFoundDecl();
+  FunctorDecl->setIsUsed();
+
+  auto *Decl = ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, FunctorDecl, Arrays);
+  IdResolver.AddDecl(Decl);
+  S->AddDecl(Decl);
+
+  // temporarily always set to used so we can do code generation, when we implement the input/output part,
+  // we should set the tensor to used there.
+  Decl->setIsUsed();
+  return Decl;
+}
+
+
+ExprResult
+Sema::ActOnApproxArraySliceExpr(Expr *Base,
+SourceLocation Loc,
+                                ArrayRef<Expr *> Slice,
+                                SourceLocation RLOC
+) {
+  return ApproxArraySliceExpr::Create(Context, Base, Slice, Context.DependentTy,
+                                            RLOC);
+}
+
+ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
+                                         SourceLocation ColonLocFirst,
+                                         Expr *Stop,
+                                         SourceLocation ColonLocSecond,
+                                         Expr *Step, SourceLocation RBLoc) {
+  if(Start && Start->getType()->isNonOverloadPlaceholderType()){
+    ExprResult Result = CheckPlaceholderExpr(Start);
+    if(Result.isInvalid())
+      return ExprError();
+    Result = DefaultLvalueConversion(Result.get());
+    if(Result.isInvalid())
+      return ExprError();
+    Start = Result.get();
+  }
+
+  if(Stop && Stop->getType()->isNonOverloadPlaceholderType()){
+    ExprResult Result = CheckPlaceholderExpr(Stop);
+    if(Result.isInvalid())
+      return ExprError();
+    Result = DefaultLvalueConversion(Result.get());
+    if(Result.isInvalid())
+      return ExprError();
+    Stop = Result.get();
+  }
+
+  if(Step && Step->getType()->isNonOverloadPlaceholderType()){
+    ExprResult Result = CheckPlaceholderExpr(Step);
+    if(Result.isInvalid())
+      return ExprError();
+    Result = DefaultLvalueConversion(Result.get());
+    if(Result.isInvalid())
+      return ExprError();
+    Step = Result.get();
+  }
+
+  if (Start) {
+    auto Res =
+        PerformApproxImplicitIntegerConversion(Start->getExprLoc(), Start);
+    if (Res.isInvalid())
+      return ExprError(
+          (Diag(Start->getExprLoc(), diag::err_approx_slice_start_not_integer)
+           << 0 << Start->getSourceRange()));
+    Start = Res.get();
+
+    if (Start->getType()->isSpecificBuiltinType(BuiltinType::Char_S) ||
+        Start->getType()->isSpecificBuiltinType(BuiltinType::Char_U)) {
+      Diag(Start->getExprLoc(), diag::warn_approx_slice_is_char)
+          << 0 << Start->getSourceRange();
+    }
+  }
+
+  // TODO: This can be cleaned up a bit.
+  if (Stop) {
+    auto Res = PerformApproxImplicitIntegerConversion(Stop->getExprLoc(), Stop);
+    if (Res.isInvalid())
+      return ExprError(
+          (Diag(Stop->getExprLoc(), diag::err_approx_slice_start_not_integer)
+           << 1 << Stop->getSourceRange()));
+    Stop = Res.get();
+
+    if (Stop->getType()->isSpecificBuiltinType(BuiltinType::Char_S) ||
+        Stop->getType()->isSpecificBuiltinType(BuiltinType::Char_U)) {
+      Diag(Stop->getExprLoc(), diag::warn_approx_slice_is_char)
+          << 1 << Stop->getSourceRange();
+    }
+  }
+
+  if (Step) {
+    auto Res = PerformApproxImplicitIntegerConversion(Step->getExprLoc(), Step);
+    if (Res.isInvalid())
+      return ExprError(
+          (Diag(Step->getExprLoc(), diag::err_approx_slice_start_not_integer)
+           << 2 << Step->getSourceRange()));
+    Step = Res.get();
+
+    if (Step->getType()->isSpecificBuiltinType(BuiltinType::Char_S) ||
+        Step->getType()->isSpecificBuiltinType(BuiltinType::Char_U)) {
+      Diag(Step->getExprLoc(), diag::warn_approx_slice_is_char)
+          << 2 << Step->getSourceRange();
+    }
+  }
+
+  // TODO: Is 'DependentTy' correct here? I chose it because
+  // the type of the final sliced tensor is dependent.
+  return new (Context)
+      ApproxSliceExpr(Start, Stop, Step, Context.DependentTy, VK_LValue,
+                      OK_Ordinary, LBLoc, ColonLocFirst, ColonLocSecond, RBLoc);
+}
+
+ExprResult Sema::ActOnApproxIndexVarRefExpr(IdentifierInfo *II, SourceLocation Loc) {
+  return new (Context)  ApproxIndexVarRefExpr(II, Context.getIntTypeForBitwidth(64, false), VK_LValue, OK_Ordinary, Loc);
 }
 
 ApproxClause *Sema::ActOnApproxNNClause(ClauseKind Kind,
@@ -2306,7 +2473,7 @@ ApproxClause *Sema::ActOnApproxVarList(ClauseKind Kind,
       Expr::EvalResult Result;
       if (Length && !Length->isValueDependent() &&
           Length->EvaluateAsInt(Result, Context) &&
-          Result.Val.getInt().isZero(0) ) {
+          Result.Val.getInt().isZero() ) {
         Diag(ELoc,
               diag::err_approx_depend_zero_length_array_section_not_allowed)
             << SimpleExpr->getSourceRange();

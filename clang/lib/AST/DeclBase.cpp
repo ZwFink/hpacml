@@ -838,6 +838,11 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case OMPDeclareMapper:
       return IDNS_OMPMapper;
 
+    // TODO: I think this is what we want
+    case ApproxDeclareTensor:
+    case ApproxDeclareTensorFunctor:
+      return IDNS_Ordinary;
+
     // Never have names.
     case Friend:
     case FriendTemplate:

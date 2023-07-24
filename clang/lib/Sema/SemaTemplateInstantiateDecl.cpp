@@ -3745,6 +3745,14 @@ Decl *TemplateDeclInstantiator::VisitApproxCapturedExprDecl(
   llvm_unreachable("Should not be met in templates");
 }
 
+Decl *TemplateDeclInstantiator::VisitApproxDeclareTensorDecl(ApproxDeclareTensorDecl *) {
+  llvm_unreachable("Should not be met in templates");
+}
+
+Decl *TemplateDeclInstantiator::VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *) {
+  llvm_unreachable("Should not be met in templates");
+}
+
 Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D) {
   return VisitFunctionDecl(D, nullptr);
 }

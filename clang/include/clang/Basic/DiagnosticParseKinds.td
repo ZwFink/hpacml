@@ -249,6 +249,8 @@ def err_invalid_token_after_declarator_suggest_equal : Error<
 def err_expected_statement : Error<"expected statement">;
 def err_expected_lparen_after : Error<"expected '(' after '%0'">;
 def err_expected_rparen_after : Error<"expected ')' after '%0'">;
+def err_expected_lsquare_after : Error<"expected '[' after '%0'">;
+def err_expected_rsquare_after : Error<"expected ']' after '%0'">;
 def err_expected_punc : Error<"expected ')' or ',' after '%0'">;
 def err_expected_less_after : Error<"expected '<' after '%0'">;
 def err_expected_lbrace_in_compound_literal : Error<

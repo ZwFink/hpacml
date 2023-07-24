@@ -2670,6 +2670,11 @@ Sema::ActOnIdExpression(Scope *S, CXXScopeSpec &SS,
     if (IsInlineAsmIdentifier)
       return ExprError();
 
+    // if we are not parsing a tensor decl and find a slice, we should ignore lookup errors
+    // as the user is implicitly defining an Index VarRef
+    if (!S->isApproxTensorDeclScope() && S->isApproxSliceScope())
+      return ActOnApproxIndexVarRefExpr(II, NameLoc);
+
     // If this name wasn't predeclared and if this is not a function
     // call, diagnose the problem.
     TypoExpr *TE = nullptr;
@@ -3402,6 +3407,9 @@ ExprResult Sema::BuildDeclarationNameExpr(
   case Decl::UnresolvedUsingValue:
   case Decl::OMPDeclareReduction:
   case Decl::OMPDeclareMapper:
+  // TODO: I think this is correct
+  case Decl::ApproxDeclareTensor:
+  case Decl::ApproxDeclareTensorFunctor:
     valueKind = VK_PRValue;
     break;
 
@@ -6889,6 +6897,9 @@ static bool isPlaceholderToRemoveAsArg(QualType type) {
   case BuiltinType::BuiltinFn:
   case BuiltinType::IncompleteMatrixIdx:
   case BuiltinType::ApproxArraySection:
+  case BuiltinType::ApproxArraySlice:
+  case BuiltinType::ApproxSlice:
+  case BuiltinType::ApproxIndexVarRef:
   case BuiltinType::OMPArraySection:
   case BuiltinType::OMPArrayShaping:
   case BuiltinType::OMPIterator:
@@ -7143,7 +7154,7 @@ ExprResult Sema::ActOnCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
   ExprResult Call =
       BuildCallExpr(Scope, Fn, LParenLoc, ArgExprs, RParenLoc, ExecConfig,
                     /*IsExecConfig=*/false, /*AllowRecovery=*/true);
-  if (Call.isInvalid())
+  if ( Call.isInvalid())
     return Call;
 
   // Diagnose uses of the C++20 "ADL-only template-id call" feature in earlier
@@ -21701,6 +21712,18 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
 
   case BuiltinType::ApproxArraySection:
     Diag(E->getBeginLoc(), diag::err_approx_array_section_use);
+    return ExprError();
+
+  case BuiltinType::ApproxArraySlice:
+    Diag(E->getBeginLoc(), diag::err_approx_array_slice_use);
+    return ExprError();
+
+  case BuiltinType::ApproxSlice:
+    Diag(E->getBeginLoc(), diag::err_approx_slice_use);
+    return ExprError();
+
+  case BuiltinType::ApproxIndexVarRef:
+    Diag(E->getBeginLoc(), diag::err_approx_index_var_ref_use);
     return ExprError();
 
  // Expressions of unknown type.

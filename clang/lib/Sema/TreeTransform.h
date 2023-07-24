@@ -2728,6 +2728,25 @@ public:
                                               ColonLoc, Length, RBracketLoc);
   }
 
+  ExprResult RebuildApproxArraySliceExpr(Expr *Base, SourceLocation Loc,
+                                         ArrayRef<Expr *> Slices,
+                                         SourceLocation RLOC) {
+    return getSema().ActOnApproxArraySliceExpr(Base, Loc, Slices, RLOC);
+  }
+
+  ExprResult RebuildApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
+                                    SourceLocation ColonLocFirst, Expr *Stop,
+                                    SourceLocation ColonLocSecond, Expr *Step,
+                                    SourceLocation RBLoc) {
+    return getSema().ActOnApproxSliceExpr(LBLoc, Start, ColonLocFirst, Stop,
+                                          ColonLocSecond, Step, RBLoc);
+  }
+
+  ExprResult RebuildApproxIndexVarRefExpr(IdentifierInfo *II,
+                                          SourceLocation Loc) {
+    return getSema().ActOnApproxIndexVarRefExpr(II, Loc);
+  }
+
   /// Build a new array section expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -11222,6 +11241,40 @@ TreeTransform<Derived>::TransformApproxArraySectionExpr(ApproxArraySectionExpr *
 
 template <typename Derived>
 ExprResult
+TreeTransform<Derived>::TransformApproxSliceExpr(ApproxSliceExpr *E) {
+  ExprResult Start;
+  if (E->getStart()) {
+    Start = getDerived().TransformExpr(E->getStart());
+    if (Start.isInvalid())
+      return ExprError();
+  }
+
+  ExprResult Stop;
+  if(E->getStop()) {
+    Stop = getDerived().TransformExpr(E->getStop());
+    if (Stop.isInvalid())
+      return ExprError();
+  }
+
+  ExprResult Step;
+  if (E->getStep()) {
+    Step = getDerived().TransformExpr(E->getStep());
+    if (Step.isInvalid())
+      return ExprError();
+  }
+
+  if(!getDerived().AlwaysRebuild() && Start.get() == E->getStart() &&
+     Stop.get() == E->getStop() && Step.get() == E->getStep())
+    return E;
+
+  return getDerived().RebuildApproxSliceExpr(
+      E->getLBracketLoc(), Start.get(), E->getColonLocFirst(), Stop.get(),
+      E->getColonLocSecond(), Step.get(), E->getRBracketLoc());
+
+}
+
+template <typename Derived>
+ExprResult
 TreeTransform<Derived>::TransformOMPArraySectionExpr(OMPArraySectionExpr *E) {
   ExprResult Base = getDerived().TransformExpr(E->getBase());
   if (Base.isInvalid())
@@ -11258,6 +11311,37 @@ TreeTransform<Derived>::TransformOMPArraySectionExpr(OMPArraySectionExpr *E) {
       E->getRBracketLoc());
 }
 
+template<typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformApproxArraySliceExpr(ApproxArraySliceExpr *E) {
+  ExprResult Base = getDerived().TransformExpr(E->getBase());
+  if (Base.isInvalid())
+    return ExprError();
+
+  SmallVector<Expr *, 8> DimSlices;
+  bool ErrorFound = false;
+  for (Expr *DimSlice : E->getSlices()) {
+    ExprResult DimRes = getDerived().TransformExpr(DimSlice);
+    if (DimRes.isInvalid()) {
+      ErrorFound = true;
+      continue;
+    }
+    DimSlices.push_back(DimRes.get());
+  }
+
+  if (ErrorFound)
+    return ExprError();
+  return getDerived().RebuildApproxArraySliceExpr(Base.get(), E->getBeginLoc(),
+                                                  DimSlices, E->getEndLoc());
+}
+
+template <typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
+  return getDerived().RebuildApproxIndexVarRefExpr(E->getIdentifier(),
+                                                   E->getBeginLoc());
+}
+
 template <typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformOMPArrayShapingExpr(OMPArrayShapingExpr *E) {
@@ -11282,6 +11366,7 @@ TreeTransform<Derived>::TransformOMPArrayShapingExpr(OMPArrayShapingExpr *E) {
                                                  E->getRParenLoc(), Dims,
                                                  E->getBracketsRanges());
 }
+
 
 template <typename Derived>
 ExprResult

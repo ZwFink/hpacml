@@ -27,6 +27,7 @@
 #include "clang/AST/DeclContextInternals.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclOpenMP.h"
+#include "clang/AST/DeclApprox.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/DeclarationName.h"
 #include "clang/AST/DependenceFlags.h"
@@ -1376,6 +1377,9 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
     InitBuiltinType(IncompleteMatrixIdxTy, BuiltinType::IncompleteMatrixIdx);
 
   InitBuiltinType(ApproxArraySectionTy, BuiltinType::ApproxArraySection);
+  InitBuiltinType(ApproxArraySliceTy, BuiltinType::ApproxArraySlice);
+  InitBuiltinType(ApproxSliceTy, BuiltinType::ApproxSlice);
+  InitBuiltinType(ApproxIndexVarRefTy, BuiltinType::ApproxIndexVarRef);
 
   // Builtin types for 'id', 'Class', and 'SEL'.
   InitBuiltinType(ObjCBuiltinIdTy, BuiltinType::ObjCId);
@@ -11862,6 +11866,8 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
   else if (isa<OMPAllocateDecl>(D))
     return !D->getDeclContext()->isDependentContext();
   else if (isa<OMPDeclareReductionDecl>(D) || isa<OMPDeclareMapperDecl>(D))
+    return !D->getDeclContext()->isDependentContext();
+  else if(isa<ApproxDeclareTensorDecl>(D) || isa<ApproxDeclareTensorFunctorDecl>(D))
     return !D->getDeclContext()->isDependentContext();
   else if (isa<ImportDecl>(D))
     return true;

@@ -3372,6 +3372,19 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
     }
   }
 
+  if(LangOpts.Approx) {
+    if(auto *ATD = dyn_cast<ApproxDeclareTensorDecl>(Global)) {
+      if (MustBeEmitted(Global))
+        EmitApproxDeclareTensor(ATD);
+      return;
+    }
+    if(auto *ATFD = dyn_cast<ApproxDeclareTensorFunctorDecl>(Global)) {
+      if (MustBeEmitted(Global))
+        EmitApproxDeclareTensorFunctor(ATFD);
+      return;
+    }
+  }
+
   // Ignore declarations, they will be emitted on their first use.
   if (const auto *FD = dyn_cast<FunctionDecl>(Global)) {
     // Forward declarations are emitted lazily on first use.
@@ -6600,6 +6613,13 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
 
   case Decl::OMPRequires:
     EmitOMPRequiresDecl(cast<OMPRequiresDecl>(D));
+    break;
+
+  case Decl::ApproxDeclareTensor:
+    llvm_unreachable("EmitApproxDeclareTensor not implemented yet\n");
+    break;
+  case Decl::ApproxDeclareTensorFunctor:
+    llvm_unreachable("EmitApproxDeclareTensorFunctor not implemented yet\n");
     break;
 
   case Decl::Typedef:

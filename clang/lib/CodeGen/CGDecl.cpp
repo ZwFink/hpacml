@@ -175,6 +175,11 @@ void CodeGenFunction::EmitDecl(const Decl &D) {
   case Decl::OMPDeclareMapper:
     return CGM.EmitOMPDeclareMapper(cast<OMPDeclareMapperDecl>(&D), this);
 
+  case Decl::ApproxDeclareTensor:
+    return CGM.EmitApproxDeclareTensor(cast<ApproxDeclareTensorDecl>(&D), this);
+  case Decl::ApproxDeclareTensorFunctor:
+    return CGM.EmitApproxDeclareTensorFunctor(cast<ApproxDeclareTensorFunctorDecl>(&D), this);
+
   case Decl::Typedef:      // typedef int X;
   case Decl::TypeAlias: {  // using X = int; [C++0x]
     QualType Ty = cast<TypedefNameDecl>(D).getUnderlyingType();
@@ -2643,6 +2648,20 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
                             Builder.CreateIsNotNull(Arg.getAnyValue()));
     }
   }
+}
+
+void CodeGenModule::EmitApproxDeclareTensor(const ApproxDeclareTensorDecl *D,
+                                            CodeGenFunction *CGF) {
+  if (!LangOpts.Approx || (!LangOpts.EmitAllDecls && !D->isUsed()))
+    return;
+  getApproxRuntime().emitApproxDeclareTensor(CGF, D);
+}
+
+void CodeGenModule::EmitApproxDeclareTensorFunctor(
+    const ApproxDeclareTensorFunctorDecl *D, CodeGenFunction *CGF) {
+  if (!LangOpts.Approx || (!LangOpts.EmitAllDecls && !D->isUsed()))
+    return;
+  getApproxRuntime().emitApproxDeclareTensorFunctor(CGF, D);
 }
 
 void CodeGenModule::EmitOMPDeclareReduction(const OMPDeclareReductionDecl *D,

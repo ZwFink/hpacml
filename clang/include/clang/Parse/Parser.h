@@ -443,10 +443,6 @@ class Parser : public CodeCompletionHandler {
   /// a statement expression and builds a suitable expression statement.
   StmtResult handleExprStmt(ExprResult E, ParsedStmtContext StmtCtx);
 
-  /// inApproxScope - When this is true, we are parsing approximate
-  /// pragmas. By default this value is false.
-  bool inApproxScope;
-
 public:
   Parser(Preprocessor &PP, Sema &Actions, bool SkipFunctionBodies);
   ~Parser() override;
@@ -3523,6 +3519,18 @@ private:
   ParseApproxClauseFn ParseApproxLabelClause;
   
 
+  StmtResult ParseApproxDecl(approx::DeclKind DK);
+  ApproxDeclareTensorDecl *ParseApproxTensorDecl(approx::DeclKind DK, SourceLocation Loc);
+  ApproxDeclareTensorFunctorDecl *ParseApproxTensorFunctorDecl(approx::DeclKind DK, SourceLocation Loc);
+
+  using ApproxNDTensorSlice = SmallVector<Expr *, 8>;
+  using ApproxNDTensorSliceCollection = SmallVector<ApproxNDTensorSlice, 16>;
+  // TODO: Probably refactor needed: We don't need the location shere, because we can get them
+  // We may want a later version that uses just the locations and not the cached tokens.
+  void ParseApproxNDTensorSlice(SmallVectorImpl<Expr *> &Vars, 
+                                      tok::TokenKind EndToken);
+  void ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &Slices);
+  ExprResult ParseSliceExpression();                                
   bool ParseApproxVarList(SmallVectorImpl<Expr*> &Vars, SourceLocation &ELoc);
 
 public:

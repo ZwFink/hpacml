@@ -1529,6 +1529,40 @@ void StmtPrinter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *Node) {
   OS << "]";
 }
 
+void StmtPrinter::VisitApproxArraySliceExpr(ApproxArraySliceExpr *Node) {
+  PrintExpr(Node->getBase());
+  OS << "[";
+
+  auto Slices = Node->getSlices();
+  for(unsigned i = 0; i < Node->getNumDimensionSlices(); i++) {
+    if (i != 0)
+      OS << ", ";
+    VisitApproxSliceExpr(dyn_cast<ApproxSliceExpr>(Slices[i]));
+  }
+  OS << "]";
+}
+
+void StmtPrinter::VisitApproxSliceExpr(ApproxSliceExpr *Node) {
+  if (Node->getStart())
+    PrintExpr(Node->getStart());
+
+  if (Node->getColonLocFirst().isValid()) {
+    OS << ":";
+    if (Node->getStop())
+      PrintExpr(Node->getStop());
+  }
+
+  if (Node->getColonLocSecond().isValid()) {
+    OS << ":";
+    if (Node->getStep())
+      PrintExpr(Node->getStep());
+  }
+}
+
+void StmtPrinter::VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *Node) {
+  OS << Node->getName();
+}
+
 void StmtPrinter::VisitOMPArraySectionExpr(OMPArraySectionExpr *Node) {
   PrintExpr(Node->getBase());
   OS << "[";

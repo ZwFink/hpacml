@@ -63,6 +63,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SaveAndRestore.h"
+#include "llvm/Support/Debug.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -468,6 +469,8 @@ namespace clang {
     void VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D);
     void VisitOMPRequiresDecl(OMPRequiresDecl *D);
     void VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D);
+    void VisitApproxDeclareTensorDecl(ApproxDeclareTensorDecl *D);
+    void VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *D);
     void VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D);
   };
 
@@ -3027,6 +3030,16 @@ void ASTDeclReader::VisitOMPDeclareMapperDecl(OMPDeclareMapperDecl *D) {
 
 void ASTDeclReader::VisitOMPCapturedExprDecl(OMPCapturedExprDecl *D) {
   VisitVarDecl(D);
+}
+
+void ASTDeclReader::VisitApproxDeclareTensorDecl(ApproxDeclareTensorDecl *D) {
+  llvm::dbgs() << "VisitApproxTensorDecl is not actually implemented\n";
+  VisitValueDecl(D);
+}
+
+void ASTDeclReader::VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *D) {
+  llvm::dbgs() << "VisitApproxTensorFunctorDecl is not actually implemented\n";
+  VisitValueDecl(D);
 }
 
 void ASTDeclReader::VisitApproxCapturedExprDecl(ApproxCapturedExprDecl *D){

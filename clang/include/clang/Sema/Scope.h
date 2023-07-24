@@ -150,6 +150,10 @@ public:
     /// template scope in between), the outer scope does not increase the
     /// depth of recursion.
     LambdaScope = 0x8000000,
+
+    ApproxSliceScope = 0x10000000,
+    ApproxTensorDeclScope = 0x20000000,
+    ApproxArraySectionScope = 0x40000000,
   };
 
 private:
@@ -496,6 +500,23 @@ public:
   bool isOpenMPLoopScope() const {
     const Scope *P = getParent();
     return P && P->isOpenMPLoopDirectiveScope();
+  }
+
+  bool isApproxSliceScope() const {
+    return getFlags() & Scope::ApproxSliceScope;
+  }
+
+  bool isApproxTensorDeclScope() const {
+    return getFlags() & Scope::ApproxTensorDeclScope;
+  }
+
+  bool isApproxArraySectionScope() const {
+    return getFlags() & Scope::ApproxArraySectionScope;
+  }
+
+  bool isApproxScope() const {
+    return isApproxSliceScope() || isApproxTensorDeclScope() ||
+           isApproxArraySectionScope();
   }
 
   /// Determine whether this scope is some OpenMP directive with

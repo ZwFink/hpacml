@@ -171,6 +171,8 @@ namespace clang {
   class OMPDeclareReductionDecl;
   class OMPDeclareSimdDecl;
   class OMPClause;
+  class ApproxDeclareTensorDecl;
+  class ApproxDeclareTensorFunctorDecl;
   struct OMPVarListLocTy;
   struct OverloadCandidate;
   enum class OverloadCandidateParamOrder : char;
@@ -5778,9 +5780,17 @@ public:
                                               Expr *ColumnIdx,
                                               SourceLocation RBLoc);
 
+  ExprResult ActOnApproxArraySliceExpr(Expr *Base, SourceLocation Loc,
+                                       ArrayRef<Expr *> Slice,
+                                       SourceLocation RLOC);
+
   ExprResult ActOnApproxArraySectionExpr(Expr *Base, SourceLocation LBLoc,
-                                      Expr *LowerBound, SourceLocation ColonLoc,
-                                      Expr *Length, SourceLocation RBLoc);
+                                         Expr *LowerBound,
+                                         SourceLocation ColonLoc, Expr *Length,
+                                         SourceLocation RBLoc);
+
+  ExprResult ActOnApproxIndexVarRefExpr(IdentifierInfo *II,
+                                        SourceLocation ILoc);
 
   ExprResult ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
                                       Expr *LowerBound,
@@ -11377,6 +11387,7 @@ public:
   /// Return the number of captured regions created for an OpenMP directive.
   static int getOpenMPCaptureLevels(OpenMPDirectiveKind Kind);
 
+
   /// Called after parsing the '\#pragma approx' directive.
   StmtResult ActOnApproxDirective(Stmt *AssociatedStmt, ArrayRef<ApproxClause *> Clauses, approx::ApproxVarListLocTy &Locs);
   //Called to process each approx clause respectively
@@ -11394,11 +11405,30 @@ public:
                                       approx::MLType MType,
                                       approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxDTClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
-  ApproxClause* ActOnApproxNNClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
+  ApproxDeclareTensorFunctorDecl *ActOnApproxTFDecl(
+      approx::DeclKind Kind, Scope *S, IdentifierInfo *TensorName, ApproxNDTensorSlice &LHSSlice,
+      ApproxNDTensorSliceCollection &RHSSlices,
+      approx::ApproxVarListLocTy &Locs);
+
+  ApproxDeclareTensorDecl *ActOnApproxTensorDecl(approx::DeclKind CK,
+                                            Scope *S,
+                                            IdentifierInfo *TFName,
+                                            IdentifierInfo *TensorName,
+                                            llvm::ArrayRef<Expr *> Arrays,
+                                            approx::ApproxVarListLocTy &Locs);
+
+  ApproxClause *ActOnApproxNNClause(approx::ClauseKind Kind,
+                                    approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxUserClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxIfClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs, Expr *Cond);
   ApproxClause* ActOnApproxVarList(approx::ClauseKind Kind, ArrayRef<Expr *> Vars, approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxLabelClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs, Expr *Step);
+
+  ExprResult ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
+                                         SourceLocation ColonLocFirst,
+                                         Expr *Stop,
+                                         SourceLocation ColonLocSecond,
+                                         Expr *Step, SourceLocation RBLoc);
 
   /// Initialization of captured region for OpenMP region.
   void ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope);

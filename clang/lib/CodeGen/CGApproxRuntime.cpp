@@ -813,3 +813,16 @@ void CGApproxRuntime::CGApproxRuntimeEmitMLInit(
         llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 3);
   }
 }
+
+void CGApproxRuntime::CGApproxRuntimeEmitDeclInit(
+    CodeGenFunction &CGF, ApproxDeclClause &DeclClause) {
+      // raise an error that says we hav enot implemented this yet
+    }
+
+
+  void CGApproxRuntime::emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D) {
+    llvm::dbgs() << "Emitting tensor functor declaration for functor " << D->getName() << "\n";
+  }
+  void CGApproxRuntime::emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
+    llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName() << "\n";
+  }

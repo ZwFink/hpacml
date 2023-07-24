@@ -1768,6 +1768,8 @@ DEF_TRAVERSE_DECL(OMPDeclareMapperDecl, {
 })
 
 DEF_TRAVERSE_DECL(OMPCapturedExprDecl, { TRY_TO(TraverseVarHelper(D)); })
+DEF_TRAVERSE_DECL(ApproxDeclareTensorDecl, { llvm_unreachable("This isn't implemented yet"); })
+DEF_TRAVERSE_DECL(ApproxDeclareTensorFunctorDecl, { llvm_unreachable("This isn't implemented yet"); })
 DEF_TRAVERSE_DECL(ApproxCapturedExprDecl, { TRY_TO(TraverseVarHelper(D)); })
 
 DEF_TRAVERSE_DECL(OMPAllocateDecl, {
@@ -2713,6 +2715,9 @@ DEF_TRAVERSE_STMT(AddrLabelExpr, {})
 DEF_TRAVERSE_STMT(ArraySubscriptExpr, {})
 DEF_TRAVERSE_STMT(MatrixSubscriptExpr, {})
 DEF_TRAVERSE_STMT(ApproxArraySectionExpr, {})
+DEF_TRAVERSE_STMT(ApproxArraySliceExpr, {})
+DEF_TRAVERSE_STMT(ApproxSliceExpr, {})
+DEF_TRAVERSE_STMT(ApproxIndexVarRefExpr, {})
 DEF_TRAVERSE_STMT(OMPArraySectionExpr, {})
 DEF_TRAVERSE_STMT(OMPArrayShapingExpr, {})
 DEF_TRAVERSE_STMT(OMPIteratorExpr, {})

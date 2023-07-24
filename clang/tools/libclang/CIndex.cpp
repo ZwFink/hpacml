@@ -5567,6 +5567,8 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("UnaryOperator");
   case CXCursor_ArraySubscriptExpr:
     return cxstring::createRef("ArraySubscriptExpr");
+  case CXCursor_ApproxDirective:
+    return cxstring::createRef("ApproxDirective");
   case CXCursor_OMPArraySectionExpr:
     return cxstring::createRef("OMPArraySectionExpr");
   case CXCursor_OMPArrayShapingExpr:
@@ -6776,6 +6778,7 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::StaticAssert:
   case Decl::Block:
   case Decl::Captured:
+  case Decl::ApproxCapturedExpr:
   case Decl::OMPCapturedExpr:
   case Decl::Label: // FIXME: Is this right??
   case Decl::ClassScopeFunctionSpecialization:
@@ -6786,6 +6789,8 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::OMPDeclareReduction:
   case Decl::OMPDeclareMapper:
   case Decl::OMPRequires:
+  case Decl::ApproxDeclareTensor:
+  case Decl::ApproxDeclareTensorFunctor:
   case Decl::ObjCTypeParam:
   case Decl::BuiltinTemplate:
   case Decl::PragmaComment:

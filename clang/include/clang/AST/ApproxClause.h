@@ -24,11 +24,14 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/TrailingObjects.h"
+#include "DeclApprox.h"
 
 
 
 namespace clang {
+
 
 /// This is a basic class for representing a
 /// single Approx Clause.
@@ -46,6 +49,8 @@ protected:
   ApproxClause(approx::ClauseKind Kind, SourceLocation StartLoc, SourceLocation EndLoc)
       : StartLoc(StartLoc), EndLoc(EndLoc), Kind(Kind) {}
 
+  virtual ~ApproxClause() = default;
+
 public:
   static const std::string Name[approx::CK_END];
 
@@ -62,6 +67,8 @@ public:
   std::string getAsString() const { return Name[Kind]; }
 
   bool isImplicit() const { return StartLoc.isInvalid(); }
+
+  virtual bool requiresCapturedRegion() const { return true; }
 
   using child_iterator = StmtIterator;
   using const_child_iterator = ConstStmtIterator;
@@ -168,6 +175,20 @@ public:
   Expr *getStep() const { return cast_or_null<Expr>(Step); }
   const Stmt *getPreInit() const { return PreInit; }
   Stmt *getPreInit() { return PreInit; }
+};
+
+class ApproxDeclClause : public ApproxClause {
+  approx::DeclType Type;
+  SourceLocation LParenLoc;
+
+  public:
+  static const std::string DeclName[approx::DT_END];
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ApproxDeclClause(approx::DeclType DT, SourceLocation StartLoc,
+                    SourceLocation EndLoc, SourceLocation LParenLoc)
+      : ApproxClause(approx::CK_END, StartLoc, EndLoc), Type(DT), LParenLoc(LParenLoc){Type = approx::DeclType::DT_END; llvm_unreachable("This shouldn't be constructed");
+      }
 };
 
 class ApproxPetrubateClause final : public ApproxClause {
@@ -663,7 +684,6 @@ class ApproxClauseVisitorBase{
         return VisitApproxLabelClause(static_cast<PTR(ApproxLabelClause)>(S));
       case approx::CK_PETRUBATE:
         return VisitApproxPetrubateClause(static_cast<PTR(ApproxPetrubateClause)>(S));
-
     }
   }
 
@@ -699,6 +719,8 @@ class ApproxClausePrinter final : public ApproxClauseVisitor<ApproxClausePrinter
     void VisitApproxMLClause(ApproxMLClause *S);
     void VisitApproxDTClause(ApproxDTClause *S);
     void VisitApproxNNClause(ApproxNNClause *S);
+    void VisitApproxTensorFunctorDecl(ApproxDeclareTensorFunctorDecl *S);
+    void VisitApproxTensorDecl(ApproxDeclareTensorDecl *S);
     void VisitApproxUserClause(ApproxUserClause *S);
     void VisitApproxIfClause(ApproxIfClause *S);
     void VisitApproxInClause(ApproxInClause *S);

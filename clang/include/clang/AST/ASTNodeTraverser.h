@@ -24,6 +24,7 @@
 #include "clang/AST/TemplateArgumentVisitor.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeVisitor.h"
+#include "llvm/Support/Debug.h"
 
 namespace clang {
 
@@ -506,6 +507,14 @@ public:
       Visit(E);
     for (const auto *C : D->clauselists())
       Visit(C);
+  }
+
+  void VisitApproxDeclareTensorDecl(const ApproxDeclareTensorDecl *D) {
+    llvm::dbgs() << "Visiting ApproxTensorDecl in ASTNodeTraverser, not actually implemented\n";
+  }
+
+  void VisitApproxDeclareTensorFunctorDecl(const ApproxDeclareTensorFunctorDecl *D) {
+    llvm::dbgs() << "Visiting ApproxTensorFunctorDecl in ASTNodeTraverser, not actually implemented\n";
   }
 
   void VisitApproxCapturedExprDecl(const ApproxCapturedExprDecl *D) {
