@@ -212,6 +212,29 @@ static void getSliceInfoTy(ASTContext &C, QualType &SliceInfoTy) {
   }
 }
 
+static void getNDArraySliceTy(ASTContext &C, QualType &SliceTy, QualType &NDArraySliceTy) {
+  if(NDArraySliceTy.isNull()) {
+    assert(!SliceTy.isNull() && "SliceTy must be defined before NDArraySliceTy");
+
+    RecordDecl *NDArraySliceRD = C.buildImplicitRecord("approx_ndarray_slice_t");
+    NDArraySliceRD->startDefinition();
+    // Void pointer to the array
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntPtrType());
+
+    // indicator for the underlying type
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntTypeForBitwidth(8, false));
+
+    // Number of dimensions
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntTypeForBitwidth(32, false));
+
+    // The slice info
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(SliceTy));
+
+    NDArraySliceRD->completeDefinition();
+    NDArraySliceTy = C.getRecordType(NDArraySliceRD);
+  }
+}
+
 static void getVarInfoType(ASTContext &C, QualType &VarInfoTy) {
   if (VarInfoTy.isNull()) {
     RecordDecl *VarInfoRD = C.buildImplicitRecord("approx_var_info_t");
@@ -249,6 +272,7 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
   getPerfoInfoType(C, PerfoInfoTy);
   getVarInfoType(C, VarInfoTy);
   getSliceInfoTy(C, SurrogateInfo.SliceInfoTy);
+  getNDArraySliceTy(C, SurrogateInfo.SliceInfoTy, SurrogateInfo.NDArraySliceTy);
 
   CallbackFnTy = llvm::FunctionType::get(CGM.VoidTy, {CGM.VoidPtrTy}, false);
 
@@ -799,7 +823,76 @@ getSliceExprValues(CodeGenFunction &CGF, Expr *Slice) {
   return std::make_tuple(StartVal, StopVal, StepVal);
 }
 
-void CGApproxRuntime::CGApproxRuntimeEmitSlices(CodeGenFunction &CGF,
+
+static int8_t getArrPointeeApproxType(CodeGenFunction &CGF, QualType BaseTy) {
+    QualType ResultExprTy = BaseTy;
+    int8_t TyKind = -1;
+    // Drill down to find the scalar type we point to.
+    do {
+      if (auto *AT = CGF.getContext().getAsArrayType(ResultExprTy))
+        ResultExprTy = AT->getElementType();
+      else
+        ResultExprTy = ResultExprTy->getPointeeType();
+    } while (ResultExprTy->isPointerType() || ResultExprTy->isReferenceType() ||
+             ResultExprTy->isArrayType());
+
+    if (const BuiltinType *T = ResultExprTy->getAs<BuiltinType>()) {
+      TyKind = convertToApproxType(T);
+    }
+
+  return TyKind;
+}
+
+void CGApproxRuntime::CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF,
+Expr *AAIE) {
+  static int numArraysCreated = 0;
+  ASTContext &C = CGM.getContext();
+  Twine name = Twine("array.info_") + Twine(numArraysCreated);
+
+  ApproxArraySliceExpr *E = dyn_cast_or_null<ApproxArraySliceExpr>(AAIE);
+  Address ArrayInfo = CGF.CreateMemTemp(SurrogateInfo.NDArraySliceTy, name);
+  const auto *ArrayInfoRecord = SurrogateInfo.NDArraySliceTy->getAsRecordDecl();
+
+
+  LValue ArrayInfoStart = CGF.MakeAddrLValue(ArrayInfo, SurrogateInfo.NDArraySliceTy);
+
+  Expr *ArrayBase = E->getBase();
+  QualType BaseTy = E->getBaseOriginalType(ArrayBase);
+
+  LValue FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 0));
+  CGF.EmitStoreOfScalar(CGF.Builder.CreatePtrToInt(CGF.EmitScalarExpr(ArrayBase), CGF.IntPtrTy),
+                        FieldAddr);
+
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 1));
+  
+  auto TyKind  = getArrPointeeApproxType(CGF, BaseTy);
+
+  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, TyKind, false),
+                        FieldAddr);
+
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 2));
+
+  llvm::ArrayRef<Expr *> ArraySlices = E->getSlices();
+  auto NumDims = ArraySlices.size();
+  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, NumDims, false),
+                        FieldAddr);
+
+  Address SlicesStruct = CGApproxRuntimeEmitSlices(CGF, ArraySlices);
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 3));
+
+  CGF.EmitStoreOfScalar(
+      CGF.Builder.CreatePtrToInt(SlicesStruct.getPointer(), CGF.IntPtrTy),
+      FieldAddr);
+
+  numArraysCreated++;
+}
+
+
+Address CGApproxRuntime::CGApproxRuntimeEmitSlices(CodeGenFunction &CGF,
                                                 llvm::ArrayRef<Expr*> Slices) {
   static int numSliceArraysCreated = 0;
   ASTContext &C = CGM.getContext();
@@ -813,12 +906,14 @@ void CGApproxRuntime::CGApproxRuntimeEmitSlices(CodeGenFunction &CGF,
   Twine ArrayName = Twine("slice.info_") + Twine(numSliceArraysCreated);
   Address SliceInfoArray = CGF.CreateMemTemp(SliceInfoArrayTy, ArrayName);
               
-  for (auto i = 0; i < numSlices; i++) {
+  for (size_t i = 0; i < numSlices; i++) {
     Address CurrentSlice = CGF.Builder.CreateConstArrayGEP(SliceInfoArray, i);
     CGApproxRuntimeEmitSlice(CGF, Slices[i], CurrentSlice);
   }
 
   numSliceArraysCreated++;
+
+  return SliceInfoArray;
 }
 
 void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice, Address SliceMemory) {
@@ -955,7 +1050,8 @@ void CGApproxRuntime::CGApproxRuntimeEmitDeclInit(
     // and initialize it with the slice info
 
     llvm::ArrayRef<Expr*> ArraySlices = D->getArraySlices();
-    llvm::ArrayRef<Expr*> Slices = dyn_cast<ApproxArraySliceExpr>(ArraySlices[0])->getSlices();
-    CGApproxRuntimeEmitSlices(*CGF, Slices);
+    CGApproxRuntimeEmitApproxArrayInfo(*CGF, ArraySlices[0]);
+    // llvm::ArrayRef<Expr*> Slices = dyn_cast<ApproxArraySliceExpr>(ArraySlices[0])->getSlices();
+    // CGApproxRuntimeEmitSlices(*CGF, Slices);
 
   }

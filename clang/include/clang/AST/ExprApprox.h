@@ -124,7 +124,7 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   const Expr *getBase() const { return getTrailingObjects<Expr *>()[0];}
   Expr *getBase() { return getTrailingObjects<Expr *>()[0];}
 
-
+  QualType getBaseOriginalType(const Expr *Base);
   void setBase(Expr *E) { getTrailingObjects<Expr *>()[0] = E;}
   void setDimensionSlices(llvm::ArrayRef<Expr *> DSlices) {
     assert(DSlices.size() == numDims && "Wrong number of dimension slices");

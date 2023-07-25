@@ -64,3 +64,24 @@ QualType ApproxArraySectionExpr::getBaseOriginalType(const Expr *Base) {
   }
   return OriginalTy;
 }
+
+QualType ApproxArraySliceExpr::getBaseOriginalType(const Expr *Base) {
+  unsigned ArraySliceCount  = 0;
+
+  Base = Base->IgnoreParenImpCasts();
+  auto OriginalTy = Base->getType();
+  if (auto *DRE = dyn_cast<DeclRefExpr>(Base))
+    if (auto *PVD = dyn_cast<ParmVarDecl>(DRE->getDecl()))
+      OriginalTy = PVD->getOriginalType().getNonReferenceType();
+
+  for (unsigned Cnt = 0; Cnt < ArraySliceCount; ++Cnt) {
+    if (OriginalTy->isAnyPointerType())
+      OriginalTy = OriginalTy->getPointeeType();
+    else {
+      assert (OriginalTy->isArrayType());
+      OriginalTy = OriginalTy->castAsArrayTypeUnsafe()->getElementType();
+    }
+  }
+
+  return OriginalTy;
+}

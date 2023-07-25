@@ -129,11 +129,24 @@ public:
         // bool hasStep;
     //} slice_info_t
     QualType SliceInfoTy;
+
+
+    // NDArraySliceTy is a struct containing information about an ND
+    // array slice.
+    // It looks like:
+    // typedef struct ndarray_slice_ty {
+        // void* base;
+        // int8_t type;
+        // int ndim;
+        // slice_info_t slices[ndim];
+      // } ndarray_slice_t;
+    QualType NDArraySliceTy;
   };
 
   MLSurrogateInfo SurrogateInfo;
 
-  void CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  void CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF, Expr *AAIE);
+  Address CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
   void CGApproxRuntimeEmitSlice(CodeGenFunction &CFG, Expr *Slice, Address SliceMemory);
   public:
 
