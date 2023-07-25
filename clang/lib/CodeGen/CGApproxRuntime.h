@@ -133,7 +133,8 @@ public:
 
   MLSurrogateInfo SurrogateInfo;
 
-  void CGApproxRuntimeEmitSlice(CodeGenFunction &CFG, Expr *Slice);
+  void CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  void CGApproxRuntimeEmitSlice(CodeGenFunction &CFG, Expr *Slice, Address SliceMemory);
   public:
 
   void emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D);

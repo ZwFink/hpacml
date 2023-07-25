@@ -799,20 +799,38 @@ getSliceExprValues(CodeGenFunction &CGF, Expr *Slice) {
   return std::make_tuple(StartVal, StopVal, StepVal);
 }
 
-void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice) {
-  static uint32_t numSlices = 0;
-  ApproxArraySliceExpr *ArraySlice = dyn_cast_or_null<ApproxArraySliceExpr>(Slice);
-  assert(ArraySlice && "Expected a slice expression");
-  ArrayRef<Expr*> SliceExprs = ArraySlice->getSlices();
-  ApproxSliceExpr *SliceExpr = dyn_cast_or_null<ApproxSliceExpr>(SliceExprs[0]);
+void CGApproxRuntime::CGApproxRuntimeEmitSlices(CodeGenFunction &CGF,
+                                                llvm::ArrayRef<Expr*> Slices) {
+  static int numSliceArraysCreated = 0;
+  ASTContext &C = CGM.getContext();
+  auto numSlices = Slices.size();
+  QualType SliceInfoArrayTy;
+  llvm::Value *NumOfElements =
+      llvm::ConstantInt::get(CGM.Int32Ty, numSlices, false);
+
+  SliceInfoArrayTy = C.getConstantArrayType(SurrogateInfo.SliceInfoTy, llvm::APInt(64, numSlices),
+                                          nullptr, ArrayType::Normal, 0);
+  Twine ArrayName = Twine("slice.info_") + Twine(numSliceArraysCreated);
+  Address SliceInfoArray = CGF.CreateMemTemp(SliceInfoArrayTy, ArrayName);
+              
+  for (auto i = 0; i < numSlices; i++) {
+    Address CurrentSlice = CGF.Builder.CreateConstArrayGEP(SliceInfoArray, i);
+    CGApproxRuntimeEmitSlice(CGF, Slices[i], CurrentSlice);
+  }
+
+  numSliceArraysCreated++;
+}
+
+void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice, Address SliceMemory) {
+  ApproxSliceExpr *SliceExpr = dyn_cast_or_null<ApproxSliceExpr>(Slice);
   assert(SliceExpr && "Expected a slice expression");
 
   ASTContext &C = CGM.getContext();
   llvm::Value *StartVal, *StopVal, *StepVal;
   std::tie(StartVal, StopVal, StepVal) = getSliceExprValues(CGF, SliceExpr);
 
-  Twine InfoInstanceName = Twine("slice.info_") + Twine(numSlices);
-  Address SliceMemory  = CGF.CreateMemTemp(SurrogateInfo.SliceInfoTy, InfoInstanceName);
+  // Twine InfoInstanceName = Twine("slice.info_") + Twine(numSlices);
+  // Address SliceMemory  = CGF.CreateMemTemp(SurrogateInfo.SliceInfoTy, InfoInstanceName);
   const auto *SliceInfoRecord = SurrogateInfo.SliceInfoTy->getAsRecordDecl();
   LValue SliceStart = CGF.MakeAddrLValue(SliceMemory, SurrogateInfo.SliceInfoTy);
 
@@ -858,7 +876,6 @@ Indicator = CGF.EmitLValueForField(
                           Indicator);
   }
 
-  ++numSlices;
 }
 
 
@@ -937,7 +954,8 @@ void CGApproxRuntime::CGApproxRuntimeEmitDeclInit(
     // allocate a variable named "f" with type "slice_info_t" on the stack
     // and initialize it with the slice info
 
-    llvm::ArrayRef<Expr*> Slices = D->getArraySlices();
-    CGApproxRuntimeEmitSlice(*CGF, Slices[0]);
+    llvm::ArrayRef<Expr*> ArraySlices = D->getArraySlices();
+    llvm::ArrayRef<Expr*> Slices = dyn_cast<ApproxArraySliceExpr>(ArraySlices[0])->getSlices();
+    CGApproxRuntimeEmitSlices(*CGF, Slices);
 
   }
