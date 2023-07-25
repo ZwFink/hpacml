@@ -195,7 +195,7 @@ class ApproxDeclareTensorDecl final : public ApproxDecl, public ValueDecl {
   Decl *getFunctor() const {return TensorFunctor;}
   void setFunctor(Decl *Functor) {TensorFunctor = Functor;}
 
-  llvm::ArrayRef<Expr*> getArraySlices() {return ArraySlices;}
+  llvm::ArrayRef<Expr*> getArraySlices() const {return ArraySlices;}
 };
 
 

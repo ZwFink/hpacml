@@ -2392,6 +2392,8 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
     }
   }
 
+  Start = MakeFullExpr(Start).get();
+
   // TODO: Is 'DependentTy' correct here? I chose it because
   // the type of the final sliced tensor is dependent.
   return new (Context)

@@ -117,9 +117,28 @@ public:
   void CGApproxRuntimeEmitDataValues(CodeGenFunction &CG);
   llvm::Constant* getOrCreateName(StringRef Name, CodeGenFunction &CGF);
 
+  private:
+  struct MLSurrogateInfo {
+    // SliceInfoTy is a struct containing information about the slice for one dimension.
+    // typedef struct slice_info_ty {
+        // int start;
+        // int stop;
+        // inst step;
+        // bool hasStart;
+        // bool hasStop
+        // bool hasStep;
+    //} slice_info_t
+    QualType SliceInfoTy;
+  };
+
+  MLSurrogateInfo SurrogateInfo;
+
+  void CGApproxRuntimeEmitSlice(CodeGenFunction &CFG, Expr *Slice);
+  public:
 
   void emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D);
   void emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D);
+
 };
 
 } // namespace CodeGen
