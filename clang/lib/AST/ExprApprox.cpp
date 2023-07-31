@@ -67,6 +67,7 @@ QualType ApproxArraySectionExpr::getBaseOriginalType(const Expr *Base) {
 
 QualType ApproxArraySliceExpr::getBaseOriginalType(const Expr *Base) {
   unsigned ArraySliceCount  = 0;
+  assert(Base && "Base is null");
 
   Base = Base->IgnoreParenImpCasts();
   auto OriginalTy = Base->getType();

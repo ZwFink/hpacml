@@ -154,6 +154,7 @@ public:
     ApproxSliceScope = 0x10000000,
     ApproxTensorDeclScope = 0x20000000,
     ApproxArraySectionScope = 0x40000000,
+    ApproxTensorFunctorDeclScope = 0x80000000,
   };
 
 private:
@@ -514,9 +515,13 @@ public:
     return getFlags() & Scope::ApproxArraySectionScope;
   }
 
+  bool isApproxTensorFunctorDeclScope() const {
+    return getFlags() & Scope::ApproxTensorFunctorDeclScope;
+  }
+
   bool isApproxScope() const {
     return isApproxSliceScope() || isApproxTensorDeclScope() ||
-           isApproxArraySectionScope();
+           isApproxArraySectionScope() || isApproxTensorFunctorDeclScope();
   }
 
   /// Determine whether this scope is some OpenMP directive with

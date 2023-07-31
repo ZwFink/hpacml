@@ -258,7 +258,7 @@ StmtResult Parser::ParseApproxDecl(DeclKind DK) {
 }
 
 ApproxDeclareTensorFunctorDecl *Parser::ParseApproxTensorFunctorDecl(DeclKind DK, SourceLocation Loc) {
-  unsigned ScopeFlags = Scope::ApproxSliceScope | getCurScope()->getFlags();
+  unsigned ScopeFlags = Scope::ApproxTensorFunctorDeclScope | getCurScope()->getFlags();
   ParseScope ApproxScope(this, ScopeFlags);
   BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
   if (T.expectAndConsume(diag::err_expected_lparen_after, "tensor_functor"))
@@ -283,6 +283,11 @@ ApproxDeclareTensorFunctorDecl *Parser::ParseApproxTensorFunctorDecl(DeclKind DK
   if(T2.expectAndConsume(diag::err_expected_lsquare_after, "tensor_functor"))
     return nullptr;
   ParseApproxNDTensorSlice(Slices, tok::r_square);
+  auto RSQLoc = Tok.getLocation();
+  ExprResult LHSRes = Actions.ActOnApproxArraySliceExpr(nullptr, Begin, Slices, RSQLoc);
+  if(LHSRes.isInvalid())
+    return nullptr;
+  Expr *LHS = LHSRes.get();
 
   if(T2.consumeClose())
     llvm_unreachable("Expected a close bracket");
@@ -290,22 +295,31 @@ ApproxDeclareTensorFunctorDecl *Parser::ParseApproxTensorFunctorDecl(DeclKind DK
   // consume the token '='
   ConsumeAnyToken();
 
-  ApproxNDTensorSliceCollection RHSSlices;
+  BalancedDelimiterTracker T3(*this, tok::l_paren);
+  if(T3.expectAndConsume(diag::err_expected_lparen_after, "tensor_functor"))
+    return nullptr;
+
   // parse the RHS of the tensor functor, looks like ([...], [...], ...)
-  ParseApproxNDTensorSliceCollection(RHSSlices);
+  // each element of the vector is an ApproxArraySliceExpr
+  llvm::SmallVector<Expr *, 8> IptArrayExprs;
+  ParseExpressionList(IptArrayExprs);
+
+  T3.consumeClose();
+
 
   if(T.consumeClose())
     llvm_unreachable("Expected a close paren");
 
   ApproxVarListLocTy Locs(Loc, LParenLoc, T.getCloseLocation());
-  // Do we need to pass in the declared type?
 
   ApproxScope.Exit();
   Scope *S = getNonApproxScope(getCurScope());
-  return Actions.ActOnApproxTFDecl(DK, S, NameID, Slices, RHSSlices, Locs);
+  return Actions.ActOnApproxTFDecl(DK, S, NameID, LHS, IptArrayExprs, Locs);
 }
 
 void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::TokenKind EndToken) {
+  unsigned ScopeFlags = Scope::ApproxSliceScope | getCurScope()->getFlags();
+  ParseScope ApproxScope(this, ScopeFlags);
 
   while (Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
     // Parse a slice expression

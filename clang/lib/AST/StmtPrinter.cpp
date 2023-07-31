@@ -1530,7 +1530,8 @@ void StmtPrinter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *Node) {
 }
 
 void StmtPrinter::VisitApproxArraySliceExpr(ApproxArraySliceExpr *Node) {
-  PrintExpr(Node->getBase());
+  if(Node->getBase())
+    PrintExpr(Node->getBase());
   OS << "[";
 
   auto Slices = Node->getSlices();

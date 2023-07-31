@@ -118,35 +118,68 @@ public:
   llvm::Constant* getOrCreateName(StringRef Name, CodeGenFunction &CGF);
 
   private:
+
+class SymbolVarInfo {
+  public:
+  ApproxIndexVarRefExpr *Symbol = nullptr;
+  std::optional<Address> Addr;
+  Expr *Range = nullptr;
+
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, Address Addr, Expr *Range) : Symbol(Symbol), Addr(Addr), Range(Range) {}
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, Address Addr) : Symbol(Symbol), Addr(Addr) {}
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol) : Symbol(Symbol) {}
+  SymbolVarInfo() {}
+
+  void setAddress(Address A) {
+    Addr = A;
+  }
+
+};
+
+// Maps a symbolic in a tensor functor decl to the its range as given
+// in the tensor decl
+using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
+
   struct MLSurrogateInfo {
     // SliceInfoTy is a struct containing information about the slice for one dimension.
     // typedef struct slice_info_ty {
         // int start;
         // int stop;
         // inst step;
-        // bool hasStart;
-        // bool hasStop
-        // bool hasStep;
     //} slice_info_t
     QualType SliceInfoTy;
-
 
     // NDArraySliceTy is a struct containing information about an ND
     // array slice.
     // It looks like:
     // typedef struct ndarray_slice_ty {
+
         // void* base;
         // int8_t type;
         // int ndim;
         // slice_info_t slices[ndim];
       // } ndarray_slice_t;
     QualType NDArraySliceTy;
+
+    
+    SymbolVarInfoMap SymbolVars;
   };
 
   MLSurrogateInfo SurrogateInfo;
 
-  void CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF, Expr *AAIE);
+    void mapSymbolicVarsToRanges(
+        SymbolVarInfoMap &InfoMap,
+        llvm::ArrayRef<Expr *> FunctorSlice,
+        llvm::ArrayRef<Expr *> TensorSlice);
+  void initializeAndDeclareSymbolVars(ApproxDeclareTensorFunctorDecl *Decl, llvm::ArrayRef<Expr*> Vars);
+  Address EmitDeclarationOfSymbolVar(CodeGenFunction &CGF, ApproxIndexVarRefExpr *Symbol);
+  Address CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF, Expr *AAIE);
   Address CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  Address CGApproxRuntimeEmitShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  void CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest);
+  Address CGApproxRuntimeEmitSizeOfSliceElement(CodeGenFunction &CGF, std::unordered_map<Expr*,Expr*> &RangeMap, Expr *Slice);
+  void CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF);
+  void EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Symbols);
   void CGApproxRuntimeEmitSlice(CodeGenFunction &CFG, Expr *Slice, Address SliceMemory);
   public:
 

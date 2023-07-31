@@ -20,6 +20,7 @@
 
 namespace clang {
 
+
 class ApproxSliceExpr : public Expr {
   enum { START, STOP, STEP, END_EXPR };
   Stmt *SubExprs[END_EXPR];
@@ -124,6 +125,8 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   const Expr *getBase() const { return getTrailingObjects<Expr *>()[0];}
   Expr *getBase() { return getTrailingObjects<Expr *>()[0];}
 
+  bool hasBase() const { return getBase() != nullptr;}
+
   QualType getBaseOriginalType(const Expr *Base);
   void setBase(Expr *E) { getTrailingObjects<Expr *>()[0] = E;}
   void setDimensionSlices(llvm::ArrayRef<Expr *> DSlices) {
@@ -135,7 +138,9 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   void setNumDimensionSlices(unsigned N) { numDims = N; }
 
   SourceLocation getBeginLoc() const LLVM_READONLY {
-    return getTrailingObjects<Expr *>()[0]->getBeginLoc();
+    if(hasBase())
+      return getBase()->getBeginLoc();
+    return getTrailingObjects<Expr *>()[1]->getBeginLoc();
   }
 
   SourceLocation getEndLoc() const LLVM_READONLY {return RBracketLoc;}
@@ -163,6 +168,7 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
 class ApproxIndexVarRefExpr : public Expr {
   IdentifierInfo *Identifier;
   SourceLocation Loc;
+  std::optional<VarDecl*> Decl;
 
   public:
   ApproxIndexVarRefExpr(IdentifierInfo *II, QualType Type, ExprValueKind VK,
@@ -191,6 +197,14 @@ class ApproxIndexVarRefExpr : public Expr {
     IdentifierInfo *getIdentifier() const { return Identifier; }
 
     llvm::StringRef getName() const { return Identifier->getName(); }
+    llvm::StringRef getDeclName() const {
+    assert(hasDecl() && "Attempt to get Decl Name of Index var without decl");
+    return getDecl().value()->getName();
+    }
+
+    void setDecl(VarDecl *D) { Decl.emplace(D); }
+    bool hasDecl() const { return Decl.has_value(); }
+    std::optional<VarDecl*> getDecl() const { return Decl; }
 
 
     static bool classof(const Stmt *T) {

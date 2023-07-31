@@ -2672,7 +2672,7 @@ Sema::ActOnIdExpression(Scope *S, CXXScopeSpec &SS,
 
     // if we are not parsing a tensor decl and find a slice, we should ignore lookup errors
     // as the user is implicitly defining an Index VarRef
-    if (!S->isApproxTensorDeclScope() && S->isApproxSliceScope())
+    if (S->isApproxTensorFunctorDeclScope() && S->isApproxSliceScope())
       return ActOnApproxIndexVarRefExpr(II, NameLoc);
 
     // If this name wasn't predeclared and if this is not a function
