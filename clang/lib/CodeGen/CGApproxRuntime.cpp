@@ -294,6 +294,13 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
        /* Ouput Data Descr. */ CGM.VoidPtrTy,
        /* Output Data Num Elements*/ CGM.Int32Ty},
       false);
+
+  SurrogateInfo.ConvertSliceInfoFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, 
+    { /*Number of slices */ CGM.Int32Ty,
+      /* Tensor array slices (void **) */ CGM.VoidPtrTy,
+      /* Functor Array Slices */ CGM.VoidPtrTy
+    }, false);
 }
 
 void CGApproxRuntime::CGApproxRuntimeEnterRegion(CodeGenFunction &CGF,
@@ -1234,42 +1241,91 @@ void CGApproxRuntime::EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::Ar
     }
   }
 
-  void CGApproxRuntime::emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
-    llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName() << "\n";
 
-    auto *TensorFunctor  = dyn_cast<ApproxDeclareTensorFunctorDecl>(D->getFunctor());
-    auto IndexRefExprs = TensorFunctor->getSymbolicVarsUniqueToEachSlice();
-    initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprs);
-    addSymbolDeclarationsToSlices(TensorFunctor);
-    EmitDeclarationOfSymbolVars(*CGF, IndexRefExprs);
+llvm::Value *CGApproxRuntime::CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars) {
+  size_t num_vars = Vars.size();
+  // we want to create an array of type "void *" that holds all addresses in Vars
+  // we will then return the address of this array
 
+  QualType VoidPtrArrayType = CGF.getContext().getConstantArrayType(
+      CGF.getContext().VoidPtrTy, llvm::APInt(64, num_vars), nullptr,
+      ArrayType::Normal, 0);
+  Address Array = CGF.CreateMemTemp(VoidPtrArrayType, "allocated_ptrs");
 
-    auto RHS = TensorFunctor->getRHSSlices();
-    auto ArrSlices = D->getArraySlices();
-    assert(RHS.size() == ArrSlices.size() && "Expected same number of RHS slices and array slices");
-    for (size_t i = 0; i < RHS.size(); i++) {
-      ApproxArraySliceExpr *Slice = dyn_cast<ApproxArraySliceExpr>(ArrSlices[i]);
-      assert(Slice && "Expected an array slice expression");
-      auto SliceVals = Slice->getSlices();
-      mapSymbolicVarsToRanges(SurrogateInfo.SymbolVars, RHS[i], SliceVals);
+  for(size_t i = 0; i < num_vars; i++) {
+    Address ElementPtr = CGF.Builder.CreateConstArrayGEP(Array, i);
+    CGF.Builder.CreateStore(Vars[i].getPointer(), ElementPtr);
+  }
+
+  return CGF.Builder.CreatePointerBitCastOrAddrSpaceCast(Array.getPointer(), CGF.VoidPtrTy);
+}
+
+void CGApproxRuntime::CGApproxRuntimeEmitSliceConversion(
+    CodeGenFunction &CGF, size_t NumVals, llvm::Value *TensorCollection,
+    llvm::Value *FunctorCollection) {
+      Function *Fn = nullptr;
+      StringRef FnName("__approx_runtime_slice_conversion");
+      Fn = CGM.getModule().getFunction(FnName);
+      if(!Fn) {
+        Fn = llvm::Function::Create(SurrogateInfo.ConvertSliceInfoFnTy,
+                                llvm::Function::ExternalLinkage, FnName,
+                                &CGM.getModule());
+      }
+
+      auto *NumValsArg = llvm::ConstantInt::get(CGM.getLLVMContext(), llvm::APInt(32, NumVals));
+      llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertSliceInfoFnTy, Fn});
+      CGF.EmitRuntimeCall(Fn, {NumValsArg, TensorCollection, FunctorCollection});
     }
-    CGApproxRuntimeEmitSymbolicVarInits(*CGF);
 
-    std::vector<Address> TensorDeclAddresses;
-    std::vector<Address> FunctorDeclAddresses;
+void CGApproxRuntime::emitApproxDeclareTensor(
+    CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
+  llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName()
+               << "\n";
 
-    for (auto *E : D->getArraySlices()) {
-      auto *ArraySlices = dyn_cast<ApproxArraySliceExpr>(E);
-      auto Addr = CGApproxRuntimeEmitApproxArrayInfo(*CGF, ArraySlices);
-      TensorDeclAddresses.push_back(Addr);
-    }
+  auto *TensorFunctor =
+      dyn_cast<ApproxDeclareTensorFunctorDecl>(D->getFunctor());
+  auto IndexRefExprs = TensorFunctor->getSymbolicVarsUniqueToEachSlice();
+  initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprs);
+  addSymbolDeclarationsToSlices(TensorFunctor);
+  EmitDeclarationOfSymbolVars(*CGF, IndexRefExprs);
 
-    for(auto *E : TensorFunctor->getRHSSliceExprs()) {
-      auto *Slice = dyn_cast<ApproxArraySliceExpr>(E);
-      auto Addr = CGApproxRuntimeEmitApproxArrayInfo(*CGF, Slice);
-      FunctorDeclAddresses.push_back(Addr);
-    }
+  auto RHS = TensorFunctor->getRHSSlices();
+  auto ArrSlices = D->getArraySlices();
+  assert(RHS.size() == ArrSlices.size() &&
+         "Expected same number of RHS slices and array slices");
+  for (size_t i = 0; i < RHS.size(); i++) {
+    ApproxArraySliceExpr *Slice = dyn_cast<ApproxArraySliceExpr>(ArrSlices[i]);
+    assert(Slice && "Expected an array slice expression");
+    auto SliceVals = Slice->getSlices();
+    mapSymbolicVarsToRanges(SurrogateInfo.SymbolVars, RHS[i], SliceVals);
+  }
+  CGApproxRuntimeEmitSymbolicVarInits(*CGF);
 
-    assert(TensorDeclAddresses.size() == FunctorDeclAddresses.size() &&
-           "Expected same number of tensor decl addresses and functor decl addresses");
+  std::vector<Address> TensorDeclAddresses;
+  std::vector<Address> FunctorDeclAddresses;
+
+  for (auto *E : D->getArraySlices()) {
+    auto *ArraySlices = dyn_cast<ApproxArraySliceExpr>(E);
+    auto Addr = CGApproxRuntimeEmitApproxArrayInfo(*CGF, ArraySlices);
+    TensorDeclAddresses.push_back(Addr);
+  }
+
+  for (auto *E : TensorFunctor->getRHSSliceExprs()) {
+    auto *Slice = dyn_cast<ApproxArraySliceExpr>(E);
+    auto Addr = CGApproxRuntimeEmitApproxArrayInfo(*CGF, Slice);
+    FunctorDeclAddresses.push_back(Addr);
+  }
+
+  assert(TensorDeclAddresses.size() == FunctorDeclAddresses.size() &&
+         "Expected same number of tensor decl addresses and functor decl "
+         "addresses");
+
+  llvm::Value *TensorCollectionAddr =
+      CGApproxRuntimeCreateVoidPtrArray(*CGF, TensorDeclAddresses);
+  llvm::Value *FunctorCollectionAddr =
+      CGApproxRuntimeCreateVoidPtrArray(*CGF, FunctorDeclAddresses);
+
+  CGApproxRuntimeEmitSliceConversion(*CGF, TensorDeclAddresses.size(),
+                                     TensorCollectionAddr,
+                                     FunctorCollectionAddr);
   }

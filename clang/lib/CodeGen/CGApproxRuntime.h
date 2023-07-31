@@ -141,28 +141,34 @@ class SymbolVarInfo {
 using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
 
   struct MLSurrogateInfo {
-    // SliceInfoTy is a struct containing information about the slice for one dimension.
-    // typedef struct slice_info_ty {
-        // int start;
-        // int stop;
-        // inst step;
-    //} slice_info_t
-    QualType SliceInfoTy;
+  // SliceInfoTy is a struct containing information about the slice for one
+  // dimension. typedef struct slice_info_ty 
+  // { 
+  //   int start; 
+  //   int stop; 
+  //   int step;
+  //} slice_info_t
+  QualType SliceInfoTy;
 
-    // NDArraySliceTy is a struct containing information about an ND
-    // array slice.
-    // It looks like:
-    // typedef struct ndarray_slice_ty {
+  // NDArraySliceTy is a struct containing information about an ND
+  // array slice.
+  // It looks like:
+  // typedef struct ndarray_slice_ty {
 
-        // void* base;
-        // int8_t type;
-        // int ndim;
-        // slice_info_t slices[ndim];
-      // } ndarray_slice_t;
-    QualType NDArraySliceTy;
+  // void* base;
+  // int8_t type;
+  // int ndim;
+  // slice_info_t slices[ndim];
+  // } ndarray_slice_t;
+  QualType NDArraySliceTy;
 
-    
-    SymbolVarInfoMap SymbolVars;
+  SymbolVarInfoMap SymbolVars;
+
+  // Function type of the function that takes
+  // the tensor decl array slices and the
+  // tensor functor decl slices and converts the
+  // local i'th slice to global slices for the array
+  llvm::FunctionType *ConvertSliceInfoFnTy;
   };
 
   MLSurrogateInfo SurrogateInfo;
@@ -181,6 +187,8 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   void CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF);
   void EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Symbols);
   void CGApproxRuntimeEmitSlice(CodeGenFunction &CFG, Expr *Slice, Address SliceMemory);
+  llvm::Value *CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars);
+  void CGApproxRuntimeEmitSliceConversion(CodeGenFunction &CGF, size_t NumVals, llvm::Value *TensorCollection, llvm::Value *FunctorCollection);
   public:
 
   void emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D);
