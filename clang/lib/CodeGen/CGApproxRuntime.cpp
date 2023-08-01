@@ -884,14 +884,14 @@ Expr *AAIE) {
       ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 0));
   CGF.EmitStoreOfScalar(BasePtr, FieldAddr);
 
-  FieldAddr = CGF.EmitLValueForField(
-      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 1));
   
   int8_t TyKind = -1;
   if(ArrayBase) {
     TyKind = getArrPointeeApproxType(CGF, BaseTy);
   }
 
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 1));
   CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, TyKind, false),
                         FieldAddr);
 
@@ -959,14 +959,12 @@ Address CGApproxRuntime::CGApproxRuntimeEmitSlices(CodeGenFunction &CGF,
   ASTContext &C = CGM.getContext();
   auto numSlices = Slices.size();
   QualType SliceInfoArrayTy;
-  llvm::Value *NumOfElements =
-      llvm::ConstantInt::get(CGM.Int32Ty, numSlices, false);
 
   SliceInfoArrayTy = C.getConstantArrayType(SurrogateInfo.SliceInfoTy, llvm::APInt(64, numSlices),
                                           nullptr, ArrayType::Normal, 0);
   Twine ArrayName = Twine("slice.info_") + Twine(numSliceArraysCreated);
   Address SliceInfoArray = CGF.CreateMemTemp(SliceInfoArrayTy, ArrayName);
-              
+                
   for (size_t i = 0; i < numSlices; i++) {
     Address CurrentSlice = CGF.Builder.CreateConstArrayGEP(SliceInfoArray, i);
     CGApproxRuntimeEmitSlice(CGF, Slices[i], CurrentSlice);
@@ -984,8 +982,6 @@ Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
   auto numSlices = Slices.size();
   QualType SliceShapeArrayTy;
   QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(32, true);
-  llvm::Value *NumOfElements =
-      llvm::ConstantInt::get(CGF.Int32Ty, numSlices, false);
 
   SliceShapeArrayTy = C.getConstantArrayType(Int32Ty, llvm::APInt(32, numSlices),
                                           nullptr, ArrayType::Normal, 0);
@@ -1033,7 +1029,7 @@ void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *S
 
 
   CGF.EmitBlock(DestBB);
-  Size = SizeAddr.getPointer();
+  Size = CGF.Builder.CreateLoad(SizeAddr);
 
   CGF.EmitStoreOfScalar(Size, Dest, false, Int32Ty);
 
@@ -1267,9 +1263,9 @@ void CGApproxRuntime::CGApproxRuntimeEmitSliceConversion(
       StringRef FnName("__approx_runtime_slice_conversion");
       Fn = CGM.getModule().getFunction(FnName);
       if(!Fn) {
-        Fn = llvm::Function::Create(SurrogateInfo.ConvertSliceInfoFnTy,
-                                llvm::Function::ExternalLinkage, FnName,
-                                &CGM.getModule());
+        Fn = Function::Create(SurrogateInfo.ConvertSliceInfoFnTy,
+                          llvm::Function::ExternalLinkage, FnName,
+                          CGM.getModule());
       }
 
       auto *NumValsArg = llvm::ConstantInt::get(CGM.getLLVMContext(), llvm::APInt(32, NumVals));
