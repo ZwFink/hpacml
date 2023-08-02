@@ -169,6 +169,22 @@ class ApproxIndexVarRefExpr : public Expr {
   IdentifierInfo *Identifier;
   SourceLocation Loc;
   std::optional<VarDecl*> Decl;
+  
+  // when we want to identify an index variable in a shape,
+  // we need some way to identify it. We choose negative integers,
+  // as they are not valid within shapes. Each index variable
+  // is given a unique negative integer used to represent all instances
+  // of that index variable
+  static std::unordered_map<std::string, int> shapeReprMap;
+  static int nextShapeRepr;
+
+  void setShapeRepr(llvm::StringRef Name) {
+    std::string NameStr = Name.str();
+    if(shapeReprMap.find(NameStr) == shapeReprMap.end()) {
+      shapeReprMap[NameStr] = nextShapeRepr;
+      nextShapeRepr--;
+    }
+  }
 
   public:
   ApproxIndexVarRefExpr(IdentifierInfo *II, QualType Type, ExprValueKind VK,
@@ -177,6 +193,7 @@ class ApproxIndexVarRefExpr : public Expr {
     assert(II && "No identifier provided!");
     Identifier = II;
     setDependence(computeDependence(this));
+    setShapeRepr(II->getName());
     }
 
     explicit ApproxIndexVarRefExpr(EmptyShell Shell)
@@ -202,6 +219,11 @@ class ApproxIndexVarRefExpr : public Expr {
     return getDecl().value()->getName();
     }
 
+    int getShapeRepresentation() const {
+      std::string NameStr  = std::string(getName());
+      return shapeReprMap[NameStr];
+    }
+
     void setDecl(VarDecl *D) { Decl.emplace(D); }
     bool hasDecl() const { return Decl.has_value(); }
     std::optional<VarDecl*> getDecl() const { return Decl; }
@@ -211,6 +233,7 @@ class ApproxIndexVarRefExpr : public Expr {
       return T->getStmtClass() == ApproxIndexVarRefExprClass;
     }
   };
+
 
 class ApproxArraySectionExpr : public Expr {
   enum { BASE, LOWER_BOUND, LENGTH, END_EXPR };

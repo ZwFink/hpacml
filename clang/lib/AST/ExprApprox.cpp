@@ -86,3 +86,6 @@ QualType ApproxArraySliceExpr::getBaseOriginalType(const Expr *Base) {
 
   return OriginalTy;
 }
+
+int ApproxIndexVarRefExpr::nextShapeRepr = -1;
+std::unordered_map<std::string, int> ApproxIndexVarRefExpr::shapeReprMap;
