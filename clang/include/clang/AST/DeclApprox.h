@@ -339,23 +339,44 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
       return LinearizedSlices;
     }
 
-    llvm::SmallVector<Expr*, 16> getSymbolicVarsUniqueToEachSlice() {
+    template<typename InsertIterator>
+    void getSymbolicVarsUniqueToExpression(InsertIterator I, Expr * E) {
+      auto Vars = getSymbolicVarsFromExpression(E);
+      std::unordered_set<std::string> SymbolicVarDecls;
+      for(auto *Var : Vars) {
+        ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(Var);
+        auto Name = std::string(IndexVar->getName());
+        if (SymbolicVarDecls.find(Name) == SymbolicVarDecls.end()) {
+          SymbolicVarDecls.insert(Name);
+          *I++ = Var;
+        }
+      }
+
+    }
+
+    llvm::SmallVector<Expr*, 16> getSymbolicVarsUniqueToEachLHSSlice() {
+      llvm::SmallVector<Expr*, 16> UniqueVars;
+      for(auto *E : LHSSlice) {
+        getSymbolicVarsUniqueToExpression(std::back_inserter(UniqueVars), E);
+      }
+      return UniqueVars;
+    }
+
+    llvm::SmallVector<Expr*, 16> getSymbolicVarsUniqueToEachRHSSlice() {
       llvm::SmallVector<Expr *, 16> UniqueVars;
       for (auto NDSlice : RHSSlices) {
         for (auto *E : NDSlice) {
-          std::unordered_set<std::string> SymbolicVarDecls;
-          auto Vars = getSymbolicVarsFromExpression(E);
-          for (auto *Var : Vars) {
-          ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(Var);
-          auto Name = std::string(IndexVar->getName());
-          if (SymbolicVarDecls.find(Name) == SymbolicVarDecls.end()) {
-            UniqueVars.push_back(Var);
-            SymbolicVarDecls.insert(Name);
-          }
-          }
+          getSymbolicVarsUniqueToExpression(std::back_inserter(UniqueVars), E);
         }
       }
       return UniqueVars;
+    }
+
+    llvm::SmallVector<Expr*, 16> getSymbolicVarsUniqueToEachSlice(bool RHS=true) {
+      if(RHS)
+        return getSymbolicVarsUniqueToEachRHSSlice();
+      else
+        return getSymbolicVarsUniqueToEachLHSSlice();
     }
 
     void DeclareSymbolicVar(Expr *E) {

@@ -124,10 +124,11 @@ class SymbolVarInfo {
   ApproxIndexVarRefExpr *Symbol = nullptr;
   std::optional<Address> Addr;
   Expr *Range = nullptr;
+  bool isFromRHS = false;
 
-  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, Address Addr, Expr *Range) : Symbol(Symbol), Addr(Addr), Range(Range) {}
-  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, Address Addr) : Symbol(Symbol), Addr(Addr) {}
-  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol) : Symbol(Symbol) {}
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, Address Addr, Expr *Range, bool isFromRHS = false) : Symbol(Symbol), Addr(Addr), Range(Range), isFromRHS(isFromRHS) {}
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, Address Addr, bool isFromRHS = false) : Symbol(Symbol), Addr(Addr), isFromRHS(isFromRHS) {}
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, bool isFromRHS = false) : Symbol(Symbol), isFromRHS(isFromRHS) {}
   SymbolVarInfo() {}
 
   void setAddress(Address A) {

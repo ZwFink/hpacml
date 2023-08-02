@@ -929,13 +929,21 @@ void CGApproxRuntime::CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF) 
     auto Name = SymbolInfo.first;
     auto &Info = SymbolInfo.second;
 
-    assert(Info.Addr.has_value() && "Symbol should already be declared");
-    assert(Info.Range && "Symbol should have a range");
+    Value *LBVal = nullptr;
 
-    ApproxSliceExpr *Slice = dyn_cast_or_null<ApproxSliceExpr>(Info.Range);
-    assert(Slice && "Expected a slice expression");
-    Expr *LB = Slice->getStart();
-    Value *LBVal = CGF.EmitScalarExpr(LB);
+    assert(Info.Addr.has_value() && "Symbol should already be declared");
+    if(Info.isFromRHS) {
+      assert(Info.Range && "Symbol from RHS doesn't have a corresponding range?");
+      ApproxSliceExpr *Slice = dyn_cast_or_null<ApproxSliceExpr>(Info.Range);
+      assert(Slice && "Expected a slice expression");
+      Expr *LB = Slice->getStart();
+      LBVal = CGF.EmitScalarExpr(LB);
+    }
+    else {
+      assert(!Info.Range && "Symbol from LHS shouldn't have a range?");
+      LBVal = llvm::ConstantInt::get(CGF.IntPtrTy, 1, false);
+    }
+
     CGF.EmitStoreOfScalar(LBVal, Info.Addr.value(), false, CGF.getContext().getIntTypeForBitwidth(32, true));
   }
 
@@ -1154,6 +1162,7 @@ void CGApproxRuntime::mapSymbolicVarsToRanges(
     auto it = InfoMap.find(Name);
     if (it != InfoMap.end()) {
         it->second.Range = (TensorSlice[idx]);
+        it->second.isFromRHS = true;
     }
     ++idx;
   }
@@ -1209,14 +1218,15 @@ void CGApproxRuntime::EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::Ar
 
   }
 
-  void addSymbolDeclarationsToSlices(ApproxDeclareTensorFunctorDecl *Decl) {
-    auto RHS = Decl->getRHSSlices();
-    size_t slice_idx = 0;
-    for (auto &NDSlice : RHS) {
+  void addSymbolDeclarationsToNDSlice(ApproxDeclareTensorFunctorDecl *Decl, llvm::ArrayRef<Expr*> NDSlice) {
       for (auto *Expr : NDSlice) {
         ApproxSliceExpr *Slice = dyn_cast<ApproxSliceExpr>(Expr);
         auto DeclaredSymbVars =
             Decl->getDeclaredSymbolicVarsFromExpression(Slice);
+        // not all will have symbolic vars, e.g., [i, 0:6]
+        if(DeclaredSymbVars.size() == 0) {
+          continue;
+        }
         auto SymbVars = Decl->getSymbolicVarsFromExpression(Slice);
 
         auto *AIVRE =
@@ -1234,7 +1244,17 @@ void CGApproxRuntime::EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::Ar
           }
         }
       }
+
+  }
+
+  void addSymbolDeclarationsToSlices(ApproxDeclareTensorFunctorDecl *Decl) {
+    auto RHS = Decl->getRHSSlices();
+    for (auto &NDSlice : RHS) {
+      addSymbolDeclarationsToNDSlice(Decl, NDSlice);
     }
+
+    auto LHS = Decl->getLHSSlice();
+    addSymbolDeclarationsToNDSlice(Decl, LHS);
   }
 
 
@@ -1280,12 +1300,17 @@ void CGApproxRuntime::emitApproxDeclareTensor(
 
   auto *TensorFunctor =
       dyn_cast<ApproxDeclareTensorFunctorDecl>(D->getFunctor());
-  auto IndexRefExprs = TensorFunctor->getSymbolicVarsUniqueToEachSlice();
-  initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprs);
+  auto IndexRefExprsRHS = TensorFunctor->getSymbolicVarsUniqueToEachSlice();
+  auto IndexRefExprsLHS = TensorFunctor->getSymbolicVarsUniqueToEachLHSSlice();
+  initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsRHS);
+  initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsLHS);
   addSymbolDeclarationsToSlices(TensorFunctor);
-  EmitDeclarationOfSymbolVars(*CGF, IndexRefExprs);
+  EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsRHS);
+  EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsLHS);
 
   auto RHS = TensorFunctor->getRHSSlices();
+  auto LHS = TensorFunctor->getLHSSlice();
+
   auto ArrSlices = D->getArraySlices();
   assert(RHS.size() == ArrSlices.size() &&
          "Expected same number of RHS slices and array slices");
