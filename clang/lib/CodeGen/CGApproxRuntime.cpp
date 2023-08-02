@@ -209,7 +209,7 @@ static void getSliceInfoTy(ASTContext &C, QualType &SliceInfoTy) {
   }
 }
 
-static void getNDArraySliceTy(ASTContext &C, QualType &SliceTy, QualType &NDArraySliceTy) {
+static void getNDArraySliceTy(ASTContext &C, QualType &SliceTy, QualType &ShapeTy, QualType &NDArraySliceTy) {
   if(NDArraySliceTy.isNull()) {
     assert(!SliceTy.isNull() && "SliceTy must be defined before NDArraySliceTy");
 
@@ -228,10 +228,25 @@ static void getNDArraySliceTy(ASTContext &C, QualType &SliceTy, QualType &NDArra
     addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(SliceTy));
 
     // the shape info, just an array of integers
-    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntPtrType());
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(ShapeTy));
 
     NDArraySliceRD->completeDefinition();
     NDArraySliceTy = C.getRecordType(NDArraySliceRD);
+  }
+}
+
+static void getTensorShapeTy(ASTContext &C, QualType &TensorShapeTy) {
+  if(TensorShapeTy.isNull()) {
+    RecordDecl *TensorShapeRD = C.buildImplicitRecord("tensor_shape_t");
+    TensorShapeRD->startDefinition();
+    // Number of dimensions
+    addFieldToRecordDecl(C, TensorShapeRD, C.getIntTypeForBitwidth(32, false));
+
+    // The shape info, just an array of integers
+    addFieldToRecordDecl(C, TensorShapeRD, C.getIntPtrType());
+
+    TensorShapeRD->completeDefinition();
+    TensorShapeTy = C.getRecordType(TensorShapeRD);
   }
 }
 
@@ -272,7 +287,8 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
   getPerfoInfoType(C, PerfoInfoTy);
   getVarInfoType(C, VarInfoTy);
   getSliceInfoTy(C, SurrogateInfo.SliceInfoTy);
-  getNDArraySliceTy(C, SurrogateInfo.SliceInfoTy, SurrogateInfo.NDArraySliceTy);
+  getTensorShapeTy(C, SurrogateInfo.TensorShapeTy);
+  getNDArraySliceTy(C, SurrogateInfo.SliceInfoTy, SurrogateInfo.TensorShapeTy, SurrogateInfo.NDArraySliceTy);
 
   CallbackFnTy = llvm::FunctionType::get(CGM.VoidTy, {CGM.VoidPtrTy}, false);
 
@@ -985,25 +1001,32 @@ Address CGApproxRuntime::CGApproxRuntimeEmitSlices(CodeGenFunction &CGF,
 
 Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
                                                       llvm::ArrayRef<Expr*> Slices) {
-  static int numSliceShapesCreated = 0;
   ASTContext &C = CGM.getContext();
   auto numSlices = Slices.size();
-  QualType SliceShapeArrayTy;
+  QualType SliceTy;
   QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(32, true);
 
-  SliceShapeArrayTy = C.getConstantArrayType(Int32Ty, llvm::APInt(32, numSlices),
+  SliceTy = C.getConstantArrayType(Int32Ty, llvm::APInt(32, numSlices),
                                           nullptr, ArrayType::Normal, 0);
-  Twine ArrayName = Twine("slice.shape_") + Twine(numSliceShapesCreated);
-  Address SliceShapeArray = CGF.CreateMemTemp(SliceShapeArrayTy, ArrayName);
+  Twine ArrayName = "slice.shape_";
+  Address SliceShapeArray = CGF.CreateMemTemp(SliceTy, ArrayName);
               
   for (size_t i = 0; i < numSlices; i++) {
     Address CurrentSlice = CGF.Builder.CreateConstArrayGEP(SliceShapeArray, i);
     CGApproxRuntimeEmitSliceSize(CGF, Slices[i], CurrentSlice);
   }
 
-  numSliceShapesCreated++;
+  auto TensorShape = CGF.CreateMemTemp(SurrogateInfo.TensorShapeTy, "tensor.shape");
+  auto TensorShapeAddr = CGF.MakeAddrLValue(TensorShape, SurrogateInfo.TensorShapeTy);
+  auto TensorShapeDecl = SurrogateInfo.TensorShapeTy->getAsRecordDecl();
 
-  return SliceShapeArray;
+  LValue NumDimsLValue = CGF.EmitLValueForField(TensorShapeAddr, *TensorShapeDecl->field_begin());
+  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, numSlices, false), NumDimsLValue);
+
+  NumDimsLValue = CGF.EmitLValueForField(TensorShapeAddr, *std::next(TensorShapeDecl->field_begin(), 1));
+  CGF.EmitStoreOfScalar(SliceShapeArray.getPointer(), NumDimsLValue);
+
+  return TensorShape;
 }
 
 void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest) {

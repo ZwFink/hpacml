@@ -9,13 +9,46 @@ typedef struct slice_info_t {
 	uint32_t step;
 } slice_info_t;
 
+// a tensor's shape is a list of integers,
+// each representing the size of a dimension
+// currently, this is distinct form array_info shapes
+// which is just a list of integers
+// but can be changed later to combine the two
+typedef struct tensor_shape {
+	int ndim;
+	int *shapes;
+
+	void operator=(const tensor_shape &other) {
+		ndim = other.ndim;
+		for(int i = 0; i < ndim; i++) {
+			shapes[i] = other.shapes[i];
+		}
+	}
+
+	int& operator[](int idx) {
+		return shapes[idx];
+	}
+} tensor_shape_t;
+
 typedef struct array_info {
 	void *base;
 	int8_t type;
 	uint ndim;
 	slice_info_t *slices;
-	int *shapes;
+	// yes, we end up duplicating ndim, but that's fine.
+	// the cost is low and we don't have to re-allocate the shapes for the
+	// RHS when doing our analysis
+	tensor_shape_t *shapes;
+
+	tensor_shape_t &shape() {
+		return *shapes;
+	}
 } array_info_t;
+
+
+// void __approx_runtime_shape_check(int numArgs, void *tensor, void* slice, tensor_shape *tensor_shape, tensor_shape *slice_shape) {
+
+// }
 
 void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
     std::cout << "Found " << numArgs << " arguments\n";
@@ -44,7 +77,7 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 		}
 		f_slice.step = t_slice.step;
 
-		finfo.shapes[i] *= tinfo.shapes[i];
+		finfo.shape()[i] *= tinfo.shape()[i];
 
 	}
 	}
@@ -62,7 +95,7 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 		<< tinfo.slices[i].start << ", " << tinfo.slices[i].stop << ", " << tinfo.slices[i].step << "\n";
 	}
 	for (int i = 0; i < tinfo.ndim; i++) {
-		std::cout << "Tensor shape: " << tinfo.shapes[i] << "\n";
+		std::cout << "Tensor shape: " << tinfo.shape()[i] << "\n";
 	}
 	}
 

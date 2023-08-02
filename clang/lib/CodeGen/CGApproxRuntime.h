@@ -163,6 +163,13 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   // } ndarray_slice_t;
   QualType NDArraySliceTy;
 
+
+  //typedef struct tensor_shape {
+  //	int ndim;
+  //	int *shapes;
+  //} tensor_shape_t;
+  QualType TensorShapeTy;
+
   SymbolVarInfoMap SymbolVars;
 
   // Function type of the function that takes
