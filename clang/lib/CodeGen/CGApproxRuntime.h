@@ -211,8 +211,10 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   void CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF);
   void EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Symbols);
   void CGApproxRuntimeEmitSlice(CodeGenFunction &CFG, Expr *Slice, Address SliceMemory);
-  llvm::Value *CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars);
-  void CGApproxRuntimeEmitSliceConversion(CodeGenFunction &CGF, size_t NumVals, llvm::Value *TensorCollection, llvm::Value *FunctorCollection);
+  Address CGApproxRuntimeAllocInternalReprMetadata(CodeGenFunction& CGF, int numArgs);
+  Address CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars);
+  void CGApproxRuntimeEmitSliceConversion(CodeGenFunction &CGF, size_t NumVals, Address TensorCollection, Address FunctorCollection);
+  void CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int numArgs, Address FunctorCollection, Address InternalCollection);
   public:
 
   void emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D);

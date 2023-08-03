@@ -278,10 +278,11 @@ static void getVarInfoType(ASTContext &C, QualType &VarInfoTy) {
 
 static void getInternalReprMetadataTy(ASTContext &C, QualType& TensorShapeTy, QualType &InternalReprTy) {
   if(InternalReprTy.isNull()) {
+    assert(!TensorShapeTy.isNull() && "TensorShapeTy must be defined before InternalReprTy");
     RecordDecl *InternalReprRD = C.buildImplicitRecord("internal_tensor_metadata_t");
     InternalReprRD->startDefinition();
     // int type
-    addFieldToRecordDecl(C, InternalReprRD, C.getIntTypeForBitwidth(32, true));
+    addFieldToRecordDecl(C, InternalReprRD, C.getIntTypeForBitwidth(32, false));
     // TensorShapeTy shape
     addFieldToRecordDecl(C, InternalReprRD, TensorShapeTy);
     // void *for internal data
@@ -1329,7 +1330,7 @@ void CGApproxRuntime::EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::Ar
   }
 
 
-llvm::Value *CGApproxRuntime::CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars) {
+Address CGApproxRuntime::CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars) {
   size_t num_vars = Vars.size();
   // we want to create an array of type "void *" that holds all addresses in Vars
   // we will then return the address of this array
@@ -1344,12 +1345,12 @@ llvm::Value *CGApproxRuntime::CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction 
     CGF.Builder.CreateStore(Vars[i].getPointer(), ElementPtr);
   }
 
-  return CGF.Builder.CreatePointerBitCastOrAddrSpaceCast(Array.getPointer(), CGF.VoidPtrTy);
+  return Array;
 }
 
 void CGApproxRuntime::CGApproxRuntimeEmitSliceConversion(
-    CodeGenFunction &CGF, size_t NumVals, llvm::Value *TensorCollection,
-    llvm::Value *FunctorCollection) {
+    CodeGenFunction &CGF, size_t NumVals, Address TensorCollection,
+    Address FunctorCollection) {
       Function *Fn = nullptr;
       StringRef FnName("__approx_runtime_slice_conversion");
       Fn = CGM.getModule().getFunction(FnName);
@@ -1359,9 +1360,11 @@ void CGApproxRuntime::CGApproxRuntimeEmitSliceConversion(
                           CGM.getModule());
       }
 
-      auto *NumValsArg = llvm::ConstantInt::get(CGM.getLLVMContext(), llvm::APInt(32, NumVals));
+      auto *NumValsArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, NumVals));
       llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertSliceInfoFnTy, Fn});
-      CGF.EmitRuntimeCall(Fn, {NumValsArg, TensorCollection, FunctorCollection});
+      llvm::Value *TensorCollectionValue = CGF.Builder.CreatePointerCast(TensorCollection.getPointer(), CGF.VoidPtrTy);
+      llvm::Value *FunctorCollectionValue = CGF.Builder.CreatePointerCast(FunctorCollection.getPointer(), CGF.VoidPtrTy);
+      CGF.EmitRuntimeCall(FnCallee, {NumValsArg, TensorCollectionValue, FunctorCollectionValue});
     }
 
 void CGApproxRuntime::emitApproxDeclareTensor(
@@ -1412,13 +1415,57 @@ void CGApproxRuntime::emitApproxDeclareTensor(
          "Expected same number of tensor decl addresses and functor decl "
          "addresses");
 
-  llvm::Value *TensorCollectionAddr =
+  auto TensorCollectionAddr =
       CGApproxRuntimeCreateVoidPtrArray(*CGF, TensorDeclAddresses);
-  llvm::Value *FunctorCollectionAddr =
+  auto FunctorCollectionAddr =
       CGApproxRuntimeCreateVoidPtrArray(*CGF, FunctorDeclAddresses);
 
   CGApproxRuntimeEmitSliceConversion(*CGF, TensorDeclAddresses.size(),
                                      TensorCollectionAddr,
                                      FunctorCollectionAddr);
 
+  auto InternalReprAddress =
+      CGApproxRuntimeAllocInternalReprMetadata(*CGF, FunctorDeclAddresses.size());
+  CGApproxRuntimeEmitInternalReprConversion(*CGF, FunctorDeclAddresses.size(),
+                                            FunctorCollectionAddr, InternalReprAddress);
+
+  }
+
+  void CGApproxRuntime::CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int numArgs, Address FunctorCollection, Address InternalCollection) {
+    Function *Fn = nullptr;
+    StringRef FnName("__approx_runtime_convert_to_internal_representation");
+    Fn = CGM.getModule().getFunction(FnName);
+    if(!Fn) {
+      Fn = Function::Create(SurrogateInfo.ConvertTensorToInternalReprFnTy,
+                        llvm::Function::ExternalLinkage, FnName,
+                        CGM.getModule());
+    }
+
+
+    llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertTensorToInternalReprFnTy, Fn});
+    llvm::Value *NumArgsArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, numArgs));
+    llvm::Value *FunctorCollectionValue = CGF.Builder.CreatePointerCast(FunctorCollection.getPointer(), CGF.VoidPtrTy);
+    llvm::Value *InternalCollectionValue = CGF.Builder.CreatePointerCast(InternalCollection.getPointer(), CGF.VoidPtrTy);
+    CGF.EmitRuntimeCall(FnCallee, {NumArgsArg, FunctorCollectionValue, InternalCollectionValue});
+  }
+
+  Address CGApproxRuntime::CGApproxRuntimeAllocInternalReprMetadata(CodeGenFunction& CGF, int numArgs) {
+    ASTContext &C = CGM.getContext();
+    int numArgsAfterConversion = numArgs > 1 ? numArgs + 1 : 1;
+
+    Twine ReprName = "internal_repr_";
+    auto *ReprDecl = SurrogateInfo.InternalReprMetadataTy->getAsRecordDecl();
+    auto InternalRepr = CGF.CreateMemTemp(SurrogateInfo.InternalReprMetadataTy, ReprName);
+    auto InternalReprAddr = CGF.MakeAddrLValue(InternalRepr, SurrogateInfo.InternalReprMetadataTy);
+
+    LValue Base = CGF.EmitLValueForField(InternalReprAddr, *ReprDecl->field_begin());
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, numArgs, true)), Base);
+
+    Base = CGF.EmitLValueForField(InternalReprAddr, *std::next(ReprDecl->field_begin(), 1));
+    Base = CGF.EmitLValueForField(InternalReprAddr, *std::next(ReprDecl->field_begin(), 2));
+
+    llvm::Value *NullPtr = llvm::ConstantPointerNull::get(CGM.VoidPtrTy);
+    CGF.EmitStoreOfScalar(NullPtr, Base);
+
+    return InternalRepr;
   }
