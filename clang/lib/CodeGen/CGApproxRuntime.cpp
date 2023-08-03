@@ -1025,13 +1025,20 @@ Address CGApproxRuntime::CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int 
 
 Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
                                                       llvm::ArrayRef<Expr*> Slices) {
-  ASTContext &C = CGM.getContext();
   auto numSlices = Slices.size();
   Address AllocatedShapeStruct = CGApproxRuntimeAllocateShape(CGF, numSlices);
+  return CGApproxRuntimeEmitShape(CGF, AllocatedShapeStruct, Slices);
 
-  auto SliceBaseAddr = CGF.Builder.CreateStructGEP(AllocatedShapeStruct, 1);
+}
 
-  llvm::Value *SliceShapeArray = CGF.Builder.CreateLoad(SliceBaseAddr, false, "loaded_val");
+Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction& CGF, Address Dest,
+llvm::ArrayRef<Expr*> Slices) {
+
+  ASTContext &C = CGM.getContext();
+  auto numSlices = Slices.size();
+  auto SliceBaseAddr = CGF.Builder.CreateStructGEP(Dest, 1);
+
+  llvm::Value *SliceShapeArray = CGF.Builder.CreateLoad(SliceBaseAddr, false);
   Address SliceBase = Address(SliceShapeArray, CGF.Int32Ty, clang::CharUnits::fromQuantity(32));
             
   for (size_t i = 0; i < numSlices; i++) {
@@ -1039,7 +1046,7 @@ Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
     CGApproxRuntimeEmitSliceSize(CGF, Slices[i], CurrentSlice);
   }
 
-  return AllocatedShapeStruct;
+  return Dest;
 }
 
 void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest) {
