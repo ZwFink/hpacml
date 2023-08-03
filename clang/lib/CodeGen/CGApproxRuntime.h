@@ -189,6 +189,7 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   Address EmitDeclarationOfSymbolVar(CodeGenFunction &CGF, ApproxIndexVarRefExpr *Symbol);
   Address CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF, Expr *AAIE);
   Address CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  Address CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int ndim);
   Address CGApproxRuntimeEmitShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
   void CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest);
   Address CGApproxRuntimeEmitSizeOfSliceElement(CodeGenFunction &CGF, std::unordered_map<Expr*,Expr*> &RangeMap, Expr *Slice);
