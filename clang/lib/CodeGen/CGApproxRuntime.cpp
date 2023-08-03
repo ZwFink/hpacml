@@ -957,7 +957,8 @@ void CGApproxRuntime::CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF) 
     }
     else {
       assert(!Info.Range && "Symbol from LHS shouldn't have a range?");
-      LBVal = llvm::ConstantInt::get(CGF.IntPtrTy, 1, false);
+      int Repr = Info.Symbol->getShapeRepresentation();
+      LBVal = llvm::ConstantInt::get(CGF.Int32Ty, Repr, true);
     }
 
     CGF.EmitStoreOfScalar(LBVal, Info.Addr.value(), false, CGF.getContext().getIntTypeForBitwidth(32, true));
@@ -1049,18 +1050,13 @@ llvm::ArrayRef<Expr*> Slices) {
   return Dest;
 }
 
-void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest) {
-  ApproxSliceExpr *SliceExpr = dyn_cast_or_null<ApproxSliceExpr>(Slice);
-  QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(32, true);
-  assert(SliceExpr && "Expected a slice expression");
+void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::Value *Start, llvm::Value *Stop, llvm::Value *Step, Address Dest) {
   auto DestBB = CGF.createBasicBlock("slice.size.dest");
   auto IncBB = CGF.createBasicBlock("slice.size.inc");
-
+  QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(32, true);
   ASTContext &C = CGM.getContext();
-  llvm::Value *StartValue, *StopValue, *StepValue;
+  llvm::Value *StartValue = Start, *StopValue = Stop, *StepValue = Step;
   llvm::Value *Size = nullptr;
-
-  std::tie(StartValue, StopValue, StepValue) = getSliceExprValues(CGF, SliceExpr);
 
   // start - stop / step
   llvm::Value *StopMinusStart = CGF.Builder.CreateNSWSub(StopValue, StartValue);
@@ -1083,7 +1079,16 @@ void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *S
   Size = CGF.Builder.CreateLoad(SizeAddr);
 
   CGF.EmitStoreOfScalar(Size, Dest, false, Int32Ty);
+}
+void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest) {
+  ApproxSliceExpr *SliceExpr = dyn_cast_or_null<ApproxSliceExpr>(Slice);
+  assert(SliceExpr && "Expected a slice expression");
 
+  llvm::Value *StartValue, *StopValue, *StepValue;
+  llvm::Value *Size = nullptr;
+
+  std::tie(StartValue, StopValue, StepValue) = getSliceExprValues(CGF, SliceExpr);
+  CGApproxRuntimeEmitSliceSize(CGF, StartValue, StopValue, StepValue, Dest);
 }
 
 void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice, Address SliceMemory) {
@@ -1346,13 +1351,13 @@ void CGApproxRuntime::emitApproxDeclareTensor(
   auto IndexRefExprsRHS = TensorFunctor->getSymbolicVarsUniqueToEachSlice();
   auto IndexRefExprsLHS = TensorFunctor->getSymbolicVarsUniqueToEachLHSSlice();
   initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsRHS);
-  initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsLHS);
+  // initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsLHS);
   addSymbolDeclarationsToSlices(TensorFunctor);
   EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsRHS);
-  EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsLHS);
+  // EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsLHS);
 
   auto RHS = TensorFunctor->getRHSSlices();
-  auto LHS = TensorFunctor->getLHSSlice();
+  // auto LHS = TensorFunctor->getLHSSlice();
 
   auto ArrSlices = D->getArraySlices();
   assert(RHS.size() == ArrSlices.size() &&
