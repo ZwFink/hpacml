@@ -276,6 +276,21 @@ static void getVarInfoType(ASTContext &C, QualType &VarInfoTy) {
   return;
 }
 
+static void getInternalReprMetadataTy(ASTContext &C, QualType& TensorShapeTy, QualType &InternalReprTy) {
+  if(InternalReprTy.isNull()) {
+    RecordDecl *InternalReprRD = C.buildImplicitRecord("internal_tensor_metadata_t");
+    InternalReprRD->startDefinition();
+    // int type
+    addFieldToRecordDecl(C, InternalReprRD, C.getIntTypeForBitwidth(32, true));
+    // TensorShapeTy shape
+    addFieldToRecordDecl(C, InternalReprRD, TensorShapeTy);
+    // void *for internal data
+    addFieldToRecordDecl(C, InternalReprRD, C.getIntPtrType());
+    InternalReprRD->completeDefinition();
+    InternalReprTy = C.getRecordType(InternalReprRD);
+  }
+}
+
 CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
     : CGM(CGM), CallbackFnTy(nullptr), RTFnTy(nullptr), approxRegions(0),
       StartLoc(SourceLocation()), EndLoc(SourceLocation()), requiresData(false),
@@ -289,6 +304,7 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
   getSliceInfoTy(C, SurrogateInfo.SliceInfoTy);
   getTensorShapeTy(C, SurrogateInfo.TensorShapeTy);
   getNDArraySliceTy(C, SurrogateInfo.SliceInfoTy, SurrogateInfo.TensorShapeTy, SurrogateInfo.NDArraySliceTy);
+  getInternalReprMetadataTy(C, SurrogateInfo.TensorShapeTy, SurrogateInfo.InternalReprMetadataTy);
 
   CallbackFnTy = llvm::FunctionType::get(CGM.VoidTy, {CGM.VoidPtrTy}, false);
 
@@ -316,6 +332,13 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
     { /*Number of slices */ CGM.Int32Ty,
       /* Tensor array slices (void **) */ CGM.VoidPtrTy,
       /* Functor Array Slices */ CGM.VoidPtrTy
+    }, false);
+
+  SurrogateInfo.ConvertTensorToInternalReprFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, 
+    { /*Number of arguments */ CGM.Int32Ty,
+      /* array_info_t ** pointing to the arrays */ CGM.VoidPtrTy,
+      /* internal_repr_metadata_t * with metadata about internal representation */ CGM.VoidPtrTy
     }, false);
 }
 
@@ -1397,4 +1420,5 @@ void CGApproxRuntime::emitApproxDeclareTensor(
   CGApproxRuntimeEmitSliceConversion(*CGF, TensorDeclAddresses.size(),
                                      TensorCollectionAddr,
                                      FunctorCollectionAddr);
+
   }

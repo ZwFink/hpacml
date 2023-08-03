@@ -170,6 +170,14 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   //} tensor_shape_t;
   QualType TensorShapeTy;
 
+  //typedef struct internal_tensor_repr_data {
+  //	int type;
+  //	// we want an agnostic way to represent the shape
+  //	tensor_shape_t shape;
+  //	void *data;
+  //} internal_repr_metadata_t;
+  QualType InternalReprMetadataTy;
+
   SymbolVarInfoMap SymbolVars;
 
   // Function type of the function that takes
@@ -177,6 +185,11 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   // tensor functor decl slices and converts the
   // local i'th slice to global slices for the array
   llvm::FunctionType *ConvertSliceInfoFnTy;
+
+  // a function that converts a set of user arrays on the RHS
+  // to a single tensor that we can then transpose/reshape
+  // to get the correct shape as specified by the LHS
+  llvm::FunctionType *ConvertTensorToInternalReprFnTy;
   };
 
   MLSurrogateInfo SurrogateInfo;

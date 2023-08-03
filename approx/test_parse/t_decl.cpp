@@ -45,10 +45,46 @@ typedef struct array_info {
 	}
 } array_info_t;
 
+enum InternalReprType {
+	Memory = 0,
+	Torch = 1,
+	TensorFlow
+};
+
+typedef struct internal_tensor_repr_data {
+	int type;
+	// we want an agnostic way to represent the shape
+	tensor_shape_t shape;
+	void *data;
+} internal_repr_metadata_t;
+
 
 // void __approx_runtime_shape_check(int numArgs, void *tensor, void* slice, tensor_shape *tensor_shape, tensor_shape *slice_shape) {
 
 // }
+
+// convert numArgs tensors into one tensor that has one extra dimension if numargs > 0
+// actually performs any copying that may need to be done.
+void __approx_runtime_convert_to_internal_representation(int numArgs, void *tensor, void *internal_repr_location) {
+	void **tensor_args = (void **)tensor;
+	array_info_t **tensor_infos = (array_info_t **)tensor_args;
+	internal_repr_metadata_t& internal_repr = *(internal_repr_metadata_t *)internal_repr_location;
+
+        if (numArgs > 1) {
+                internal_repr.shape.ndim = numArgs + 1;
+                internal_repr.shape.shapes[0] = numArgs;
+
+                for (int i = 0; i < numArgs; i++) {
+						internal_repr.shape.shapes[i + 1] = tensor_infos[i]->ndim;
+                }
+        } else {
+				internal_repr.shape.ndim = 1;
+				internal_repr.shape.shapes[0] = tensor_infos[0]->ndim;
+        }
+
+
+	// here we would pass the tensor_infos and the internal_repr to the runtime to fill in
+}
 
 void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
     std::cout << "Found " << numArgs << " arguments\n";
