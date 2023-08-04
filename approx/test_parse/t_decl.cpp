@@ -1,5 +1,5 @@
 #include <iostream>
-
+#include <cstring>
 
 extern "C" {
 
@@ -7,6 +7,8 @@ typedef struct slice_info_t {
 	uint32_t start;
 	uint32_t stop;
 	uint32_t step;
+	uint32_t aivrechildkind;
+	int32_t aivrerepr;
 } slice_info_t;
 
 // a tensor's shape is a list of integers,
@@ -66,24 +68,120 @@ typedef struct internal_tensor_repr_data {
 // convert numArgs tensors into one tensor that has one extra dimension if numargs > 0
 // actually performs any copying that may need to be done.
 void __approx_runtime_convert_to_internal_representation(int numArgs, void *tensor, void *internal_repr_location) {
+	// this function is currently not updated to reflect other changes.
 	void **tensor_args = (void **)tensor;
 	array_info_t **tensor_infos = (array_info_t **)tensor_args;
 	internal_repr_metadata_t& internal_repr = *(internal_repr_metadata_t *)internal_repr_location;
 
-        if (numArgs > 1) {
-                internal_repr.shape.ndim = numArgs + 1;
-                internal_repr.shape.shapes[0] = numArgs;
+ 	int totalShape = 0;
+	// we need to get the total shape
+	for(int i = 0; i < numArgs; i++) {
+		totalShape += tensor_infos[i]->shape().ndim;
+	}
 
-                for (int i = 0; i < numArgs; i++) {
-						internal_repr.shape.shapes[i + 1] = tensor_infos[i]->ndim;
-                }
+	// this is currently incorrect: it will return (6, N, N, N, N, N, N) instead of (6,N)
+	// it should be fixed
+	if(numArgs > 1)
+		totalShape += 1;
+
+	internal_repr.shape.shapes = (int *)malloc(sizeof(int) * totalShape);
+
+    internal_repr.shape.ndim = totalShape;
+    if (numArgs > 1) {
+       internal_repr.shape.shapes[0] = numArgs;
+
+       int totalTraversed = 0;
+       for (int i = 0; i < numArgs; i++) {
+			for(int j = 0; j < tensor_infos[i]->shape().ndim; j++) {
+                internal_repr.shape.shapes[1+totalTraversed] =
+                tensor_infos[i]->shape().shapes[j];
+				++totalTraversed;
+            }
+	   }
         } else {
-				internal_repr.shape.ndim = 1;
-				internal_repr.shape.shapes[0] = tensor_infos[0]->ndim;
+                internal_repr.shape.shapes[0] = totalShape;
         }
 
+	for(int i = 0; i < totalShape; i++) {
+		std::cout << "Shape " << i << " is " << internal_repr.shape.shapes[i] << "\n";
+	}
+        // here we would pass the tensor_infos and the internal_repr to the runtime to fill in
+}
 
-	// here we would pass the tensor_infos and the internal_repr to the runtime to fill in
+enum AIVREChildKind {
+    STANDALONE,
+    BINARY_EXPR,
+    NONE
+};
+
+void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memory_regns, void *tensors) {
+	// given numargs shapes, convert each of then to higher order shapes individually.
+	// For instance, if we have shape [6*N], we want to convert it to [N,6]. Note that tensors already has
+	// the space allocated for the conversion.
+
+	void **ipt_memory_rgns_vpp = (void**) ipt_memory_regns;
+	void **tensor_args_vpp = (void **)tensors;
+
+	uint maxShape = 0;
+	for(int idx = 0; idx < numArgs; idx++) {
+		array_info_t &tensor_info = *(array_info_t *)tensor_args_vpp[idx];
+		maxShape = std::max(maxShape,  tensor_info.ndim);
+	}
+
+	// perhaps a bad idea
+	int *shape_copy = (int*) alloca(sizeof(int)*maxShape);
+
+	for(int idx = 0; idx < numArgs; idx++) {
+		array_info_t &ipt_memory_info = *(array_info_t *)ipt_memory_rgns_vpp[idx];
+		array_info_t &tensor_info = *(array_info_t *)tensor_args_vpp[idx];
+		std::memcpy(shape_copy, &tensor_info.shape()[0], sizeof(int)*tensor_info.ndim);
+
+		int numAIVRFound = 0;
+		for(int i = 0; i < tensor_info.ndim; i++) {
+			auto &t_slice = tensor_info.slices[i];
+			auto AIVREKind = t_slice.aivrechildkind;
+			if(AIVREKind != AIVREChildKind::NONE) {
+				numAIVRFound++;
+			}
+		}
+
+  		// we reserve the first numAIVRFound for the AIVR representations
+		int slice_insert_pt = numAIVRFound;
+		int AIVRInsertPoint = 0;
+
+		for(int i = 0; i < tensor_info.ndim; i++) {
+			auto &t_slice = tensor_info.slices[i];
+			auto &ipt_slice = ipt_memory_info.slices[i];
+			auto AIVREKind = t_slice.aivrechildkind;
+			if(AIVREKind != AIVREChildKind::NONE) {
+				// here, we have a decl like: [i*3:i*3+3]
+				// whose shape the compiler has found is [3*N]
+				// we need to turn this into [N,3]. To do this, we need to 
+				// find 3 by dividing N*3/N
+				int inner = shape_copy[i] / ipt_memory_info.shape()[i];
+				tensor_info.shape()[AIVRInsertPoint] = t_slice.aivrerepr;
+				tensor_info.shape()[slice_insert_pt] = inner;
+				++AIVRInsertPoint;
+				++slice_insert_pt;
+			} else {
+				tensor_info.shape()[slice_insert_pt] = shape_copy[i];
+				++slice_insert_pt;
+			}
+		}
+
+		tensor_info.ndim = slice_insert_pt;
+
+	}
+
+	// now go through and print all the shapes of the tensors
+	for(int idx = 0; idx < numArgs; idx++) {
+		array_info_t &tensor_info = *(array_info_t *)tensor_args_vpp[idx];
+		std::cout << "Shape of tensor " << idx << " is ";
+		for(int i = 0; i < tensor_info.ndim; i++) {
+			std::cout << tensor_info.shape()[i] << " ";
+		}
+		std::cout << "\n";
+	}
 }
 
 void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {

@@ -204,6 +204,11 @@ static void getSliceInfoTy(ASTContext &C, QualType &SliceInfoTy) {
     addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
     // Step
     addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+
+    // the mode of this slice's AIVR, if any. See ApproxSliceExpr::AIVREChildKind
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    // the program representation of this slice's AIVR, if any
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, true));
     sliceInfoRD->completeDefinition();
     SliceInfoTy = C.getRecordType(sliceInfoRD);
   }
@@ -329,6 +334,13 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
       false);
 
   SurrogateInfo.ConvertSliceInfoFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, 
+    { /*Number of slices */ CGM.Int32Ty,
+      /* Tensor array slices (void **) */ CGM.VoidPtrTy,
+      /* Functor Array Slices */ CGM.VoidPtrTy
+    }, false);
+
+  SurrogateInfo.ConvertToHigherOrderShapeFnTy = llvm::FunctionType::get(
     CGM.VoidTy, 
     { /*Number of slices */ CGM.Int32Ty,
       /* Tensor array slices (void **) */ CGM.VoidPtrTy,
@@ -1051,7 +1063,23 @@ Address CGApproxRuntime::CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int 
 Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
                                                       llvm::ArrayRef<Expr*> Slices) {
   auto numSlices = Slices.size();
-  Address AllocatedShapeStruct = CGApproxRuntimeAllocateShape(CGF, numSlices);
+
+  // later, we will need to 'unpack' slices that look like
+  // [i] to [i,1] and slices that look like [i*3:i*3+3] to [i,3]
+  // we'll allocate the extra space we need. Note: we'll need an extra dimension
+  // for /each/ slice with an AIVR, e.g., we need 2 extra slots for [i,j]
+  auto allocNumSlices = numSlices;
+  for(auto *E : Slices) {
+    assert(isa<ApproxSliceExpr>(E) && "Expected a slice expression");
+
+    ApproxSliceExpr *Slice = dyn_cast<ApproxSliceExpr>(E);
+    ApproxSliceExpr::AIVREChildKind Kind = Slice->getAIVREChildKind();
+    if(Kind == ApproxSliceExpr::AIVREChildKind::BINARY_EXPR ||
+    Kind == ApproxSliceExpr::AIVREChildKind::STANDALONE) {
+      allocNumSlices++;
+    }
+  }
+  Address AllocatedShapeStruct = CGApproxRuntimeAllocateShape(CGF, allocNumSlices);
   return CGApproxRuntimeEmitShape(CGF, AllocatedShapeStruct, Slices);
 
 }
@@ -1060,10 +1088,15 @@ Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction& CGF, Address 
 llvm::ArrayRef<Expr*> Slices) {
 
   ASTContext &C = CGM.getContext();
+  QualType Int32Ty = C.getIntTypeForBitwidth(32, true);
   auto numSlices = Slices.size();
+  auto SliceNDimsAddr = CGF.Builder.CreateStructGEP(Dest, 0);
   auto SliceBaseAddr = CGF.Builder.CreateStructGEP(Dest, 1);
 
+  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, numSlices, true), SliceNDimsAddr, false, Int32Ty);
+
   llvm::Value *SliceShapeArray = CGF.Builder.CreateLoad(SliceBaseAddr, false);
+  
   Address SliceBase = Address(SliceShapeArray, CGF.Int32Ty, clang::CharUnits::fromQuantity(32));
             
   for (size_t i = 0; i < numSlices; i++) {
@@ -1140,6 +1173,28 @@ void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice
   FieldAddr = CGF.EmitLValueForField(
       SliceStart, *std::next(SliceInfoRecord->field_begin(), 2));
     CGF.EmitStoreOfScalar(StepVal, FieldAddr);
+
+  FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 3));
+  int AIVREChildKind = static_cast<int>(SliceExpr->getAIVREChildKind());
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), AIVREChildKind), FieldAddr);
+
+  // this next part is a little non-standard. Our slices may contain symbolic variables, and how and whether 
+  // it contains symbolic variables affects the shape representation of the slice. We need to store information
+  // that may affect the shape representation of the slice in the slice info struct. 
+  auto SymbolVars = ApproxDeclareTensorFunctorDecl::getDeclaredSymbolicVarsFromExpression(SliceExpr->getStart());
+  assert(SymbolVars.size() <= 1 && "Expected at most one symbolic variable in a slice");
+  int SymbolVarRepr = 0;
+
+  if(SymbolVars.size() == 1) {
+    ApproxIndexVarRefExpr *IndexVarRef = dyn_cast_or_null<ApproxIndexVarRefExpr>(SymbolVars[0]);
+    assert(IndexVarRef && "Expected an index variable reference");
+    SymbolVarRepr = IndexVarRef->getShapeRepresentation();
+  }
+
+  FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 4));
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), SymbolVarRepr), FieldAddr);
   
 
 }
@@ -1367,6 +1422,26 @@ void CGApproxRuntime::CGApproxRuntimeEmitSliceConversion(
       CGF.EmitRuntimeCall(FnCallee, {NumValsArg, TensorCollectionValue, FunctorCollectionValue});
     }
 
+void CGApproxRuntime::CGApproxRuntimeEmitHigherOrderShapeConversion(
+  CodeGenFunction &CGF, size_t NumVals, Address TensorCollection,
+  Address FunctorCollection) {
+    Function *Fn = nullptr;
+    StringRef FnName("__approx_runtime_convert_to_higher_order_shapes");
+    Fn = CGM.getModule().getFunction(FnName);
+    if(!Fn) {
+      Fn = Function::Create(SurrogateInfo.ConvertToHigherOrderShapeFnTy,
+                        llvm::Function::ExternalLinkage, FnName,
+                        CGM.getModule());
+    }
+
+  auto *NumValsArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, NumVals));
+  llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertToHigherOrderShapeFnTy, Fn});
+  llvm::Value *TensorCollectionValue = CGF.Builder.CreatePointerCast(TensorCollection.getPointer(), CGF.VoidPtrTy);
+  llvm::Value *FunctorCollectionValue = CGF.Builder.CreatePointerCast(FunctorCollection.getPointer(), CGF.VoidPtrTy);
+  CGF.EmitRuntimeCall(FnCallee, {NumValsArg, TensorCollectionValue, FunctorCollectionValue});
+
+}
+
 void CGApproxRuntime::emitApproxDeclareTensor(
     CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
   llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName()
@@ -1423,11 +1498,14 @@ void CGApproxRuntime::emitApproxDeclareTensor(
   CGApproxRuntimeEmitSliceConversion(*CGF, TensorDeclAddresses.size(),
                                      TensorCollectionAddr,
                                      FunctorCollectionAddr);
+  CGApproxRuntimeEmitHigherOrderShapeConversion(*CGF, TensorDeclAddresses.size(),
+                                     TensorCollectionAddr,
+                                     FunctorCollectionAddr);
 
-  auto InternalReprAddress =
-      CGApproxRuntimeAllocInternalReprMetadata(*CGF, FunctorDeclAddresses.size());
-  CGApproxRuntimeEmitInternalReprConversion(*CGF, FunctorDeclAddresses.size(),
-                                            FunctorCollectionAddr, InternalReprAddress);
+  // auto InternalReprAddress =
+      // CGApproxRuntimeAllocInternalReprMetadata(*CGF, FunctorDeclAddresses.size());
+  // CGApproxRuntimeEmitInternalReprConversion(*CGF, FunctorDeclAddresses.size(),
+                                            // FunctorCollectionAddr, InternalReprAddress);
 
   }
 

@@ -148,6 +148,8 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   //   int start; 
   //   int stop; 
   //   int step;
+  //   int aivre_mode;
+  //   int aivre_repr;
   //} slice_info_t
   QualType SliceInfoTy;
 
@@ -186,10 +188,17 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   // local i'th slice to global slices for the array
   llvm::FunctionType *ConvertSliceInfoFnTy;
 
+  // function that takes rhs array slices and their shapes
+  // into a higher-order shape. For example, if we have a 
+  // 3*N, the shape will be changed to (N,3).
+  llvm::FunctionType *ConvertToHigherOrderShapeFnTy;
+
   // a function that converts a set of user arrays on the RHS
   // to a single tensor that we can then transpose/reshape
   // to get the correct shape as specified by the LHS
   llvm::FunctionType *ConvertTensorToInternalReprFnTy;
+
+
   };
 
   MLSurrogateInfo SurrogateInfo;
@@ -214,6 +223,7 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   Address CGApproxRuntimeAllocInternalReprMetadata(CodeGenFunction& CGF, int numArgs);
   Address CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars);
   void CGApproxRuntimeEmitSliceConversion(CodeGenFunction &CGF, size_t NumVals, Address TensorCollection, Address FunctorCollection);
+  void CGApproxRuntimeEmitHigherOrderShapeConversion(CodeGenFunction &CGF, size_t NumVals, Address TensorCollection, Address FunctorCollection);
   void CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int numArgs, Address FunctorCollection, Address InternalCollection);
   public:
 

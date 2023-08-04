@@ -2392,6 +2392,11 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
     }
   }
 
+  if(!Start) {
+    Start = ActOnIntegerConstant(SourceLocation(), 0).get();
+    Start = PerformImplicitConversion(Start, Context.IntTy, Sema::AA_Converting).get();
+  }
+
   if(Start) {
     if(!Step) {
       Step = ActOnIntegerConstant(SourceLocation(), 1).get();
@@ -2404,11 +2409,15 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
     }
   }
 
+  ApproxSliceExpr::AIVREChildKind CK = ApproxSliceExpr::discoverChildKind(Start, Stop, Step);
+
   // TODO: Is 'DependentTy' correct here? I chose it because
   // the type of the final sliced tensor is dependent.
-  return new (Context)
+  auto *NewExpr =  new (Context)
       ApproxSliceExpr(Start, Stop, Step, Context.DependentTy, VK_LValue,
                       OK_Ordinary, LBLoc, ColonLocFirst, ColonLocSecond, RBLoc);
+  NewExpr->setAIVREChildKind(CK);
+  return NewExpr;
 }
 
 ExprResult Sema::ActOnApproxIndexVarRefExpr(IdentifierInfo *II, SourceLocation Loc) {
