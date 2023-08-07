@@ -1,5 +1,24 @@
 #include <iostream>
 #include <cstring>
+#include <vector>
+#include <algorithm>
+
+
+std::vector<int> get_transpose_vector(std::vector<int>& shape, std::vector<int>& newShape) {
+	std::vector<int> extended;
+	extended.reserve(std::max(shape.size(), newShape.size()));
+
+	for(int i = 0; i < shape.size(); i++) {
+		auto found = std::find(newShape.begin(), newShape.end(), shape[i]);
+		if(found != newShape.end()) {
+			extended.push_back(found - newShape.begin());
+		} else {
+			extended.push_back(i);
+		}
+	}
+
+	return extended;
+}
 
 extern "C" {
 
@@ -61,51 +80,18 @@ typedef struct internal_tensor_repr_data {
 } internal_repr_metadata_t;
 
 
-// void __approx_runtime_shape_check(int numArgs, void *tensor, void* slice, tensor_shape *tensor_shape, tensor_shape *slice_shape) {
-
-// }
 
 // convert numArgs tensors into one tensor that has one extra dimension if numargs > 0
 // actually performs any copying that may need to be done.
-void __approx_runtime_convert_to_internal_representation(int numArgs, void *tensor, void *internal_repr_location) {
+void __approx_runtime_convert_to_internal_representation(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
 	// this function is currently not updated to reflect other changes.
-	void **tensor_args = (void **)tensor;
-	array_info_t **tensor_infos = (array_info_t **)tensor_args;
-	internal_repr_metadata_t& internal_repr = *(internal_repr_metadata_t *)internal_repr_location;
+	void **argsRHS_vpp = (void **)_argsRHS;
+	array_info_t *argsRHS = (array_info_t *)argsRHS_vpp[0];
 
- 	int totalShape = 0;
-	// we need to get the total shape
-	for(int i = 0; i < numArgs; i++) {
-		totalShape += tensor_infos[i]->shape().ndim;
-	}
+	slice_info_t *slicesLHS = (slice_info_t *)_slicesLHS;
+	tensor_shape_t *shapesLHS = (tensor_shape_t *)_shapesLHS;
 
-	// this is currently incorrect: it will return (6, N, N, N, N, N, N) instead of (6,N)
-	// it should be fixed
-	if(numArgs > 1)
-		totalShape += 1;
-
-	internal_repr.shape.shapes = (int *)malloc(sizeof(int) * totalShape);
-
-    internal_repr.shape.ndim = totalShape;
-    if (numArgs > 1) {
-       internal_repr.shape.shapes[0] = numArgs;
-
-       int totalTraversed = 0;
-       for (int i = 0; i < numArgs; i++) {
-			for(int j = 0; j < tensor_infos[i]->shape().ndim; j++) {
-                internal_repr.shape.shapes[1+totalTraversed] =
-                tensor_infos[i]->shape().shapes[j];
-				++totalTraversed;
-            }
-	   }
-        } else {
-                internal_repr.shape.shapes[0] = totalShape;
-        }
-
-	for(int i = 0; i < totalShape; i++) {
-		std::cout << "Shape " << i << " is " << internal_repr.shape.shapes[i] << "\n";
-	}
-        // here we would pass the tensor_infos and the internal_repr to the runtime to fill in
+	std::cout << "Made it over here\n";
 }
 
 enum AIVREChildKind {
@@ -250,11 +236,13 @@ void __approx_runtime_substitute_aivr_in_shapes(int ndim, void *_slices, void *_
 		}
 	}
 
- std::cout << "Printing out a shape during substitution\n";
+	std::cout << "Outputting shapes in aivr substitution\n";
 	for(int i = 0; i < ndim; i++) {
-		std::cout << (*shapes)[i] << ", ";
+		auto &shape = *shapes;
+		std::cout << shape[i] << " ";
 	}
 	std::cout << "\n";
+
 }
 
 }
@@ -286,8 +274,16 @@ int main()
 
 	#pragma approx declare tensor_functor(bs_ipt_1tensor: [i,0:6] = ([i*6:i*6+6]))
 	#pragma approx declare tensor(bs_ipt_1t: bs_ipt_1tensor(a[0:N]))
+
 	#pragma approx declare tensor_functor(blackscholes_ipt: [i,0:6] = ([i], [i], [i], [i], [i], [i]))
 	#pragma approx declare tensor(bs_ipt: blackscholes_ipt(a[0:N], a[0:N], a[0:N], a[0:N], a[0:N], a[0:N]))
+
 	#pragma approx declare tensor_functor(fn: [j, i] = ([i, j, k]))
 	#pragma approx declare tensor(t: fn(a[0:N,0:2*N:2, 0:N]))
+
+	#pragma approx declare tensor_functor(fn25: [i, 0:5] = ([i*3:i*3+3], [i], [i]))
+	#pragma approx declare tensor(tn38: fn25(a[0:N], a[0:N], a[0:N]))
+
+	#pragma approx declare tensor_functor(fn26: [i,j, 0:5] = ([i, j*3:j*3+3], [i,j], [j,i]))
+	#pragma approx declare tensor(tn39: fn26(a[0:N, 0:N], a[0:N, 0:N], a[0:N, 0:N]))
 }

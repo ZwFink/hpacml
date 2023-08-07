@@ -347,18 +347,20 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
       /* Functor Array Slices */ CGM.VoidPtrTy
     }, false);
 
-  SurrogateInfo.ConvertTensorToInternalReprFnTy = llvm::FunctionType::get(
+  SurrogateInfo.SubstituteAIVRInShapesFnTy = llvm::FunctionType::get(
     CGM.VoidTy, 
     { /*Number of arguments */ CGM.Int32Ty,
       /* array_info_t ** pointing to the arrays */ CGM.VoidPtrTy,
       /* internal_repr_metadata_t * with metadata about internal representation */ CGM.VoidPtrTy
     }, false);
 
-  SurrogateInfo.SubstituteAIVRInShapesFnTy = llvm::FunctionType::get(
-    CGM.VoidTy, 
-    { /*Number of arguments */ CGM.Int32Ty,
-      /* slice_info_t* for info about each slice */ CGM.VoidPtrTy,
-      /* tensor_shape_t *for info about each shape */ CGM.VoidPtrTy
+  SurrogateInfo.ConvertTensorToInternalReprFnTy = llvm::FunctionType::get(
+    CGM.VoidPtrTy, 
+    { /*Number of LHS slices */ CGM.Int32Ty,
+      /* slice_info_t * for LHS */ CGM.VoidPtrTy,
+      /* tensor_shape_t for LHS  */ CGM.VoidPtrTy,
+      /*Number of RHS array_info_t  */ CGM.Int32Ty,
+      /* array_info_t **array info for the RHS */ CGM.VoidPtrTy
     }, false);
 }
 
@@ -1523,8 +1525,8 @@ void CGApproxRuntime::emitApproxDeclareTensor(
 
   // auto InternalReprAddress =
       // CGApproxRuntimeAllocInternalReprMetadata(*CGF, FunctorDeclRHSAddresses.size());
-  // CGApproxRuntimeEmitInternalReprConversion(*CGF, FunctorDeclRHSAddresses.size(),
-                                            // FunctorCollectionAddr, InternalReprAddress);
+  CGApproxRuntimeEmitInternalReprConversion(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress, FunctorDeclRHSAddresses.size(),
+                                            FunctorCollectionAddr);
 
   }
 
@@ -1544,8 +1546,8 @@ void CGApproxRuntime::emitApproxDeclareTensor(
     llvm::Value *ShapesValue = GF.Builder.CreatePointerCast(Shapes.getPointer(), GF.VoidPtrTy);
     GF.EmitRuntimeCall(FnCallee, {NumDimsArg, SlicesValue, ShapesValue});
   }
-
-  void CGApproxRuntime::CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int numArgs, Address FunctorCollection, Address InternalCollection) {
+  Address CGApproxRuntime::CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int nargsLHS, Address LHSSlices, Address LHSShapes,
+      int nargsRHS, Address RHSAddress) {
     Function *Fn = nullptr;
     StringRef FnName("__approx_runtime_convert_to_internal_representation");
     Fn = CGM.getModule().getFunction(FnName);
@@ -1557,10 +1559,14 @@ void CGApproxRuntime::emitApproxDeclareTensor(
 
 
     llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertTensorToInternalReprFnTy, Fn});
-    llvm::Value *NumArgsArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, numArgs));
-    llvm::Value *FunctorCollectionValue = CGF.Builder.CreatePointerCast(FunctorCollection.getPointer(), CGF.VoidPtrTy);
-    llvm::Value *InternalCollectionValue = CGF.Builder.CreatePointerCast(InternalCollection.getPointer(), CGF.VoidPtrTy);
-    CGF.EmitRuntimeCall(FnCallee, {NumArgsArg, FunctorCollectionValue, InternalCollectionValue});
+    llvm::Value *NumArgsLHSArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, nargsLHS));
+    llvm::Value *SlicesLHSArg = CGF.Builder.CreatePointerCast(LHSSlices.getPointer(), CGF.VoidPtrTy);
+    llvm::Value *ShapesLHSArg = CGF.Builder.CreatePointerCast(LHSShapes.getPointer(), CGF.VoidPtrTy);
+
+    llvm::Value *NumArgsRHSArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, nargsRHS));
+    llvm::Value *RHSArg = CGF.Builder.CreatePointerCast(RHSAddress.getPointer(), CGF.VoidPtrTy);
+    auto *RetVal = CGF.EmitRuntimeCall(FnCallee, {NumArgsLHSArg, SlicesLHSArg, ShapesLHSArg, NumArgsRHSArg, RHSArg});
+    return Address(RetVal, CGF.VoidPtrTy, CGF.getPointerAlign());
   }
 
   Address CGApproxRuntime::CGApproxRuntimeAllocInternalReprMetadata(CodeGenFunction& CGF, int numArgs) {
