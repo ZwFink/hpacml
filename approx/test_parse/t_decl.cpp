@@ -235,6 +235,28 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 
 	
 }
+
+void __approx_runtime_substitute_aivr_in_shapes(int ndim, void *_slices, void *_shapes) {
+
+	slice_info_t *slices = (slice_info_t *)_slices;
+	tensor_shape_t *shapes = (tensor_shape_t *)_shapes;
+
+	for(int i = 0; i < ndim; i++) {
+		auto &slice = slices[i];
+		// the slice is separate in each dimension, but there is one shpae
+		auto &shape = *shapes;
+		if(slice.aivrechildkind != AIVREChildKind::NONE) {
+			shape[i] = slice.aivrerepr;
+		}
+	}
+
+ std::cout << "Printing out a shape during substitution\n";
+	for(int i = 0; i < ndim; i++) {
+		std::cout << (*shapes)[i] << ", ";
+	}
+	std::cout << "\n";
+}
+
 }
 int main()
 {
@@ -266,6 +288,6 @@ int main()
 	#pragma approx declare tensor(bs_ipt_1t: bs_ipt_1tensor(a[0:N]))
 	#pragma approx declare tensor_functor(blackscholes_ipt: [i,0:6] = ([i], [i], [i], [i], [i], [i]))
 	#pragma approx declare tensor(bs_ipt: blackscholes_ipt(a[0:N], a[0:N], a[0:N], a[0:N], a[0:N], a[0:N]))
-	#pragma approx declare tensor_functor(fn: [i, j] = ([i, j, k]))
+	#pragma approx declare tensor_functor(fn: [j, i] = ([i, j, k]))
 	#pragma approx declare tensor(t: fn(a[0:N,0:2*N:2, 0:N]))
 }

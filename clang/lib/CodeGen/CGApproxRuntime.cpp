@@ -353,6 +353,13 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
       /* array_info_t ** pointing to the arrays */ CGM.VoidPtrTy,
       /* internal_repr_metadata_t * with metadata about internal representation */ CGM.VoidPtrTy
     }, false);
+
+  SurrogateInfo.SubstituteAIVRInShapesFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, 
+    { /*Number of arguments */ CGM.Int32Ty,
+      /* slice_info_t* for info about each slice */ CGM.VoidPtrTy,
+      /* tensor_shape_t *for info about each shape */ CGM.VoidPtrTy
+    }, false);
 }
 
 void CGApproxRuntime::CGApproxRuntimeEnterRegion(CodeGenFunction &CGF,
@@ -1084,6 +1091,13 @@ Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
 
 }
 
+Address CGApproxRuntime::CGApproxRuntimeEmitLHSShape(CodeGenFunction &CGF,
+llvm::ArrayRef<Expr*> Slices) {
+  auto numSlices = Slices.size();
+  Address AllocatedShapeStruct = CGApproxRuntimeAllocateShape(CGF, numSlices);
+  return CGApproxRuntimeEmitShape(CGF, AllocatedShapeStruct, Slices);
+}
+
 Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction& CGF, Address Dest,
 llvm::ArrayRef<Expr*> Slices) {
 
@@ -1452,13 +1466,13 @@ void CGApproxRuntime::emitApproxDeclareTensor(
   auto IndexRefExprsRHS = TensorFunctor->getSymbolicVarsUniqueToEachSlice();
   auto IndexRefExprsLHS = TensorFunctor->getSymbolicVarsUniqueToEachLHSSlice();
   initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsRHS);
-  // initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsLHS);
+  initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsLHS);
   addSymbolDeclarationsToSlices(TensorFunctor);
   EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsRHS);
-  // EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsLHS);
+  EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsLHS);
 
   auto RHS = TensorFunctor->getRHSSlices();
-  // auto LHS = TensorFunctor->getLHSSlice();
+  auto LHS = TensorFunctor->getLHSSlice();
 
   auto ArrSlices = D->getArraySlices();
   assert(RHS.size() == ArrSlices.size() &&
@@ -1472,7 +1486,7 @@ void CGApproxRuntime::emitApproxDeclareTensor(
   CGApproxRuntimeEmitSymbolicVarInits(*CGF);
 
   std::vector<Address> TensorDeclAddresses;
-  std::vector<Address> FunctorDeclAddresses;
+  std::vector<Address> FunctorDeclRHSAddresses;
 
   for (auto *E : D->getArraySlices()) {
     auto *ArraySlices = dyn_cast<ApproxArraySliceExpr>(E);
@@ -1483,17 +1497,17 @@ void CGApproxRuntime::emitApproxDeclareTensor(
   for (auto *E : TensorFunctor->getRHSSliceExprs()) {
     auto *Slice = dyn_cast<ApproxArraySliceExpr>(E);
     auto Addr = CGApproxRuntimeEmitApproxArrayInfo(*CGF, Slice);
-    FunctorDeclAddresses.push_back(Addr);
+    FunctorDeclRHSAddresses.push_back(Addr);
   }
 
-  assert(TensorDeclAddresses.size() == FunctorDeclAddresses.size() &&
+  assert(TensorDeclAddresses.size() == FunctorDeclRHSAddresses.size() &&
          "Expected same number of tensor decl addresses and functor decl "
          "addresses");
 
   auto TensorCollectionAddr =
       CGApproxRuntimeCreateVoidPtrArray(*CGF, TensorDeclAddresses);
   auto FunctorCollectionAddr =
-      CGApproxRuntimeCreateVoidPtrArray(*CGF, FunctorDeclAddresses);
+      CGApproxRuntimeCreateVoidPtrArray(*CGF, FunctorDeclRHSAddresses);
 
   CGApproxRuntimeEmitSliceConversion(*CGF, TensorDeclAddresses.size(),
                                      TensorCollectionAddr,
@@ -1502,11 +1516,33 @@ void CGApproxRuntime::emitApproxDeclareTensor(
                                      TensorCollectionAddr,
                                      FunctorCollectionAddr);
 
+  auto LHSSliceAddress = CGApproxRuntimeEmitSlices(*CGF, LHS);
+  auto LHSShapeAddress = CGApproxRuntimeEmitLHSShape(*CGF, LHS);
+
+  CGApproxRuntimeSubstituteAIVRInShapes(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress);
+
   // auto InternalReprAddress =
-      // CGApproxRuntimeAllocInternalReprMetadata(*CGF, FunctorDeclAddresses.size());
-  // CGApproxRuntimeEmitInternalReprConversion(*CGF, FunctorDeclAddresses.size(),
+      // CGApproxRuntimeAllocInternalReprMetadata(*CGF, FunctorDeclRHSAddresses.size());
+  // CGApproxRuntimeEmitInternalReprConversion(*CGF, FunctorDeclRHSAddresses.size(),
                                             // FunctorCollectionAddr, InternalReprAddress);
 
+  }
+
+  void CGApproxRuntime::CGApproxRuntimeSubstituteAIVRInShapes(CodeGenFunction& GF, int ndim, Address Slices, Address Shapes) {
+    Function *Fn = nullptr;
+    StringRef FnName("__approx_runtime_substitute_aivr_in_shapes");
+    Fn = CGM.getModule().getFunction(FnName);
+    if(!Fn) {
+      Fn = Function::Create(SurrogateInfo.SubstituteAIVRInShapesFnTy,
+                        llvm::Function::ExternalLinkage, FnName,
+                        CGM.getModule());
+    }
+
+    llvm::FunctionCallee FnCallee({SurrogateInfo.SubstituteAIVRInShapesFnTy, Fn});
+    llvm::Value *NumDimsArg = llvm::ConstantInt::get(GF.Builder.getInt32Ty(), llvm::APInt(32, ndim));
+    llvm::Value *SlicesValue = GF.Builder.CreatePointerCast(Slices.getPointer(), GF.VoidPtrTy);
+    llvm::Value *ShapesValue = GF.Builder.CreatePointerCast(Shapes.getPointer(), GF.VoidPtrTy);
+    GF.EmitRuntimeCall(FnCallee, {NumDimsArg, SlicesValue, ShapesValue});
   }
 
   void CGApproxRuntime::CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int numArgs, Address FunctorCollection, Address InternalCollection) {

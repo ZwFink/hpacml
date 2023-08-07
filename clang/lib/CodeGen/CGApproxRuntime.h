@@ -198,6 +198,11 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   // to get the correct shape as specified by the LHS
   llvm::FunctionType *ConvertTensorToInternalReprFnTy;
 
+  // a function that takes (ndim, void *slices, void *shapes)
+  // and changes shapes so that all AIVR variables are 
+  // replaced with their internal representation
+  // for use in LHS of tensor functor
+  llvm::FunctionType *SubstituteAIVRInShapesFnTy;
 
   };
 
@@ -214,6 +219,8 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   Address CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int ndim);
   Address CGApproxRuntimeEmitShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
   Address CGApproxRuntimeEmitShape(CodeGenFunction& CGF, Address Dest, llvm::ArrayRef<Expr*> Slices);
+  Address CGApproxRuntimeEmitLHSShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr *> Slices);
+  void CGApproxRuntimeSubstituteAIVRInShapes(CodeGenFunction &CGF, int ndim, Address Slices, Address Shapes);
   void CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest);
   void CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::Value *Start, llvm::Value *Stop, llvm::Value *Step, Address Dest);
   Address CGApproxRuntimeEmitSizeOfSliceElement(CodeGenFunction &CGF, std::unordered_map<Expr*,Expr*> &RangeMap, Expr *Slice);
