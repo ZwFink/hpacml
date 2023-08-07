@@ -4,7 +4,7 @@
 #include <algorithm>
 
 
-std::vector<int> get_transpose_vector(std::vector<int>& shape, std::vector<int>& newShape) {
+std::vector<int> get_transpose_vector(std::vector<int>& newShape, std::vector<int>& shape) {
 	std::vector<int> extended;
 	extended.reserve(std::max(shape.size(), newShape.size()));
 
@@ -19,6 +19,8 @@ std::vector<int> get_transpose_vector(std::vector<int>& shape, std::vector<int>&
 
 	return extended;
 }
+
+
 
 extern "C" {
 
@@ -49,7 +51,23 @@ typedef struct tensor_shape {
 	int& operator[](int idx) {
 		return shapes[idx];
 	}
+
 } tensor_shape_t;
+}
+
+std::ostream &operator<<(std::ostream &os, const tensor_shape_t &shape) {
+        os << "(";
+        for (int i = 0; i < shape.ndim; i++) {
+                os << shape.shapes[i];
+                if (i != shape.ndim - 1) {
+                        os << ",";
+                }
+        }
+        os << ")";
+        return os;
+}
+
+extern "C" {
 
 typedef struct array_info {
 	void *base;
@@ -63,6 +81,11 @@ typedef struct array_info {
 
 	tensor_shape_t &shape() {
 		return *shapes;
+	}
+
+	void set_ndim(int ndim) {
+		this->ndim = ndim;
+		this->shapes->ndim = ndim;
 	}
 } array_info_t;
 
@@ -81,17 +104,30 @@ typedef struct internal_tensor_repr_data {
 
 
 
-// convert numArgs tensors into one tensor that has one extra dimension if numargs > 0
-// actually performs any copying that may need to be done.
-void __approx_runtime_convert_to_internal_representation(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
-	// this function is currently not updated to reflect other changes.
+void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
 	void **argsRHS_vpp = (void **)_argsRHS;
 	array_info_t *argsRHS = (array_info_t *)argsRHS_vpp[0];
 
 	slice_info_t *slicesLHS = (slice_info_t *)_slicesLHS;
 	tensor_shape_t *shapesLHS = (tensor_shape_t *)_shapesLHS;
 
-	std::cout << "Made it over here\n";
+ 	std::vector<int> LHSShape; 
+	LHSShape.assign(shapesLHS->shapes, shapesLHS->shapes + shapesLHS->ndim);
+
+	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
+		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
+		std::vector<int> RHSShape;
+		RHSShape.assign(argRHS.shapes->shapes, argRHS.shapes->shapes + argRHS.shapes->ndim);
+		auto transpose_vec = get_transpose_vector(LHSShape, RHSShape);
+		std::cout << "To transform shape: " << *argRHS.shapes << " to " << *shapesLHS << "\n";
+		for(int i = 0; i < transpose_vec.size(); i++) {
+			std::cout << transpose_vec[i] << " ";
+		}
+		std::cout << "\n";
+
+	}
+
+	return nullptr;
 }
 
 enum AIVREChildKind {
@@ -155,8 +191,7 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 			}
 		}
 
-		tensor_info.ndim = slice_insert_pt;
-
+		tensor_info.set_ndim(slice_insert_pt);
 	}
 
 	// now go through and print all the shapes of the tensors
@@ -256,21 +291,7 @@ int main()
 	std::cout << "A is: " << a << "\n";
 	int b = 0;
 	char c = 0;
-	//#pragma approx ml(infer) in(a[0:10]) out(b)
 	b = a[0] + 2;
-	//#pragma approx declare tensor_functor(functor_name: [0:10] = ([::5], [0:10+c], [0:c*10:1]))
-  	// #pragma approx declare tensor_functor(functor_name: [i, 0:6] = ([i], [i], [i], [i], [i], [i]))
-  	// #pragma approx declare tensor_functor(fivepoint_stencil: [i, j, 0:5] = ([i,j-1:j+2], [i-1,j], [i+1,5]))
-  	// #pragma approx declare tensor(first_tensor: functor_name(a[0:N], a[0:N], a[0:N], a[0:N], a[0:N], a[0:N]))
-  	// #pragma approx declare tensor(second_tensor: functor_name(a[0:N], a[0:N], a[0:N], a[0:N], a[0:N], a[0:N]))
-
-  	// #pragma approx declare tensor_functor(functor_name2: [0:c+10] = ([0:c,0:c+5:10]))
-  	// #pragma approx declare tensor_functor(functor_name3: [c:c+10:10] = ([0:2:2]))
-	{
-	// #pragma approx declare tensor_functor(functor_name4: [c:j:10] = ([0:2:2]))
-  	// #pragma approx declare tensor(third_tensor: functor_name4(a[0:N], a[0:N], a[0:N], a[0:N], a[0:N], a[0:N]))
-	}
-	// #pragma approx declare tensor_functor(functor_name4: [c:j:10] = ([0:2:2]))
 
 	#pragma approx declare tensor_functor(bs_ipt_1tensor: [i,0:6] = ([i*6:i*6+6]))
 	#pragma approx declare tensor(bs_ipt_1t: bs_ipt_1tensor(a[0:N]))
