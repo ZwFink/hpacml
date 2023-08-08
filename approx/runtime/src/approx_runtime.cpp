@@ -69,7 +69,7 @@ public:
   float *randomNumbers;
   int count;
   BaseDB *db;
-  SurrogateModel<GPUExecutionPolicy, MemcpyTensorTranslator<double, true>, double> Model{
+  SurrogateModel<GPUExecutionPolicy, CatTensorTranslator<double>, double> Model{
       "/usr/workspace/fink12/torch/model.pt", {NUM_ITEMS, 5}, {NUM_ITEMS, 1}, false};
 
   ApproxRuntimeConfiguration() {

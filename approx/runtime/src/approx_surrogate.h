@@ -164,6 +164,47 @@ class MemcpyTensorTranslator : public TensorTranslator<TypeInValue> {
     }
 };
 
+template <typename TypeInValue>
+class CatTensorTranslator : public TensorTranslator<TypeInValue> {
+  public:
+    std::vector<torch::Tensor> allocatedTensors;
+    torch::Tensor tensor = torch::empty({0, 5}, torch::kFloat64);
+    CatTensorTranslator(at::Tensor &tensor)
+        : TensorTranslator<TypeInValue>{tensor} {
+          for(int i = 0; i < 5; i++)
+            allocatedTensors.push_back(torch::empty({NUM_ITEMS,1}, torch::kFloat64));
+        }
+
+    at::Tensor &arrayToTensor(long numRows, long numCols, TypeInValue **array) {
+      for (int i = 0; i < numCols; i++) {
+        at::Tensor temp = torch::from_blob((TypeInValue *)array[i],
+                                           {numRows, 1}, torch::kFloat64);
+
+        allocatedTensors[i].narrow(0, this->insert_index, numRows).copy_(temp);
+      }
+
+      auto tensor = torch::nested::as_nested_tensor(allocatedTensors);
+      this->tensor = tensor;
+      this->insert_index += numRows;
+      return this->tensor;
+    }
+
+    void reset()
+    {
+      this->tensor = torch::empty({0, 5}, torch::kFloat64);
+      this->insert_index = 0;
+    }
+
+    void tensorToArray(at::Tensor tensor, long numRows, long numCols,
+                       TypeInValue **array) {}
+
+    at::Tensor prepareForInference(at::Tensor& t)
+    {
+      return t;
+    }
+
+};
+
 //! ----------------------------------------------------------------------------
 //! An implementation for a surrogate model
 //! ----------------------------------------------------------------------------
@@ -192,25 +233,6 @@ private:
   // -------------------------------------------------------------------------
   torch::jit::script::Module module;
   c10::TensorOptions tensorOptions;
-
-
-  // -------------------------------------------------------------------------
-  // conversion to and from torch
-  // -------------------------------------------------------------------------
-  // inline at::Tensor arrayToTensor(long numRows,
-  //                                 long numCols,
-  //                                 TypeInValue** array)
-  // {
-  //     at::Tensor tensor = torch::empty({numRows, numCols}, tensorOptions);
-  //     for (int i = 0; i < numCols; i++) {
-  //       auto column = tensor.select(1, i);
-  //       auto data = reinterpret_cast<TypeInValue *>(array[i]);
-  //       column.copy_(torch::from_blob(data, {numRows}, tensorOptions));
-  //     }
-  //     tensor = tensor.to(ExecutionPolicy::device, true);
-  //     return tensor;
-  // }
-
 
   inline void tensorToArray(at::Tensor tensor,
                             long numRows,

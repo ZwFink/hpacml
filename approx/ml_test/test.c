@@ -17,7 +17,7 @@ void test(float *y, float *x, int size, float a, float b, float c){
 void foo(float *y, float *x, int size, float a, float b, float c){
   char name[100];
   for (int i = 0; i < 2*size-1; i+=2){
-#pragma approx ml(offline) in(x[i:2]) out(y[i/2])
+#pragma approx ml(offline) in(x[i:2]) out(y[i/2]) label("test_region")
     y[i/2] = x[i] * a + b * x[i+1] + c;
   }
 }
