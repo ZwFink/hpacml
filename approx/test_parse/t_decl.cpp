@@ -20,10 +20,11 @@ std::vector<int> get_transpose_vector(std::vector<int>& newShape, std::vector<in
 	return extended;
 }
 
-
-
 extern "C" {
 
+void __approx_runtime_tensor_cleanup(void*) {
+	std::cout << "Cleanup function is called\n";
+}
 typedef struct slice_info_t {
 	uint32_t start;
 	uint32_t stop;
@@ -301,9 +302,11 @@ int main()
 
 	#pragma approx declare tensor_functor(fn: [j, i] = ([i, j, k]))
 	#pragma approx declare tensor(t: fn(a[0:N,0:2*N:2, 0:N]))
+	{
 
 	#pragma approx declare tensor_functor(fn25: [i, 0:5] = ([i*3:i*3+3], [i], [i]))
 	#pragma approx declare tensor(tn38: fn25(a[0:N], a[0:N], a[0:N]))
+	}
 
 	#pragma approx declare tensor_functor(fn26: [i,j, 0:5] = ([i, j*3:j*3+3], [i,j], [j,i]))
 	#pragma approx declare tensor(tn39: fn26(a[0:N, 0:N], a[0:N, 0:N], a[0:N, 0:N]))

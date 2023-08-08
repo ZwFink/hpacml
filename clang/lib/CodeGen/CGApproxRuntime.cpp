@@ -362,6 +362,9 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
       /*Number of RHS array_info_t  */ CGM.Int32Ty,
       /* array_info_t **array info for the RHS */ CGM.VoidPtrTy
     }, false);
+
+  SurrogateInfo.TensorCleanupFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, {CGM.VoidPtrTy}, false);
 }
 
 void CGApproxRuntime::CGApproxRuntimeEnterRegion(CodeGenFunction &CGF,
@@ -1458,6 +1461,27 @@ void CGApproxRuntime::CGApproxRuntimeEmitHigherOrderShapeConversion(
 
 }
 
+namespace {
+  class TensorCleanupTy final : public EHScopeStack::Cleanup {
+    public:
+      static const int TensorCleanupFinArgs = 1;
+
+    private:
+      llvm::FunctionCallee RTLFn;
+      llvm::Value *Args[TensorCleanupFinArgs];
+
+    public:
+      TensorCleanupTy(llvm::FunctionCallee RTLFN, ArrayRef<llvm::Value *> CallArgs) : RTLFn{RTLFN} {
+        assert(CallArgs.size() == TensorCleanupFinArgs && "Expected 1 argument for tensor cleanup");
+        std::copy(CallArgs.begin(), CallArgs.end(), std::begin(Args));
+      }
+    
+      void Emit(CodeGenFunction &CGF, Flags) override {
+        CGF.EmitRuntimeCall(RTLFn, Args);
+      }
+};
+} //namespace
+
 void CGApproxRuntime::emitApproxDeclareTensor(
     CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
   llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName()
@@ -1523,12 +1547,31 @@ void CGApproxRuntime::emitApproxDeclareTensor(
 
   CGApproxRuntimeSubstituteAIVRInShapes(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress);
 
-  // auto InternalReprAddress =
-      // CGApproxRuntimeAllocInternalReprMetadata(*CGF, FunctorDeclRHSAddresses.size());
-  CGApproxRuntimeEmitInternalReprConversion(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress, FunctorDeclRHSAddresses.size(),
+  Address InternalRepr = CGApproxRuntimeEmitInternalReprConversion(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress, FunctorDeclRHSAddresses.size(),
                                             FunctorCollectionAddr);
+  llvm::Value *InternalReprValue = CGF->Builder.CreatePointerCast(InternalRepr.getPointer(), CGF->VoidPtrTy);
+
+
+  llvm::FunctionCallee CleanFNCall = getTensorCleanupFn(CGM);
+  llvm::SmallVector<llvm::Value *, 1> CallArgs;
+  CGF->EHStack.pushCleanup<TensorCleanupTy>(NormalAndEHCleanup, CleanFNCall, llvm::makeArrayRef(InternalReprValue));
 
   }
+
+llvm::FunctionCallee CGApproxRuntime::getTensorCleanupFn(CodeGenModule &CGM) {
+  Function *Fn = nullptr;
+  StringRef FnName("__approx_runtime_tensor_cleanup");
+  Fn = CGM.getModule().getFunction(FnName);
+  if(!Fn) {
+    Fn = Function::Create(SurrogateInfo.TensorCleanupFnTy,
+                      llvm::Function::ExternalLinkage, FnName,
+                      CGM.getModule());
+  }
+
+  llvm::FunctionCallee FnCallee({SurrogateInfo.TensorCleanupFnTy, Fn});
+  return FnCallee;
+}
+  
 
   void CGApproxRuntime::CGApproxRuntimeSubstituteAIVRInShapes(CodeGenFunction& GF, int ndim, Address Slices, Address Shapes) {
     Function *Fn = nullptr;

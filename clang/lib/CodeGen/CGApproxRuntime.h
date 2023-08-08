@@ -204,6 +204,11 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   // for use in LHS of tensor functor
   llvm::FunctionType *SubstituteAIVRInShapesFnTy;
 
+
+  // a function that takes a void * of the internal representation
+  // of a tensor and destructs it, freeing any memory as needed.
+  llvm::FunctionType *TensorCleanupFnTy;
+
   };
 
   MLSurrogateInfo SurrogateInfo;
@@ -212,6 +217,8 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
         SymbolVarInfoMap &InfoMap,
         llvm::ArrayRef<Expr *> FunctorSlice,
         llvm::ArrayRef<Expr *> TensorSlice);
+
+  llvm::FunctionCallee getTensorCleanupFn(CodeGenModule &CGM);
   void initializeAndDeclareSymbolVars(ApproxDeclareTensorFunctorDecl *Decl, llvm::ArrayRef<Expr*> Vars);
   Address EmitDeclarationOfSymbolVar(CodeGenFunction &CGF, ApproxIndexVarRefExpr *Symbol);
   Address CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF, Expr *AAIE);
