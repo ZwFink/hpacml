@@ -33,11 +33,11 @@ if [ ! -f $clang_bin ]; then
     -DCMAKE_INSTALL_PREFIX=$prefix \
     -DLLVM_CCACHE_BUILD='Off'\
     -DCMAKE_EXPORT_COMPILE_COMMANDS='On'\
-    -DCMAKE_BUILD_TYPE='Debug' \
+    -DCMAKE_BUILD_TYPE='RelWithDebInfo' \
     -DLLVM_FORCE_ENABLE_STATS='On' \
     -DLLVM_ENABLE_PROJECTS='clang' \
-    -DCMAKE_C_COMPILER='gcc' \
-    -DCMAKE_CXX_COMPILER='g++' \
+    -DCMAKE_C_COMPILER='clang' \
+    -DCMAKE_CXX_COMPILER='clang++' \
     -DLLVM_OPTIMIZED_TABLEGEN='On' \
     -DCLANG_BUILD_EXAMPLES='On' \
     -DBUILD_SHARED_LIBS='On' \
@@ -54,8 +54,6 @@ if [ ! -f $clang_bin ]; then
     echo "export CPP=clang++" >> hpac_env.sh
 fi
 
-exit
-
 source hpac_env.sh
 
 if [ ! -f $approx_runtime_lib ]; then
@@ -64,13 +62,13 @@ if [ ! -f $approx_runtime_lib ]; then
   CC=clang CPP=clang++ cmake -G Ninja \
       -DCMAKE_INSTALL_PREFIX=$prefix \
       -DLLVM_EXTERNAL_CLANG_SOURCE_DIR=${current_dir}/clang/ \
-      -DPACKAGE_VERSION=11.0.0git \
+      -DPACKAGE_VERSION=17.0.0 \
      ../approx
     ninja -j $threads
     ninja -j $threads install
     popd
 fi
-
+exit
 pushd ./approx/approx_utilities/
 
 if [ ! -f 'original_src.tar.gz' ]; then
