@@ -183,7 +183,8 @@ class CatTensorTranslator : public TensorTranslator<TypeInValue> {
         allocatedTensors[i].narrow(0, this->insert_index, numRows).copy_(temp);
       }
 
-      auto tensor = torch::nested::as_nested_tensor(allocatedTensors);
+      // auto tensor = torch::nested::as_nested_tensor(allocatedTensors);
+      auto tensor = torch::cat(allocatedTensors, 1);
       this->tensor = tensor;
       this->insert_index += numRows;
       return this->tensor;
