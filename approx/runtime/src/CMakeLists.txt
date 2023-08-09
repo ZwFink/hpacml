@@ -11,9 +11,9 @@ set(LIBAPPROX_SOURCE_FILES
     approx_memoize_out.cpp
     approx_memoize_iact_in.cpp
     approx_perforate.cpp
-    approx_io_hdf5.cpp
-    io_helpers.cpp
     approx_petrubate.cpp
+    memory_pool/memory_pool.cpp
+    database/database.cpp
 )
 
 include_directories(
@@ -26,14 +26,25 @@ include_directories(
 
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 
+enable_language(CUDA)
+set(CMAKE_CUDA_STANDARD 14)
 #We might need to use CXX as linker.
 set(LIBAPPROX_LINKER_LANGUAGE C)
 add_library(approx ${LIBAPPROX_LIBRARY_KIND} ${LIBAPPROX_SOURCE_FILES})
+find_package(Torch REQUIRED)
+set(CMAKE_CUDA_FLAGS "")
+set(CMAKE_CUDA_ARCHITECTURES ON)
+# link with openmp
+find_package(OpenMP REQUIRED)
+target_link_libraries(approx PRIVATE OpenMP::OpenMP_CXX)
 
-find_package(nlohmann_json 3.2.0 REQUIRED)
+# set to RelWithDebInfo
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
-set(HDF5_DIR /usr/workspace/koparasy/approx-programming-model/hdf5/usr/)
-find_package(HDF5 REQUIRED COMPONENTS C CXX HL)
+# find_package(nlohmann_json 3.2.0 REQUIRED)
+find_package(HDF5 NAMES hdf5 COMPONENTS C shared REQUIRED NO_DEFAULT_PATH PATHS ${HDF5_Dir} ${HDF5_Dir}/share/cmake)
+
+
 
 set_target_properties(approx PROPERTIES
     PREFIX "" SUFFIX "" OUTPUT_NAME "${LIBAPPROX_LIB_FILE}"
@@ -41,12 +52,26 @@ set_target_properties(approx PROPERTIES
     LINKER_LANGUAGE ${LIBAPPROX_LINKER_LANGUAGE})
 
 
-message(STATUS "HDF5 include dir: ${HDF5_C_LIBRARIES}")
+message(STATUS "HDF5 include dir: ${HDF5_INCLUDE_DIRS}")
 
+set_target_properties(approx PROPERTIES
+    PREFIX "" SUFFIX "" OUTPUT_NAME "${LIBAPPROX_LIB_FILE}"
+    LINK_FLAGS ""
+    LINKER_LANGUAGE ${LIBAPPROX_LINKER_LANGUAGE})
+
+
+include_directories(${HDF5_INCLUDE_DIRS})
+include_directories(${TORCH_INCLUDE_DIRS})
+message(STATUS "HDF5 include dir: ${HDF5_LIBRARIES}")
+
+target_link_libraries(approx PRIVATE ${CUDA_LIBRARIES} cuda)
 target_link_libraries(approx PRIVATE ${CMAKE_DL_LIBS})
-target_link_libraries(approx PRIVATE $HDF5_C_LIBRARIES)
-target_link_libraries(approx PRIVATE $HDF5_HL_LIBRARIES)
-target_link_libraries(approx PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(approx PRIVATE ${HDF5_LIBRARIES})
+target_link_libraries(approx PRIVATE ${TORCH_LIBRARIES})
+message(STATUS "Torch libraries dir: ${TORCH_LIBRARIES}")
+
+# link hdf5
+# target_link_libraries(approx PRIVATE nlohmann_json::nlohmann_json)
 
 message("PACKAGE VERSION is: ${PACKAGE_VERSION}")
 string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION ${PACKAGE_VERSION})

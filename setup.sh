@@ -22,7 +22,7 @@ LIGHTCYAN='\033[1;36m'
 WHITE='\033[1;37m'
 
 clang_bin=$prefix/bin/clang
-approx_runtime_lib=$prefix/lib/libapprox.so
+approx_runtime_lib=/dev/null
 
 
 if [ ! -f $clang_bin ]; then
@@ -38,6 +38,7 @@ if [ ! -f $clang_bin ]; then
     -DLLVM_ENABLE_PROJECTS='clang' \
     -DCMAKE_C_COMPILER='gcc' \
     -DCMAKE_CXX_COMPILER='g++' \
+    -DLLVM_ENABLE_RUNTIMES='openmp' \
     -DLLVM_OPTIMIZED_TABLEGEN='On' \
     -DCLANG_BUILD_EXAMPLES='On' \
     -DBUILD_SHARED_LIBS='On' \
@@ -58,6 +59,13 @@ exit
 
 source hpac_env.sh
 
+torch_d=`spack location -i py-torch`
+hdf5_d=`spack location -i hdf5`
+echo HDF5 directory: $hdf5_d
+
+torch_d=$(echo $torch_d/lib/python3.*/site-packages/torch/share/cmake/Torch)
+echo Torch directory: $torch_d
+
 if [ ! -f $approx_runtime_lib ]; then
   mkdir build_hpac
   pushd build_hpac
@@ -65,12 +73,15 @@ if [ ! -f $approx_runtime_lib ]; then
       -DCMAKE_INSTALL_PREFIX=$prefix \
       -DLLVM_EXTERNAL_CLANG_SOURCE_DIR=${current_dir}/clang/ \
       -DPACKAGE_VERSION=11.0.0git \
+      -DTorch_DIR=$torch_d \
+      -DHDF5_Dir=$hdf5_d \
      ../approx
     ninja -j $threads
     ninja -j $threads install
     popd
 fi
 
+exit
 pushd ./approx/approx_utilities/
 
 if [ ! -f 'original_src.tar.gz' ]; then
