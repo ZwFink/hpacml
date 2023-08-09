@@ -69,7 +69,8 @@ public:
   float *randomNumbers;
   int count;
   BaseDB *db;
-  SurrogateModel<float> Model{"/usr/workspace/fink12/torch/model.pt", false};
+  SurrogateModel<GPUExecutionPolicy, CatTensorTranslator<double>, double> Model{
+      "/usr/workspace/fink12/torch/model.pt", {NUM_ITEMS, 5}, {NUM_ITEMS, 1}, false};
 
   ApproxRuntimeConfiguration() {
       ExecuteBoth = false;
@@ -297,16 +298,17 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
   }
   else if ( (MLType) ml_type == ML_INFER ){
     // I have not implemented this part
-    float **ipts = new float*[num_inputs];
-    float **opts = new float*[num_outputs];
+    double **ipts = new double*[num_inputs];
+    double **opts = new double*[num_outputs];
     for(int i = 0; i < num_inputs; i++){
-      ipts[i] = static_cast<float*>(input_vars[i].ptr);
+      ipts[i] = static_cast<double*>(input_vars[i].ptr);
     }
     for(int i = 0; i < num_outputs; i++){
-      opts[i] = static_cast<float*>(output_vars[i].ptr);
+      opts[i] = static_cast<double*>(output_vars[i].ptr);
     }
-    RTEnv.Model.evaluate(1, num_inputs, output_vars->num_elem, ipts, 
+    RTEnv.Model.evaluate(input_vars[0].num_elem, num_inputs, num_outputs, ipts, 
     opts);
+    // accurateFN(arg);
     delete [] ipts;
     delete [] opts;
   }
