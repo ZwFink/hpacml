@@ -35,10 +35,13 @@ if [ ! -f $clang_bin ]; then
     -DCMAKE_EXPORT_COMPILE_COMMANDS='On'\
     -DCMAKE_BUILD_TYPE='RelWithDebInfo' \
     -DLLVM_FORCE_ENABLE_STATS='On' \
-    -DLLVM_ENABLE_PROJECTS='clang;openmp' \
+    -DLLVM_ENABLE_PROJECTS='clang' \
+    -DLLVM_ENABLE_RUNTIMES='openmp' \
     -DLLVM_OPTIMIZED_TABLEGEN='On' \
     -DCLANG_BUILD_EXAMPLES='On' \
     -DBUILD_SHARED_LIBS='On' \
+    -DCMAKE_C_COMPILER='clang' \
+    -DCMAKE_CXX_COMPILER='clang++' \
     -DLLVM_ENABLE_ASSERTIONS='On' \
     ../llvm
 
