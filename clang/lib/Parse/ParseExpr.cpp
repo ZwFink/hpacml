@@ -1795,7 +1795,17 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
         }
         break;
       }
-      Res = ParseLambdaExpression();
+      // when parsing a tensor functor decl,
+      // we'll see bracketed expressions with no preceding identifier
+      // it looks like a lambda, but it's not
+      // We'll pass parsing off to PostfixExpressionSuffix, which 
+      // handles array slice parsing
+      if (getCurScope()->isApproxTensorFunctorDeclScope()) {
+        Res = ParsePostfixExpressionSuffix(ExprResult());
+        break;
+      } else {
+        Res = ParseLambdaExpression();
+      }
       break;
     }
     if (getLangOpts().ObjC) {
@@ -1985,18 +1995,14 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       if (ArgExprs.size() <= 1 &&
           (getLangOpts().OpenMP ||
            CurScope->isApproxArraySectionScope()
-           || CurScope->isApproxTensorDeclScope())) {
+           || CurScope->isApproxTensorDeclScope()
+           || CurScope->isApproxTensorFunctorDeclScope())) {
         ColonProtectionRAIIObject RAII(*this);
-        if(CurScope->isApproxTensorDeclScope()) {
+        if(CurScope->isApproxTensorDeclScope()
+        || CurScope->isApproxTensorFunctorDeclScope()) {
           ApproxNDTensorSlice Slice;
 
-          // Make sure the ONLY approx scope that's turned on is 
-          // ApproxTensorSliceScope
-          unsigned ScopeFlags =
-              CurScope->getFlags() | Scope::ApproxSliceScope;
-          ParseScope ApproxScope(this, ScopeFlags);
           ParseApproxNDTensorSlice(Slice, tok::r_square);
-          ApproxScope.Exit();
 
           LHS = Actions.ActOnApproxArraySliceExpr(LHS.get(), Loc, Slice, Tok.getLocation());
           LHS = Actions.CorrectDelayedTyposInExpr(LHS);

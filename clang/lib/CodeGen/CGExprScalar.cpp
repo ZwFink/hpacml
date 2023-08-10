@@ -447,6 +447,16 @@ public:
     return Visit(E->getSubExpr());
   }
 
+  Value *VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
+    auto DeclOption = E->getDecl();
+    assert(DeclOption.has_value() && "Decl option should have a value");
+    VarDecl *Decl = *DeclOption;
+    Address Addr = CGF.GetAddrOfLocalVar(Decl);
+    // Get the value stored at address
+    llvm::Value *Val = CGF.Builder.CreateLoad(Addr);
+    return Val;
+  }
+
   // Leaves.
   Value *VisitIntegerLiteral(const IntegerLiteral *E) {
     return Builder.getInt(E->getValue());

@@ -20,6 +20,16 @@
 
 namespace clang {
 
+template<typename ExprClass>
+bool anyChildHasType(const Expr *E) {
+  for (const Stmt *SubStmt : E->children()) {
+    if (isa<ExprClass>(SubStmt))
+      return true;
+    return anyChildHasType<ExprClass>(cast<Expr>(SubStmt));
+  }
+  return false;
+}
+
 class ApproxSliceExpr : public Expr {
   enum { START, STOP, STEP, END_EXPR };
   Stmt *SubExprs[END_EXPR];
@@ -46,6 +56,21 @@ public:
   explicit ApproxSliceExpr(EmptyShell Empty)
       : Expr(ApproxSliceExprClass, Empty) {}  
 
+  // we want to know if this slice has
+  // any children that contain ApproxIndexVarRefExprs.
+  // There are 3 different cases that affect codegen/shape analysis:
+  // 1. the AIVRE is standalone, e.g. [i]
+  //    In this case, we want to expand the shape to [i,1]
+  // 2. Case 2: the AIVRE is part of a binary expression, e.g. [i*3:i*3+3]
+  //    In this case, we want to expand the shape to [i,3]
+  // 3. Case 3: The slice has no AIVRE. Nothing special happens here.
+  enum class AIVREChildKind {
+    STANDALONE,
+    BINARY_EXPR,
+    NONE
+  };
+
+  AIVREChildKind AIVREChild = AIVREChildKind::NONE;
 
   Expr *getStart() { return cast_or_null<Expr>(SubExprs[START]); }
   const Expr *getStart() const { return cast_or_null<Expr>(SubExprs[START]); }
@@ -61,6 +86,24 @@ public:
 
   SourceLocation getBeginLoc() const LLVM_READONLY {
     return getStart()->getBeginLoc();
+  }
+
+  AIVREChildKind getAIVREChildKind() const { return AIVREChild; }
+  void setAIVREChildKind(AIVREChildKind K) { AIVREChild = K; }
+
+  static AIVREChildKind discoverChildKind(Expr *Start, Expr *Stop, Expr* Step) {
+    assert(Start && Stop && Step && "Start, Stop, and Step must be non-null");
+    Start = Start->IgnoreParenImpCasts();
+    // we need only check start
+    if(isa<ApproxIndexVarRefExpr>(Start)) {
+      // if start is an AIVRE, we're in case 1: [i]
+      return AIVREChildKind::STANDALONE;
+    }
+    if(anyChildHasType<ApproxIndexVarRefExpr>(Start)) {
+      // if any child has an AIVRE, we're in case 2: [i*3:i*3+3]
+      return AIVREChildKind::BINARY_EXPR;
+    }
+    return AIVREChildKind::NONE;
   }
 
   SourceLocation getEndLoc() const LLVM_READONLY { return RBracketLoc; }
@@ -124,7 +167,9 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   const Expr *getBase() const { return getTrailingObjects<Expr *>()[0];}
   Expr *getBase() { return getTrailingObjects<Expr *>()[0];}
 
+  bool hasBase() const { return getBase() != nullptr;}
 
+  QualType getBaseOriginalType(const Expr *Base);
   void setBase(Expr *E) { getTrailingObjects<Expr *>()[0] = E;}
   void setDimensionSlices(llvm::ArrayRef<Expr *> DSlices) {
     assert(DSlices.size() == numDims && "Wrong number of dimension slices");
@@ -135,7 +180,9 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   void setNumDimensionSlices(unsigned N) { numDims = N; }
 
   SourceLocation getBeginLoc() const LLVM_READONLY {
-    return getTrailingObjects<Expr *>()[0]->getBeginLoc();
+    if(hasBase())
+      return getBase()->getBeginLoc();
+    return getTrailingObjects<Expr *>()[1]->getBeginLoc();
   }
 
   SourceLocation getEndLoc() const LLVM_READONLY {return RBracketLoc;}
@@ -163,6 +210,23 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
 class ApproxIndexVarRefExpr : public Expr {
   IdentifierInfo *Identifier;
   SourceLocation Loc;
+  std::optional<VarDecl*> Decl;
+  
+  // when we want to identify an index variable in a shape,
+  // we need some way to identify it. We choose negative integers,
+  // as they are not valid within shapes. Each index variable
+  // is given a unique negative integer used to represent all instances
+  // of that index variable
+  static std::unordered_map<std::string, int> shapeReprMap;
+  static int nextShapeRepr;
+
+  void setShapeRepr(llvm::StringRef Name) {
+    std::string NameStr = Name.str();
+    if(shapeReprMap.find(NameStr) == shapeReprMap.end()) {
+      shapeReprMap[NameStr] = nextShapeRepr;
+      nextShapeRepr--;
+    }
+  }
 
   public:
   ApproxIndexVarRefExpr(IdentifierInfo *II, QualType Type, ExprValueKind VK,
@@ -171,6 +235,7 @@ class ApproxIndexVarRefExpr : public Expr {
     assert(II && "No identifier provided!");
     Identifier = II;
     setDependence(computeDependence(this));
+    setShapeRepr(II->getName());
     }
 
     explicit ApproxIndexVarRefExpr(EmptyShell Shell)
@@ -191,12 +256,26 @@ class ApproxIndexVarRefExpr : public Expr {
     IdentifierInfo *getIdentifier() const { return Identifier; }
 
     llvm::StringRef getName() const { return Identifier->getName(); }
+    llvm::StringRef getDeclName() const {
+    assert(hasDecl() && "Attempt to get Decl Name of Index var without decl");
+    return getDecl().value()->getName();
+    }
+
+    int getShapeRepresentation() const {
+      std::string NameStr  = std::string(getName());
+      return shapeReprMap[NameStr];
+    }
+
+    void setDecl(VarDecl *D) { Decl.emplace(D); }
+    bool hasDecl() const { return Decl.has_value(); }
+    std::optional<VarDecl*> getDecl() const { return Decl; }
 
 
     static bool classof(const Stmt *T) {
       return T->getStmtClass() == ApproxIndexVarRefExprClass;
     }
   };
+
 
 class ApproxArraySectionExpr : public Expr {
   enum { BASE, LOWER_BOUND, LENGTH, END_EXPR };

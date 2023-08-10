@@ -117,9 +117,134 @@ public:
   void CGApproxRuntimeEmitDataValues(CodeGenFunction &CG);
   llvm::Constant* getOrCreateName(StringRef Name, CodeGenFunction &CGF);
 
+  private:
+
+class SymbolVarInfo {
+  public:
+  ApproxIndexVarRefExpr *Symbol = nullptr;
+  std::optional<Address> Addr;
+  Expr *Range = nullptr;
+  bool isFromRHS = false;
+
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, Address Addr, Expr *Range, bool isFromRHS = false) : Symbol(Symbol), Addr(Addr), Range(Range), isFromRHS(isFromRHS) {}
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, Address Addr, bool isFromRHS = false) : Symbol(Symbol), Addr(Addr), isFromRHS(isFromRHS) {}
+  SymbolVarInfo(ApproxIndexVarRefExpr *Symbol, bool isFromRHS = false) : Symbol(Symbol), isFromRHS(isFromRHS) {}
+  SymbolVarInfo() {}
+
+  void setAddress(Address A) {
+    Addr = A;
+  }
+
+};
+
+// Maps a symbolic in a tensor functor decl to the its range as given
+// in the tensor decl
+using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
+
+  struct MLSurrogateInfo {
+  // SliceInfoTy is a struct containing information about the slice for one
+  // dimension. typedef struct slice_info_ty 
+  // { 
+  //   int start; 
+  //   int stop; 
+  //   int step;
+  //   int aivre_mode;
+  //   int aivre_repr;
+  //} slice_info_t
+  QualType SliceInfoTy;
+
+  // NDArraySliceTy is a struct containing information about an ND
+  // array slice.
+  // It looks like:
+  // typedef struct ndarray_slice_ty {
+
+  // void* base;
+  // int8_t type;
+  // int ndim;
+  // slice_info_t slices[ndim];
+  // } ndarray_slice_t;
+  QualType NDArraySliceTy;
+
+
+  //typedef struct tensor_shape {
+  //	int ndim;
+  //	int *shapes;
+  //} tensor_shape_t;
+  QualType TensorShapeTy;
+
+  //typedef struct internal_tensor_repr_data {
+  //	int type;
+  //	// we want an agnostic way to represent the shape
+  //	tensor_shape_t shape;
+  //	void *data;
+  //} internal_repr_metadata_t;
+  QualType InternalReprMetadataTy;
+
+  SymbolVarInfoMap SymbolVars;
+
+  // Function type of the function that takes
+  // the tensor decl array slices and the
+  // tensor functor decl slices and converts the
+  // local i'th slice to global slices for the array
+  llvm::FunctionType *ConvertSliceInfoFnTy;
+
+  // function that takes rhs array slices and their shapes
+  // into a higher-order shape. For example, if we have a 
+  // 3*N, the shape will be changed to (N,3).
+  llvm::FunctionType *ConvertToHigherOrderShapeFnTy;
+
+  // a function that converts a set of user arrays on the RHS
+  // to a single tensor that we can then transpose/reshape
+  // to get the correct shape as specified by the LHS
+  llvm::FunctionType *ConvertTensorToInternalReprFnTy;
+
+  // a function that takes (ndim, void *slices, void *shapes)
+  // and changes shapes so that all AIVR variables are 
+  // replaced with their internal representation
+  // for use in LHS of tensor functor
+  llvm::FunctionType *SubstituteAIVRInShapesFnTy;
+
+
+  // a function that takes a void * of the internal representation
+  // of a tensor and destructs it, freeing any memory as needed.
+  llvm::FunctionType *TensorCleanupFnTy;
+
+  };
+
+  MLSurrogateInfo SurrogateInfo;
+
+    void mapSymbolicVarsToRanges(
+        SymbolVarInfoMap &InfoMap,
+        llvm::ArrayRef<Expr *> FunctorSlice,
+        llvm::ArrayRef<Expr *> TensorSlice);
+
+  llvm::FunctionCallee getTensorCleanupFn(CodeGenModule &CGM);
+  void initializeAndDeclareSymbolVars(ApproxDeclareTensorFunctorDecl *Decl, llvm::ArrayRef<Expr*> Vars);
+  Address EmitDeclarationOfSymbolVar(CodeGenFunction &CGF, ApproxIndexVarRefExpr *Symbol);
+  Address CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF, Expr *AAIE);
+  Address CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  Address CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int ndim);
+  Address CGApproxRuntimeEmitShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  Address CGApproxRuntimeEmitShape(CodeGenFunction& CGF, Address Dest, llvm::ArrayRef<Expr*> Slices);
+  Address CGApproxRuntimeEmitLHSShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr *> Slices);
+  void CGApproxRuntimeSubstituteAIVRInShapes(CodeGenFunction &CGF, int ndim, Address Slices, Address Shapes);
+  void CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest);
+  void CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::Value *Start, llvm::Value *Stop, llvm::Value *Step, Address Dest);
+  Address CGApproxRuntimeEmitSizeOfSliceElement(CodeGenFunction &CGF, std::unordered_map<Expr*,Expr*> &RangeMap, Expr *Slice);
+  void CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF);
+  void EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Symbols);
+  void CGApproxRuntimeEmitSlice(CodeGenFunction &CFG, Expr *Slice, Address SliceMemory);
+  Address CGApproxRuntimeAllocInternalReprMetadata(CodeGenFunction& CGF, int numArgs);
+  Address CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars);
+  void CGApproxRuntimeEmitSliceConversion(CodeGenFunction &CGF, size_t NumVals, Address TensorCollection, Address FunctorCollection);
+  void CGApproxRuntimeEmitHigherOrderShapeConversion(CodeGenFunction &CGF, size_t NumVals, Address TensorCollection, Address FunctorCollection);
+  Address CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int nargsLHS, Address LHSSlices, Address LHSShapes,
+      int nargsRHS, Address RHSAddress);
+  public:
 
   void emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D);
   void emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D);
+
 };
 
 } // namespace CodeGen

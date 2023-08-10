@@ -58,8 +58,8 @@ ApproxDeclareTensorDecl *ApproxDeclareTensorDecl::Create(
 
 ApproxDeclareTensorFunctorDecl *ApproxDeclareTensorFunctorDecl::Create(
     ASTContext &C, DeclContext *DC, SourceRange SR, DeclarationName FunctorName,
-    QualType T, ApproxNDTensorSlice LHSSlice,
-    ApproxNDTensorSliceCollection RHSSlices) {
+    QualType T, Expr* LHSSlice,
+    llvm::ArrayRef<Expr*> RHSSlices) {
 
   SourceLocation Begin = SR.getBegin();
   SourceLocation End = SR.getEnd();

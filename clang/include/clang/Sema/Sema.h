@@ -11406,8 +11406,8 @@ public:
                                       approx::ApproxVarListLocTy &Locs);
   ApproxClause* ActOnApproxDTClause(approx::ClauseKind Kind, approx::ApproxVarListLocTy &Locs);
   ApproxDeclareTensorFunctorDecl *ActOnApproxTFDecl(
-      approx::DeclKind Kind, Scope *S, IdentifierInfo *TensorName, ApproxNDTensorSlice &LHSSlice,
-      ApproxNDTensorSliceCollection &RHSSlices,
+      approx::DeclKind Kind, Scope *S, IdentifierInfo *TensorName, Expr *LHSSlice,
+      llvm::ArrayRef<Expr *> RHSSlices,
       approx::ApproxVarListLocTy &Locs);
 
   ApproxDeclareTensorDecl *ActOnApproxTensorDecl(approx::DeclKind CK,

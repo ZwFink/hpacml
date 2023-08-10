@@ -18,11 +18,15 @@
 #include "clang/AST/StmtApprox.h"
 #include "clang/Basic/Approx.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Debug.h"
+#include <unordered_map>
 
 using namespace llvm;
 using namespace clang;
 using namespace CodeGen;
+
+
 
 int8_t convertToApproxType(const BuiltinType *T) {
   ApproxType approxType;
@@ -190,6 +194,67 @@ static void getPerfoInfoType(ASTContext &C, QualType &perfoInfoTy) {
   return;
 }
 
+static void getSliceInfoTy(ASTContext &C, QualType &SliceInfoTy) {
+  if(SliceInfoTy.isNull()) {
+    RecordDecl *sliceInfoRD = C.buildImplicitRecord("approx_slice_info_t");
+    sliceInfoRD->startDefinition();
+    // Start Index
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    // Stop Index
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    // Step
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+
+    // the mode of this slice's AIVR, if any. See ApproxSliceExpr::AIVREChildKind
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    // the program representation of this slice's AIVR, if any
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, true));
+    sliceInfoRD->completeDefinition();
+    SliceInfoTy = C.getRecordType(sliceInfoRD);
+  }
+}
+
+static void getNDArraySliceTy(ASTContext &C, QualType &SliceTy, QualType &ShapeTy, QualType &NDArraySliceTy) {
+  if(NDArraySliceTy.isNull()) {
+    assert(!SliceTy.isNull() && "SliceTy must be defined before NDArraySliceTy");
+
+    RecordDecl *NDArraySliceRD = C.buildImplicitRecord("approx_ndarray_slice_t");
+    NDArraySliceRD->startDefinition();
+    // Void pointer to the array
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntPtrType());
+
+    // indicator for the underlying type
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntTypeForBitwidth(8, false));
+
+    // Number of dimensions
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntTypeForBitwidth(32, false));
+
+    // The slice info
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(SliceTy));
+
+    // the shape info, just an array of integers
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(ShapeTy));
+
+    NDArraySliceRD->completeDefinition();
+    NDArraySliceTy = C.getRecordType(NDArraySliceRD);
+  }
+}
+
+static void getTensorShapeTy(ASTContext &C, QualType &TensorShapeTy) {
+  if(TensorShapeTy.isNull()) {
+    RecordDecl *TensorShapeRD = C.buildImplicitRecord("tensor_shape_t");
+    TensorShapeRD->startDefinition();
+    // Number of dimensions
+    addFieldToRecordDecl(C, TensorShapeRD, C.getIntTypeForBitwidth(32, false));
+
+    // The shape info, just an array of integers
+    addFieldToRecordDecl(C, TensorShapeRD, C.getPointerType(C.getIntTypeForBitwidth(32, true)));
+
+    TensorShapeRD->completeDefinition();
+    TensorShapeTy = C.getRecordType(TensorShapeRD);
+  }
+}
+
 static void getVarInfoType(ASTContext &C, QualType &VarInfoTy) {
   if (VarInfoTy.isNull()) {
     RecordDecl *VarInfoRD = C.buildImplicitRecord("approx_var_info_t");
@@ -216,6 +281,22 @@ static void getVarInfoType(ASTContext &C, QualType &VarInfoTy) {
   return;
 }
 
+static void getInternalReprMetadataTy(ASTContext &C, QualType& TensorShapeTy, QualType &InternalReprTy) {
+  if(InternalReprTy.isNull()) {
+    assert(!TensorShapeTy.isNull() && "TensorShapeTy must be defined before InternalReprTy");
+    RecordDecl *InternalReprRD = C.buildImplicitRecord("internal_tensor_metadata_t");
+    InternalReprRD->startDefinition();
+    // int type
+    addFieldToRecordDecl(C, InternalReprRD, C.getIntTypeForBitwidth(32, false));
+    // TensorShapeTy shape
+    addFieldToRecordDecl(C, InternalReprRD, TensorShapeTy);
+    // void *for internal data
+    addFieldToRecordDecl(C, InternalReprRD, C.getIntPtrType());
+    InternalReprRD->completeDefinition();
+    InternalReprTy = C.getRecordType(InternalReprRD);
+  }
+}
+
 CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
     : CGM(CGM), CallbackFnTy(nullptr), RTFnTy(nullptr), approxRegions(0),
       StartLoc(SourceLocation()), EndLoc(SourceLocation()), requiresData(false),
@@ -226,6 +307,10 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
       llvm::PointerType::getUnqual(Types.ConvertType(C.CharTy));
   getPerfoInfoType(C, PerfoInfoTy);
   getVarInfoType(C, VarInfoTy);
+  getSliceInfoTy(C, SurrogateInfo.SliceInfoTy);
+  getTensorShapeTy(C, SurrogateInfo.TensorShapeTy);
+  getNDArraySliceTy(C, SurrogateInfo.SliceInfoTy, SurrogateInfo.TensorShapeTy, SurrogateInfo.NDArraySliceTy);
+  getInternalReprMetadataTy(C, SurrogateInfo.TensorShapeTy, SurrogateInfo.InternalReprMetadataTy);
 
   CallbackFnTy = llvm::FunctionType::get(CGM.VoidTy, {CGM.VoidPtrTy}, false);
 
@@ -247,6 +332,39 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
        /* Ouput Data Descr. */ CGM.VoidPtrTy,
        /* Output Data Num Elements*/ CGM.Int32Ty},
       false);
+
+  SurrogateInfo.ConvertSliceInfoFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, 
+    { /*Number of slices */ CGM.Int32Ty,
+      /* Tensor array slices (void **) */ CGM.VoidPtrTy,
+      /* Functor Array Slices */ CGM.VoidPtrTy
+    }, false);
+
+  SurrogateInfo.ConvertToHigherOrderShapeFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, 
+    { /*Number of slices */ CGM.Int32Ty,
+      /* Tensor array slices (void **) */ CGM.VoidPtrTy,
+      /* Functor Array Slices */ CGM.VoidPtrTy
+    }, false);
+
+  SurrogateInfo.SubstituteAIVRInShapesFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, 
+    { /*Number of arguments */ CGM.Int32Ty,
+      /* array_info_t ** pointing to the arrays */ CGM.VoidPtrTy,
+      /* internal_repr_metadata_t * with metadata about internal representation */ CGM.VoidPtrTy
+    }, false);
+
+  SurrogateInfo.ConvertTensorToInternalReprFnTy = llvm::FunctionType::get(
+    CGM.VoidPtrTy, 
+    { /*Number of LHS slices */ CGM.Int32Ty,
+      /* slice_info_t * for LHS */ CGM.VoidPtrTy,
+      /* tensor_shape_t for LHS  */ CGM.VoidPtrTy,
+      /*Number of RHS array_info_t  */ CGM.Int32Ty,
+      /* array_info_t **array info for the RHS */ CGM.VoidPtrTy
+    }, false);
+
+  SurrogateInfo.TensorCleanupFnTy = llvm::FunctionType::get(
+    CGM.VoidTy, {CGM.VoidPtrTy}, false);
 }
 
 void CGApproxRuntime::CGApproxRuntimeEnterRegion(CodeGenFunction &CGF,
@@ -753,6 +871,354 @@ CGApproxRuntime::CGApproxRuntimeEmitData(
                             VarInfoArray.getPointer(), CGF.VoidPtrTy));
 }
 
+std::tuple<llvm::Value *, llvm::Value *, llvm::Value*>
+getSliceExprValues(CodeGenFunction &CGF, Expr *Slice) {
+  ApproxSliceExpr *SliceExpr = dyn_cast_or_null<ApproxSliceExpr>(Slice);
+  assert(SliceExpr && "Expected a slice expression");
+
+  Expr *Start = SliceExpr->getStart();
+  Expr *Stop = SliceExpr->getStop();
+  Expr *Step = SliceExpr->getStep();
+
+  llvm::Value *StartVal = nullptr;
+  llvm::Value *StopVal = nullptr; 
+  llvm::Value *StepVal = nullptr;
+
+  if (Start)
+    StartVal = CGF.EmitScalarExpr(Start);
+  if (Stop) {
+    StopVal = CGF.EmitScalarExpr(Stop);
+  }
+  if (Step)
+    StepVal = CGF.EmitScalarExpr(Step);
+
+  return std::make_tuple(StartVal, StopVal, StepVal);
+}
+
+
+static int8_t getArrPointeeApproxType(CodeGenFunction &CGF, QualType BaseTy) {
+    QualType ResultExprTy = BaseTy;
+    int8_t TyKind = -1;
+    // Drill down to find the scalar type we point to.
+    do {
+      if (auto *AT = CGF.getContext().getAsArrayType(ResultExprTy))
+        ResultExprTy = AT->getElementType();
+      else
+        ResultExprTy = ResultExprTy->getPointeeType();
+    } while (ResultExprTy->isPointerType() || ResultExprTy->isReferenceType() ||
+             ResultExprTy->isArrayType());
+
+    if (const BuiltinType *T = ResultExprTy->getAs<BuiltinType>()) {
+      TyKind = convertToApproxType(T);
+    }
+
+  return TyKind;
+}
+
+Address CGApproxRuntime::CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF,
+Expr *AAIE) {
+  static int numArraysCreated = 0;
+  ASTContext &C = CGM.getContext();
+  Twine name = Twine("array.info_") + Twine(numArraysCreated);
+
+  ApproxArraySliceExpr *E = dyn_cast_or_null<ApproxArraySliceExpr>(AAIE);
+  Address ArrayInfo = CGF.CreateMemTemp(SurrogateInfo.NDArraySliceTy, name);
+  const auto *ArrayInfoRecord = SurrogateInfo.NDArraySliceTy->getAsRecordDecl();
+
+
+  LValue ArrayInfoStart = CGF.MakeAddrLValue(ArrayInfo, SurrogateInfo.NDArraySliceTy);
+
+  Expr *ArrayBase = E->getBase();
+  QualType BaseTy;
+
+  llvm::Value *BasePtr = nullptr;
+
+  // Base may be a null pointer if we are emitting array info for a functor decl
+  if(ArrayBase) {
+    BaseTy = E->getBaseOriginalType(ArrayBase);
+    BasePtr = CGF.Builder.CreatePtrToInt(CGF.EmitScalarExpr(ArrayBase), CGF.IntPtrTy);
+  }
+  else {
+    BaseTy = C.getIntTypeForBitwidth(32, false);
+    BasePtr = llvm::ConstantPointerNull::get(CGF.VoidPtrTy);
+  }
+
+
+  LValue FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 0));
+  CGF.EmitStoreOfScalar(BasePtr, FieldAddr);
+
+  
+  int8_t TyKind = -1;
+  if(ArrayBase) {
+    TyKind = getArrPointeeApproxType(CGF, BaseTy);
+  }
+
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 1));
+  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, TyKind, false),
+                        FieldAddr);
+
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 2));
+
+  llvm::ArrayRef<Expr *> ArraySlices = E->getSlices();
+  auto NumDims = ArraySlices.size();
+  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, NumDims, false),
+                        FieldAddr);
+
+  Address SlicesStruct = CGApproxRuntimeEmitSlices(CGF, ArraySlices);
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 3));
+  CGF.EmitStoreOfScalar(
+      CGF.Builder.CreatePtrToInt(SlicesStruct.getPointer(), CGF.IntPtrTy),
+      FieldAddr);
+
+  Address ShapesStruct = CGApproxRuntimeEmitShape(CGF, ArraySlices);
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 4));
+  CGF.EmitStoreOfScalar(
+      CGF.Builder.CreatePtrToInt(ShapesStruct.getPointer(), CGF.IntPtrTy),
+      FieldAddr);
+
+  numArraysCreated++;
+
+  return ArrayInfo;
+}
+
+void CGApproxRuntime::CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF) {
+  auto VarMap = SurrogateInfo.SymbolVars;
+
+  for(auto &SymbolInfo : VarMap) {
+    auto Name = SymbolInfo.first;
+    auto &Info = SymbolInfo.second;
+
+    Value *LBVal = nullptr;
+
+    assert(Info.Addr.has_value() && "Symbol should already be declared");
+    if(Info.isFromRHS) {
+      assert(Info.Range && "Symbol from RHS doesn't have a corresponding range?");
+      ApproxSliceExpr *Slice = dyn_cast_or_null<ApproxSliceExpr>(Info.Range);
+      assert(Slice && "Expected a slice expression");
+      Expr *LB = Slice->getStart();
+      LBVal = CGF.EmitScalarExpr(LB);
+    }
+    else {
+      assert(!Info.Range && "Symbol from LHS shouldn't have a range?");
+      int Repr = Info.Symbol->getShapeRepresentation();
+      LBVal = llvm::ConstantInt::get(CGF.Int32Ty, Repr, true);
+    }
+
+    CGF.EmitStoreOfScalar(LBVal, Info.Addr.value(), false, CGF.getContext().getIntTypeForBitwidth(32, true));
+  }
+
+}
+
+// void CGApproxRuntime::CGApproxRuntimeEmitSymbolicVarRange(CodeGenFunction &CGF) {
+
+// }
+
+// void CGApproxRuntine::CGApproxRuntimeEmitShapeForRange(CodeGenFunction &CGF) {
+
+// }
+
+// void CGApproxRuntime::CGApproxRuntimeEmitRHSTensorShapes(CodeGenFunction &CGF) {
+
+// }
+
+Address CGApproxRuntime::CGApproxRuntimeEmitSlices(CodeGenFunction &CGF,
+                                                llvm::ArrayRef<Expr*> Slices) {
+  static int numSliceArraysCreated = 0;
+  ASTContext &C = CGM.getContext();
+  auto numSlices = Slices.size();
+  QualType SliceInfoArrayTy;
+
+  SliceInfoArrayTy = C.getConstantArrayType(SurrogateInfo.SliceInfoTy, llvm::APInt(64, numSlices),
+                                          nullptr, ArrayType::Normal, 0);
+  Twine ArrayName = Twine("slice.info_") + Twine(numSliceArraysCreated);
+  Address SliceInfoArray = CGF.CreateMemTemp(SliceInfoArrayTy, ArrayName);
+                
+  for (size_t i = 0; i < numSlices; i++) {
+    Address CurrentSlice = CGF.Builder.CreateConstArrayGEP(SliceInfoArray, i);
+    CGApproxRuntimeEmitSlice(CGF, Slices[i], CurrentSlice);
+  }
+
+  numSliceArraysCreated++;
+
+  return SliceInfoArray;
+}
+
+Address CGApproxRuntime::CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int ndim) {
+  ASTContext &C = CGM.getContext();
+  auto numSlices = ndim;
+  QualType SliceTy;
+  QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(32, true);
+
+  SliceTy = C.getConstantArrayType(Int32Ty, llvm::APInt(32, numSlices),
+                                          nullptr, ArrayType::Normal, 0);
+  Twine ArrayName = "slice.shape_";
+  Address SliceShapeArray = CGF.CreateMemTemp(SliceTy, ArrayName);
+
+  auto TensorShape = CGF.CreateMemTemp(SurrogateInfo.TensorShapeTy, "tensor.shape");
+  auto TensorShapeAddr = CGF.MakeAddrLValue(TensorShape, SurrogateInfo.TensorShapeTy);
+  auto TensorShapeDecl = SurrogateInfo.TensorShapeTy->getAsRecordDecl();
+
+  LValue NumDimsLValue = CGF.EmitLValueForField(TensorShapeAddr, *TensorShapeDecl->field_begin());
+  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, numSlices, false), NumDimsLValue);
+
+  NumDimsLValue = CGF.EmitLValueForField(TensorShapeAddr, *std::next(TensorShapeDecl->field_begin(), 1));
+  CGF.EmitStoreOfScalar(SliceShapeArray.getPointer(), NumDimsLValue);
+
+  return TensorShape;
+}
+
+Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
+                                                      llvm::ArrayRef<Expr*> Slices) {
+  auto numSlices = Slices.size();
+
+  // later, we will need to 'unpack' slices that look like
+  // [i] to [i,1] and slices that look like [i*3:i*3+3] to [i,3]
+  // we'll allocate the extra space we need. Note: we'll need an extra dimension
+  // for /each/ slice with an AIVR, e.g., we need 2 extra slots for [i,j]
+  auto allocNumSlices = numSlices;
+  for(auto *E : Slices) {
+    assert(isa<ApproxSliceExpr>(E) && "Expected a slice expression");
+
+    ApproxSliceExpr *Slice = dyn_cast<ApproxSliceExpr>(E);
+    ApproxSliceExpr::AIVREChildKind Kind = Slice->getAIVREChildKind();
+    if(Kind == ApproxSliceExpr::AIVREChildKind::BINARY_EXPR ||
+    Kind == ApproxSliceExpr::AIVREChildKind::STANDALONE) {
+      allocNumSlices++;
+    }
+  }
+  Address AllocatedShapeStruct = CGApproxRuntimeAllocateShape(CGF, allocNumSlices);
+  return CGApproxRuntimeEmitShape(CGF, AllocatedShapeStruct, Slices);
+
+}
+
+Address CGApproxRuntime::CGApproxRuntimeEmitLHSShape(CodeGenFunction &CGF,
+llvm::ArrayRef<Expr*> Slices) {
+  auto numSlices = Slices.size();
+  Address AllocatedShapeStruct = CGApproxRuntimeAllocateShape(CGF, numSlices);
+  return CGApproxRuntimeEmitShape(CGF, AllocatedShapeStruct, Slices);
+}
+
+Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction& CGF, Address Dest,
+llvm::ArrayRef<Expr*> Slices) {
+
+  ASTContext &C = CGM.getContext();
+  QualType Int32Ty = C.getIntTypeForBitwidth(32, true);
+  auto numSlices = Slices.size();
+  auto SliceNDimsAddr = CGF.Builder.CreateStructGEP(Dest, 0);
+  auto SliceBaseAddr = CGF.Builder.CreateStructGEP(Dest, 1);
+
+  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, numSlices, true), SliceNDimsAddr, false, Int32Ty);
+
+  llvm::Value *SliceShapeArray = CGF.Builder.CreateLoad(SliceBaseAddr, false);
+  
+  Address SliceBase = Address(SliceShapeArray, CGF.Int32Ty, clang::CharUnits::fromQuantity(32));
+            
+  for (size_t i = 0; i < numSlices; i++) {
+    Address CurrentSlice = CGF.Builder.CreateConstGEP(SliceBase, i);
+    CGApproxRuntimeEmitSliceSize(CGF, Slices[i], CurrentSlice);
+  }
+
+  return Dest;
+}
+
+void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::Value *Start, llvm::Value *Stop, llvm::Value *Step, Address Dest) {
+  auto DestBB = CGF.createBasicBlock("slice.size.dest");
+  auto IncBB = CGF.createBasicBlock("slice.size.inc");
+  QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(32, true);
+  ASTContext &C = CGM.getContext();
+  llvm::Value *StartValue = Start, *StopValue = Stop, *StepValue = Step;
+  llvm::Value *Size = nullptr;
+
+  // start - stop / step
+  llvm::Value *StopMinusStart = CGF.Builder.CreateNSWSub(StopValue, StartValue);
+  llvm::Value *StartMinusStopDivStep = CGF.Builder.CreateSDiv(StopMinusStart, StepValue);
+
+  Address SizeAddr = CGF.CreateMemTemp(Int32Ty, "slice.size");
+  CGF.EmitStoreOfScalar(StartMinusStopDivStep, SizeAddr, false, Int32Ty);
+
+  // if(StartMinusStopDivStep % Step == 0); ++Size;
+  llvm::Value *StartMinusStopDivStepModStep = CGF.Builder.CreateSRem(StartMinusStopDivStep, StepValue);
+  llvm::Value *IsModZero = CGF.Builder.CreateICmpEQ(StartMinusStopDivStepModStep, llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0));
+  CGF.Builder.CreateCondBr(IsModZero, DestBB, IncBB);
+  CGF.EmitBlock(IncBB);
+  llvm::Value *StartMinusStopDivStepPlusOne = CGF.Builder.CreateAdd(StartMinusStopDivStep, llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 1));
+  CGF.EmitStoreOfScalar(StartMinusStopDivStepPlusOne, SizeAddr, false, Int32Ty);
+  CGF.Builder.CreateBr(DestBB);
+
+
+  CGF.EmitBlock(DestBB);
+  Size = CGF.Builder.CreateLoad(SizeAddr);
+
+  CGF.EmitStoreOfScalar(Size, Dest, false, Int32Ty);
+}
+void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest) {
+  ApproxSliceExpr *SliceExpr = dyn_cast_or_null<ApproxSliceExpr>(Slice);
+  assert(SliceExpr && "Expected a slice expression");
+
+  llvm::Value *StartValue, *StopValue, *StepValue;
+  llvm::Value *Size = nullptr;
+
+  std::tie(StartValue, StopValue, StepValue) = getSliceExprValues(CGF, SliceExpr);
+  CGApproxRuntimeEmitSliceSize(CGF, StartValue, StopValue, StepValue, Dest);
+}
+
+void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice, Address SliceMemory) {
+  ApproxSliceExpr *SliceExpr = dyn_cast_or_null<ApproxSliceExpr>(Slice);
+  assert(SliceExpr && "Expected a slice expression");
+
+  ASTContext &C = CGM.getContext();
+  llvm::Value *StartVal, *StopVal, *StepVal;
+  std::tie(StartVal, StopVal, StepVal) = getSliceExprValues(CGF, SliceExpr);
+
+  // Twine InfoInstanceName = Twine("slice.info_") + Twine(numSlices);
+  // Address SliceMemory  = CGF.CreateMemTemp(SurrogateInfo.SliceInfoTy, InfoInstanceName);
+  const auto *SliceInfoRecord = SurrogateInfo.SliceInfoTy->getAsRecordDecl();
+  LValue SliceStart = CGF.MakeAddrLValue(SliceMemory, SurrogateInfo.SliceInfoTy);
+
+  LValue FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 0));
+    CGF.EmitStoreOfScalar(StartVal, FieldAddr);
+  
+
+  FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 1));
+    CGF.EmitStoreOfScalar(StopVal, FieldAddr);
+
+  FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 2));
+    CGF.EmitStoreOfScalar(StepVal, FieldAddr);
+
+  FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 3));
+  int AIVREChildKind = static_cast<int>(SliceExpr->getAIVREChildKind());
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), AIVREChildKind), FieldAddr);
+
+  // this next part is a little non-standard. Our slices may contain symbolic variables, and how and whether 
+  // it contains symbolic variables affects the shape representation of the slice. We need to store information
+  // that may affect the shape representation of the slice in the slice info struct. 
+  auto SymbolVars = ApproxDeclareTensorFunctorDecl::getDeclaredSymbolicVarsFromExpression(SliceExpr->getStart());
+  assert(SymbolVars.size() <= 1 && "Expected at most one symbolic variable in a slice");
+  int SymbolVarRepr = 0;
+
+  if(SymbolVars.size() == 1) {
+    ApproxIndexVarRefExpr *IndexVarRef = dyn_cast_or_null<ApproxIndexVarRefExpr>(SymbolVars[0]);
+    assert(IndexVarRef && "Expected an index variable reference");
+    SymbolVarRepr = IndexVarRef->getShapeRepresentation();
+  }
+
+  FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 4));
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), SymbolVarRepr), FieldAddr);
+  
+
+}
+
+
 void CGApproxRuntime::CGApproxRuntimeEmitDataValues(CodeGenFunction &CGF) {
   /// No Dependencies so exit.
   static int input_arrays = 0;
@@ -819,10 +1285,350 @@ void CGApproxRuntime::CGApproxRuntimeEmitDeclInit(
       // raise an error that says we hav enot implemented this yet
     }
 
+void CGApproxRuntime::mapSymbolicVarsToRanges(
+        SymbolVarInfoMap &InfoMap, llvm::ArrayRef<Expr *> FunctorSlice,
+        llvm::ArrayRef<Expr *> TensorSlice) {
 
-  void CGApproxRuntime::emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D) {
-    llvm::dbgs() << "Emitting tensor functor declaration for functor " << D->getName() << "\n";
+  size_t idx = 0;
+  for (auto *FS : FunctorSlice) {
+    auto FunctorSymbols =
+        ApproxDeclareTensorFunctorDecl::getDeclaredSymbolicVarsFromExpression(
+            FS);
+    std::unordered_set<std::string> SymbolNames;
+    for (auto *Symbol : FunctorSymbols) {
+        ApproxIndexVarRefExpr *First =
+            dyn_cast_or_null<ApproxIndexVarRefExpr>(Symbol);
+        SymbolNames.insert(std::string(First->getDeclName()));
+    }
+    assert(SymbolNames.size() == 1 &&
+           "Expected exactly one symbolic var in functor slice");
+    Expr *FunctorSymbol = FunctorSymbols[0];
+    std::string Name = *SymbolNames.begin();
+    // assign the range member of InfoMap at 'Name' to TensorSlice[idx]
+    auto it = InfoMap.find(Name);
+    if (it != InfoMap.end()) {
+        it->second.Range = (TensorSlice[idx]);
+        it->second.isFromRHS = true;
+    }
+    ++idx;
   }
-  void CGApproxRuntime::emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
-    llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName() << "\n";
+}
+
+Address CGApproxRuntime::EmitDeclarationOfSymbolVar(CodeGenFunction &CGF, ApproxIndexVarRefExpr *Symbol) {
+  assert(Symbol->hasDecl() && "Expected a symbol with a declaration");
+  VarDecl *SymbolDecl = *Symbol->getDecl();
+  QualType SymbolTy = SymbolDecl->getType();
+  llvm::StringRef SymbolName = SymbolDecl->getName();
+  CGF.EmitDecl(*SymbolDecl);
+  Address SymbolAddr = CGF.GetAddrOfLocalVar(SymbolDecl);
+  // Address SymbolAddr = CGF.CreateMemTemp(SymbolTy, SymbolName);
+
+  return SymbolAddr;
+}
+
+void CGApproxRuntime::EmitDeclarationOfSymbolVars(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Symbols) {
+  // For each slice element in TensorSlice, emit a declaration of the symbolic
+  // variables in the slice element
+  // For example, if TensorSlice is [i, j, k], then emit declarations for i, j, k
+  // Note that we want the same symbolic var in a slice to share the same declaration. For instance,
+  // we want to create one declaration for a slice like: [i*6*i*6+6]
+  for(Expr *E : Symbols) {
+    ApproxIndexVarRefExpr *First = dyn_cast_or_null<ApproxIndexVarRefExpr>(E);
+    assert(First && "Expected an index var ref expr");
+    auto SymbolDeclaredName = std::string(First->getDeclName());
+    if(SurrogateInfo.SymbolVars[SymbolDeclaredName].Addr.has_value()) {
+      // we have already emitted a declaration for this symbol
+      continue;
+    }
+
+
+    Address Location = EmitDeclarationOfSymbolVar(CGF, First);
+    SurrogateInfo.SymbolVars[SymbolDeclaredName].Addr = Location;
+  }
+}
+
+    void CGApproxRuntime::emitApproxDeclareTensorFunctor(
+        CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D) {
+  llvm::dbgs() << "Emitting tensor functor declaration for functor "
+               << D->getName() << "\n";
+  }
+
+
+  void CGApproxRuntime::initializeAndDeclareSymbolVars(ApproxDeclareTensorFunctorDecl *Decl, llvm::ArrayRef<Expr*> Vars) {
+    for(auto *Var : Vars) {
+      Decl->DeclareSymbolicVar(Var);
+      ApproxIndexVarRefExpr *First = dyn_cast_or_null<ApproxIndexVarRefExpr>(Var);
+      auto SymbolName = std::string(First->getDecl().value()->getName());
+      SurrogateInfo.SymbolVars[SymbolName] = SymbolVarInfo(First);
+    }
+
+  }
+
+  void addSymbolDeclarationsToNDSlice(ApproxDeclareTensorFunctorDecl *Decl, llvm::ArrayRef<Expr*> NDSlice) {
+      for (auto *Expr : NDSlice) {
+        ApproxSliceExpr *Slice = dyn_cast<ApproxSliceExpr>(Expr);
+        auto DeclaredSymbVars =
+            Decl->getDeclaredSymbolicVarsFromExpression(Slice);
+        // not all will have symbolic vars, e.g., [i, 0:6]
+        if(DeclaredSymbVars.size() == 0) {
+          continue;
+        }
+        auto SymbVars = Decl->getSymbolicVarsFromExpression(Slice);
+
+        auto *AIVRE =
+            dyn_cast_or_null<ApproxIndexVarRefExpr>(DeclaredSymbVars[0]);
+        auto *Decl = AIVRE->getDecl().value();
+        auto VarName = std::string(AIVRE->getName());
+
+        for (auto *Symbol : SymbVars) {
+          ApproxIndexVarRefExpr *ThisSymbol =
+              dyn_cast_or_null<ApproxIndexVarRefExpr>(Symbol);
+          if (!ThisSymbol->hasDecl()) {
+            assert(std::string(ThisSymbol->getName()) == VarName &&
+                   "Expected the same symbol in a slice to have the same name");
+            ThisSymbol->setDecl(Decl);
+          }
+        }
+      }
+
+  }
+
+  void addSymbolDeclarationsToSlices(ApproxDeclareTensorFunctorDecl *Decl) {
+    auto RHS = Decl->getRHSSlices();
+    for (auto &NDSlice : RHS) {
+      addSymbolDeclarationsToNDSlice(Decl, NDSlice);
+    }
+
+    auto LHS = Decl->getLHSSlice();
+    addSymbolDeclarationsToNDSlice(Decl, LHS);
+  }
+
+
+Address CGApproxRuntime::CGApproxRuntimeCreateVoidPtrArray(CodeGenFunction &CGF, llvm::ArrayRef<Address> Vars) {
+  size_t num_vars = Vars.size();
+  // we want to create an array of type "void *" that holds all addresses in Vars
+  // we will then return the address of this array
+
+  QualType VoidPtrArrayType = CGF.getContext().getConstantArrayType(
+      CGF.getContext().VoidPtrTy, llvm::APInt(64, num_vars), nullptr,
+      ArrayType::Normal, 0);
+  Address Array = CGF.CreateMemTemp(VoidPtrArrayType, "allocated_ptrs");
+
+  for(size_t i = 0; i < num_vars; i++) {
+    Address ElementPtr = CGF.Builder.CreateConstArrayGEP(Array, i);
+    CGF.Builder.CreateStore(Vars[i].getPointer(), ElementPtr);
+  }
+
+  return Array;
+}
+
+void CGApproxRuntime::CGApproxRuntimeEmitSliceConversion(
+    CodeGenFunction &CGF, size_t NumVals, Address TensorCollection,
+    Address FunctorCollection) {
+      Function *Fn = nullptr;
+      StringRef FnName("__approx_runtime_slice_conversion");
+      Fn = CGM.getModule().getFunction(FnName);
+      if(!Fn) {
+        Fn = Function::Create(SurrogateInfo.ConvertSliceInfoFnTy,
+                          llvm::Function::ExternalLinkage, FnName,
+                          CGM.getModule());
+      }
+
+      auto *NumValsArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, NumVals));
+      llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertSliceInfoFnTy, Fn});
+      llvm::Value *TensorCollectionValue = CGF.Builder.CreatePointerCast(TensorCollection.getPointer(), CGF.VoidPtrTy);
+      llvm::Value *FunctorCollectionValue = CGF.Builder.CreatePointerCast(FunctorCollection.getPointer(), CGF.VoidPtrTy);
+      CGF.EmitRuntimeCall(FnCallee, {NumValsArg, TensorCollectionValue, FunctorCollectionValue});
+    }
+
+void CGApproxRuntime::CGApproxRuntimeEmitHigherOrderShapeConversion(
+  CodeGenFunction &CGF, size_t NumVals, Address TensorCollection,
+  Address FunctorCollection) {
+    Function *Fn = nullptr;
+    StringRef FnName("__approx_runtime_convert_to_higher_order_shapes");
+    Fn = CGM.getModule().getFunction(FnName);
+    if(!Fn) {
+      Fn = Function::Create(SurrogateInfo.ConvertToHigherOrderShapeFnTy,
+                        llvm::Function::ExternalLinkage, FnName,
+                        CGM.getModule());
+    }
+
+  auto *NumValsArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, NumVals));
+  llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertToHigherOrderShapeFnTy, Fn});
+  llvm::Value *TensorCollectionValue = CGF.Builder.CreatePointerCast(TensorCollection.getPointer(), CGF.VoidPtrTy);
+  llvm::Value *FunctorCollectionValue = CGF.Builder.CreatePointerCast(FunctorCollection.getPointer(), CGF.VoidPtrTy);
+  CGF.EmitRuntimeCall(FnCallee, {NumValsArg, TensorCollectionValue, FunctorCollectionValue});
+
+}
+
+namespace {
+  class TensorCleanupTy final : public EHScopeStack::Cleanup {
+    public:
+      static const int TensorCleanupFinArgs = 1;
+
+    private:
+      llvm::FunctionCallee RTLFn;
+      llvm::Value *Args[TensorCleanupFinArgs];
+
+    public:
+      TensorCleanupTy(llvm::FunctionCallee RTLFN, ArrayRef<llvm::Value *> CallArgs) : RTLFn{RTLFN} {
+        assert(CallArgs.size() == TensorCleanupFinArgs && "Expected 1 argument for tensor cleanup");
+        std::copy(CallArgs.begin(), CallArgs.end(), std::begin(Args));
+      }
+    
+      void Emit(CodeGenFunction &CGF, Flags) override {
+        CGF.EmitRuntimeCall(RTLFn, Args);
+      }
+};
+} //namespace
+
+void CGApproxRuntime::emitApproxDeclareTensor(
+    CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
+  llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName()
+               << "\n";
+
+  auto *TensorFunctor =
+      dyn_cast<ApproxDeclareTensorFunctorDecl>(D->getFunctor());
+  auto IndexRefExprsRHS = TensorFunctor->getSymbolicVarsUniqueToEachSlice();
+  auto IndexRefExprsLHS = TensorFunctor->getSymbolicVarsUniqueToEachLHSSlice();
+  initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsRHS);
+  initializeAndDeclareSymbolVars(TensorFunctor, IndexRefExprsLHS);
+  addSymbolDeclarationsToSlices(TensorFunctor);
+  EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsRHS);
+  EmitDeclarationOfSymbolVars(*CGF, IndexRefExprsLHS);
+
+  auto RHS = TensorFunctor->getRHSSlices();
+  auto LHS = TensorFunctor->getLHSSlice();
+
+  auto ArrSlices = D->getArraySlices();
+  assert(RHS.size() == ArrSlices.size() &&
+         "Expected same number of RHS slices and array slices");
+  for (size_t i = 0; i < RHS.size(); i++) {
+    ApproxArraySliceExpr *Slice = dyn_cast<ApproxArraySliceExpr>(ArrSlices[i]);
+    assert(Slice && "Expected an array slice expression");
+    auto SliceVals = Slice->getSlices();
+    mapSymbolicVarsToRanges(SurrogateInfo.SymbolVars, RHS[i], SliceVals);
+  }
+  CGApproxRuntimeEmitSymbolicVarInits(*CGF);
+
+  std::vector<Address> TensorDeclAddresses;
+  std::vector<Address> FunctorDeclRHSAddresses;
+
+  for (auto *E : D->getArraySlices()) {
+    auto *ArraySlices = dyn_cast<ApproxArraySliceExpr>(E);
+    auto Addr = CGApproxRuntimeEmitApproxArrayInfo(*CGF, ArraySlices);
+    TensorDeclAddresses.push_back(Addr);
+  }
+
+  for (auto *E : TensorFunctor->getRHSSliceExprs()) {
+    auto *Slice = dyn_cast<ApproxArraySliceExpr>(E);
+    auto Addr = CGApproxRuntimeEmitApproxArrayInfo(*CGF, Slice);
+    FunctorDeclRHSAddresses.push_back(Addr);
+  }
+
+  assert(TensorDeclAddresses.size() == FunctorDeclRHSAddresses.size() &&
+         "Expected same number of tensor decl addresses and functor decl "
+         "addresses");
+
+  auto TensorCollectionAddr =
+      CGApproxRuntimeCreateVoidPtrArray(*CGF, TensorDeclAddresses);
+  auto FunctorCollectionAddr =
+      CGApproxRuntimeCreateVoidPtrArray(*CGF, FunctorDeclRHSAddresses);
+
+  CGApproxRuntimeEmitSliceConversion(*CGF, TensorDeclAddresses.size(),
+                                     TensorCollectionAddr,
+                                     FunctorCollectionAddr);
+  CGApproxRuntimeEmitHigherOrderShapeConversion(*CGF, TensorDeclAddresses.size(),
+                                     TensorCollectionAddr,
+                                     FunctorCollectionAddr);
+
+  auto LHSSliceAddress = CGApproxRuntimeEmitSlices(*CGF, LHS);
+  auto LHSShapeAddress = CGApproxRuntimeEmitLHSShape(*CGF, LHS);
+
+  CGApproxRuntimeSubstituteAIVRInShapes(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress);
+
+  Address InternalRepr = CGApproxRuntimeEmitInternalReprConversion(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress, FunctorDeclRHSAddresses.size(),
+                                            FunctorCollectionAddr);
+  llvm::Value *InternalReprValue = CGF->Builder.CreatePointerCast(InternalRepr.getPointer(), CGF->VoidPtrTy);
+
+
+  llvm::FunctionCallee CleanFNCall = getTensorCleanupFn(CGM);
+  llvm::SmallVector<llvm::Value *, 1> CallArgs;
+  CGF->EHStack.pushCleanup<TensorCleanupTy>(NormalAndEHCleanup, CleanFNCall, llvm::makeArrayRef(InternalReprValue));
+
+  }
+
+llvm::FunctionCallee CGApproxRuntime::getTensorCleanupFn(CodeGenModule &CGM) {
+  Function *Fn = nullptr;
+  StringRef FnName("__approx_runtime_tensor_cleanup");
+  Fn = CGM.getModule().getFunction(FnName);
+  if(!Fn) {
+    Fn = Function::Create(SurrogateInfo.TensorCleanupFnTy,
+                      llvm::Function::ExternalLinkage, FnName,
+                      CGM.getModule());
+  }
+
+  llvm::FunctionCallee FnCallee({SurrogateInfo.TensorCleanupFnTy, Fn});
+  return FnCallee;
+}
+  
+
+  void CGApproxRuntime::CGApproxRuntimeSubstituteAIVRInShapes(CodeGenFunction& GF, int ndim, Address Slices, Address Shapes) {
+    Function *Fn = nullptr;
+    StringRef FnName("__approx_runtime_substitute_aivr_in_shapes");
+    Fn = CGM.getModule().getFunction(FnName);
+    if(!Fn) {
+      Fn = Function::Create(SurrogateInfo.SubstituteAIVRInShapesFnTy,
+                        llvm::Function::ExternalLinkage, FnName,
+                        CGM.getModule());
+    }
+
+    llvm::FunctionCallee FnCallee({SurrogateInfo.SubstituteAIVRInShapesFnTy, Fn});
+    llvm::Value *NumDimsArg = llvm::ConstantInt::get(GF.Builder.getInt32Ty(), llvm::APInt(32, ndim));
+    llvm::Value *SlicesValue = GF.Builder.CreatePointerCast(Slices.getPointer(), GF.VoidPtrTy);
+    llvm::Value *ShapesValue = GF.Builder.CreatePointerCast(Shapes.getPointer(), GF.VoidPtrTy);
+    GF.EmitRuntimeCall(FnCallee, {NumDimsArg, SlicesValue, ShapesValue});
+  }
+  Address CGApproxRuntime::CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int nargsLHS, Address LHSSlices, Address LHSShapes,
+      int nargsRHS, Address RHSAddress) {
+    Function *Fn = nullptr;
+    StringRef FnName("__approx_runtime_convert_to_internal_representation");
+    Fn = CGM.getModule().getFunction(FnName);
+    if(!Fn) {
+      Fn = Function::Create(SurrogateInfo.ConvertTensorToInternalReprFnTy,
+                        llvm::Function::ExternalLinkage, FnName,
+                        CGM.getModule());
+    }
+
+
+    llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertTensorToInternalReprFnTy, Fn});
+    llvm::Value *NumArgsLHSArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, nargsLHS));
+    llvm::Value *SlicesLHSArg = CGF.Builder.CreatePointerCast(LHSSlices.getPointer(), CGF.VoidPtrTy);
+    llvm::Value *ShapesLHSArg = CGF.Builder.CreatePointerCast(LHSShapes.getPointer(), CGF.VoidPtrTy);
+
+    llvm::Value *NumArgsRHSArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, nargsRHS));
+    llvm::Value *RHSArg = CGF.Builder.CreatePointerCast(RHSAddress.getPointer(), CGF.VoidPtrTy);
+    auto *RetVal = CGF.EmitRuntimeCall(FnCallee, {NumArgsLHSArg, SlicesLHSArg, ShapesLHSArg, NumArgsRHSArg, RHSArg});
+    return Address(RetVal, CGF.VoidPtrTy, CGF.getPointerAlign());
+  }
+
+  Address CGApproxRuntime::CGApproxRuntimeAllocInternalReprMetadata(CodeGenFunction& CGF, int numArgs) {
+    ASTContext &C = CGM.getContext();
+    int numArgsAfterConversion = numArgs > 1 ? numArgs + 1 : 1;
+
+    Twine ReprName = "internal_repr_";
+    auto *ReprDecl = SurrogateInfo.InternalReprMetadataTy->getAsRecordDecl();
+    auto InternalRepr = CGF.CreateMemTemp(SurrogateInfo.InternalReprMetadataTy, ReprName);
+    auto InternalReprAddr = CGF.MakeAddrLValue(InternalRepr, SurrogateInfo.InternalReprMetadataTy);
+
+    LValue Base = CGF.EmitLValueForField(InternalReprAddr, *ReprDecl->field_begin());
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, numArgs, true)), Base);
+
+    Base = CGF.EmitLValueForField(InternalReprAddr, *std::next(ReprDecl->field_begin(), 1));
+    Base = CGF.EmitLValueForField(InternalReprAddr, *std::next(ReprDecl->field_begin(), 2));
+
+    llvm::Value *NullPtr = llvm::ConstantPointerNull::get(CGM.VoidPtrTy);
+    CGF.EmitStoreOfScalar(NullPtr, Base);
+
+    return InternalRepr;
   }

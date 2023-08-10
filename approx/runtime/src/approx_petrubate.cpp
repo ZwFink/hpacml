@@ -150,7 +150,7 @@ class PetrubateMap{
         }
     void petrubate(uintptr_t address, approx_var_info_t *arguments, int num_arguments, const char *label);
     void record(uintptr_t address, approx_var_info_t *arguments, int num_arguments, const char *label);
-    int getExecutionType() { return execution_type; }
+    int getExecutionType() {return -1;}
 };
 
 void 

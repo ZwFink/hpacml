@@ -18,17 +18,42 @@
 
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/ExprApprox.h"
 #include "clang/AST/ExternalASTSource.h"
 #include "clang/AST/Type.h"
+#include "clang/Basic/Approx.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/TrailingObjects.h"
-#include "clang/Basic/Approx.h"
+#include <unordered_set>
 
 // TOOD: This is a hack, this must match the definitions in Parser.h
 using ApproxNDTensorSlice = llvm::SmallVector<clang::Expr *, 8>;
 using ApproxNDTensorSliceCollection = llvm::SmallVector<ApproxNDTensorSlice, 16>;
 
 namespace clang {
+
+  class LeafExprCollector {
+public:
+  std::vector<clang::Expr*> Leafs;
+
+  void Collect(clang::Expr *E) {
+    if (E == nullptr) {
+      return;
+    }
+
+    // If the expression has no children, it's a leaf.
+    if (E->child_begin() == E->child_end()) {
+      Leafs.push_back(E);
+    } else {
+      // Otherwise, recurse on its children.
+      for (auto it = E->child_begin(), end = E->child_end(); it != end; ++it) {
+        if (clang::Expr *child = llvm::dyn_cast_or_null<clang::Expr>(*it)) {
+          Collect(child);
+        }
+      }
+    }
+  }
+};
 
 class ApproxDecl {
   SourceLocation StartLoc;
@@ -73,16 +98,53 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
   std::string FunctorName;
   ApproxNDTensorSlice LHSSlice;
   ApproxNDTensorSliceCollection RHSSlices;
+  Expr *LHSSliceExpr = nullptr;
+  llvm::SmallVector<Expr*, 16> RHSSliceExprs;
+  mutable std::optional<llvm::SmallVector<Expr *, 16>> SymbolicVars;
 
     ApproxDeclareTensorFunctorDecl(SourceLocation StartLoc, SourceLocation EndLoc,
                             DeclarationName FunctorName,
                             DeclContext *DC,
                             QualType T,
-                            ApproxNDTensorSlice LHSSlice,
-                            ApproxNDTensorSliceCollection RHSSlices)
+                            Expr *LHSSlice,
+                            llvm::ArrayRef<Expr*> RHSSlices)
         : ApproxDecl(approx::DK_TF, StartLoc, EndLoc),
           ValueDecl{Decl::Kind::ApproxDeclareTensorFunctor, DC, StartLoc, FunctorName, T},
-          FunctorName{FunctorName.getAsString()}, LHSSlice{LHSSlice}, RHSSlices{RHSSlices} {}
+          FunctorName{FunctorName.getAsString()}, LHSSliceExpr{LHSSlice}, RHSSliceExprs{RHSSlices} {
+            copySlicesFromAASE(this->LHSSlice, LHSSlice);
+            initializeRHSExprs(RHSSlices);
+            // createSymbolicVarDecls();
+          }
+
+    template<typename SV>
+    void copySlicesFromAASE(SV& Vec, Expr *E) {
+      ApproxArraySliceExpr *AASE = cast<ApproxArraySliceExpr>(E);
+      for (auto *Slice : AASE->getSlices()) {
+        Vec.push_back(Slice);
+      }
+    }
+
+    void initializeRHSExprs(llvm::ArrayRef<Expr*> RHSSlices) {
+      for (auto *E : RHSSlices) {
+        ApproxNDTensorSlice Slice;
+        copySlicesFromAASE(Slice, E);
+        this->RHSSlices.push_back(Slice);
+      }
+    }
+
+    ApproxNDTensorSliceCollection getSlicesFromExprCollection(llvm::ArrayRef<Expr*> Exprs) {
+      ApproxNDTensorSliceCollection Slices;
+      for (auto *E : Exprs) {
+        ApproxNDTensorSlice Slice;
+        LeafExprCollector LeafCollector;
+        LeafCollector.Collect(E);
+        for (auto *Leaf : LeafCollector.Leafs) {
+          Slice.push_back(Leaf);
+        }
+        Slices.push_back(Slice);
+      }
+      return Slices;
+    }
 
     // build an empty clause 
     ApproxDeclareTensorFunctorDecl()
@@ -90,12 +152,65 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
         ValueDecl{Decl::Kind::ApproxDeclareTensorFunctor, nullptr, SourceLocation(), DeclarationName(), QualType()},
         FunctorName{}, LHSSlice{}, RHSSlices{} {}
 
+
+
+    VarDecl *_DeclareSymbolicVar(Expr *Var) {
+      ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(Var);
+      assert(IndexVar && "Attempt to declare a non-index variable as symbolic");
+      IdentifierInfo *Id = createIdentifierForSymbolicVar(getASTContext(), Var);
+      ASTContext &C = getASTContext();
+      DeclContext *DC = getDeclContext();
+      VarDecl *SymbolicVar = VarDecl::Create(getASTContext(), DC, IndexVar->getBeginLoc(),
+                                             IndexVar->getEndLoc(), Id, C.getIntTypeForBitwidth(32, false), nullptr, SC_None);
+      return SymbolicVar;
+    }
+
+    #if 0
+    // this implementation incorrectly assumes that all appearances of symbolic vars 
+    // on the RHS must have the same range. Under this assumption, it creates one 
+    // declaration for each symbolic var. However, the true requirement is that
+    // all appearances of symbolic vars on the RHS must have the same /shape/.
+    void createSymbolicVarDecls() {
+      std::unordered_map<std::string, VarDecl *> SymbolicVarDecls;
+      for (auto *Var : getUniqueSymbolicVars()) {
+        auto *Decl = DeclareSymbolicVar(Var);
+        ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(Var);
+        SymbolicVarDecls[std::string(IndexVar->getName())] = Decl;
+      }
+
+      for(auto *Var : getSymbolicVars()) {
+        ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(Var);
+        auto *Decl = SymbolicVarDecls[std::string(IndexVar->getName())];
+        IndexVar->setDecl(Decl);
+      }
+    }
+    #endif
+
+    void createSymbolicVarDecls() {
+
+      for(auto *Var : getSymbolicVars()) {
+        auto *Decl = _DeclareSymbolicVar(Var);
+        ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(Var);
+        IndexVar->setDecl(Decl);
+      }
+    }
+
+    static IdentifierInfo *createIdentifierForSymbolicVar(ASTContext &C, Expr * E) {
+      ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(E);
+      static int Counter = 0;
+      assert(IndexVar && "Attempt to declare a non-index variable as symbolic");
+      auto DeclName = std::string(IndexVar->getIdentifier()->getName());
+      // we'll let clang disambiguate when the same symbolic var has multiple declarations
+      std::string Name = "symbolicRefExpr_" + DeclName + "_" + std::to_string(Counter++);
+      return &C.Idents.get(Name);
+    }
+
   public:
     static ApproxDeclareTensorFunctorDecl *
     Create(ASTContext &C, DeclContext *DC, SourceRange SR,
            DeclarationName FunctorName, QualType T,
-           ApproxNDTensorSlice LHSSlice,
-           ApproxNDTensorSliceCollection RHSSlices);
+           Expr *LHSSlice,
+           llvm::ArrayRef<Expr*> RHSSlices);
 
     static bool classof(const ApproxDecl *T) {
       return T->getDeclKind() == approx::DK_TF;
@@ -125,11 +240,151 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
 
     llvm::ArrayRef<Expr*> getLHSSlice() const {return LHSSlice;}
     ApproxNDTensorSliceCollection &getRHSSlices() {return RHSSlices;}
+    llvm::ArrayRef<Expr*> getRHSSliceExprs() const {
+      return RHSSliceExprs;
+    }
 
     static bool classof(const Decl *D) {
       return classofKind(D->getKind());
     }
     static bool classofKind(Decl::Kind K) { return K == Decl::Kind::ApproxDeclareTensorFunctor; }
+
+    llvm::SmallVector<Expr *, 16> getSymbolicVars() const {
+      if(SymbolicVars.has_value()) {
+        return *SymbolicVars;
+      }
+      llvm::SmallVector<Expr *, 16> Vars;
+      LeafExprCollector Collector;
+      // for(auto *Expr : LHSSlice) {
+        // Collector.Collect(Expr);
+      // }
+      for (auto Slice : RHSSlices) {
+        for (auto *E : Slice) {
+          E->dump();
+          Collector.Collect(E);
+        }
+      }
+
+      auto &Leafs = Collector.Leafs;
+      for(auto *Leaf : Leafs) {
+        if (isa<ApproxIndexVarRefExpr>(Leaf)) {
+          Vars.push_back(Leaf);
+        }
+      }
+      SymbolicVars = std::make_optional(Vars);
+      return *SymbolicVars;
+    }
+
+    static llvm::SmallVector<Expr*, 4> getSymbolicVarsFromExpression(Expr *E) {
+      llvm::SmallVector<Expr*, 4> Vars;
+      LeafExprCollector Collector;
+      Collector.Collect(E);
+      auto &Leafs = Collector.Leafs;
+      for(auto *Leaf : Leafs) {
+        if (isa<ApproxIndexVarRefExpr>(Leaf)) {
+          Vars.push_back(Leaf);
+        }
+      }
+      return Vars;
+    } 
+
+    static llvm::SmallVector<Expr *, 4> getDeclaredSymbolicVarsFromExpression(Expr *E) {
+      auto Vars = getSymbolicVarsFromExpression(E);
+      llvm::SmallVector<Expr *, 4> DeclaredVars;
+      for(auto *Var : Vars) {
+        if (cast<ApproxIndexVarRefExpr>(Var)->getDecl().has_value()) {
+          DeclaredVars.push_back(Var);
+        }
+      }
+      return DeclaredVars;
+    }
+
+    llvm::SmallVector<Expr *, 16> getUniqueSymbolicVars() const {
+      llvm::SmallVector<Expr *, 16> UniqueVars;
+      std::unordered_set<std::string> VarNames;
+      auto Vars = getSymbolicVars();
+      for (auto *Var : Vars) {
+        auto Name = std::string(cast<ApproxIndexVarRefExpr>(Var)->getDecl().value()->getName());
+        if (VarNames.find(Name) == VarNames.end()) {
+          VarNames.insert(Name);
+          UniqueVars.push_back(Var);
+        }
+      }
+      return UniqueVars;
+    }
+
+    void createSymbolicVarDeclsForExpression(Expr *E) {
+      auto Vars = getSymbolicVarsFromExpression(E);
+      std::unordered_map<std::string, VarDecl *> SymbolicVarDecls;
+      for(auto *Var : Vars) {
+        ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(Var);
+        auto Name = std::string(IndexVar->getName());
+        if (SymbolicVarDecls.find(Name) == SymbolicVarDecls.end()) {
+          auto *Decl = _DeclareSymbolicVar(Var);
+          SymbolicVarDecls[Name] = Decl;
+        } else {
+          auto *Decl = SymbolicVarDecls[Name];
+          cast<ApproxIndexVarRefExpr>(Var)->setDecl(Decl);
+        }
+      }
+    }
+
+    llvm::SmallVector<Expr*, 16> getFlattenedRHSSlices() const {
+      llvm::SmallVector<Expr*, 16> LinearizedSlices;
+      for(auto Slice : RHSSlices) {
+        for(auto *E : Slice) {
+          LinearizedSlices.push_back(E);
+        }
+      }
+      return LinearizedSlices;
+    }
+
+    template<typename InsertIterator>
+    void getSymbolicVarsUniqueToExpression(InsertIterator I, Expr * E) {
+      auto Vars = getSymbolicVarsFromExpression(E);
+      std::unordered_set<std::string> SymbolicVarDecls;
+      for(auto *Var : Vars) {
+        ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(Var);
+        auto Name = std::string(IndexVar->getName());
+        if (SymbolicVarDecls.find(Name) == SymbolicVarDecls.end()) {
+          SymbolicVarDecls.insert(Name);
+          *I++ = Var;
+        }
+      }
+
+    }
+
+    llvm::SmallVector<Expr*, 16> getSymbolicVarsUniqueToEachLHSSlice() {
+      llvm::SmallVector<Expr*, 16> UniqueVars;
+      for(auto *E : LHSSlice) {
+        getSymbolicVarsUniqueToExpression(std::back_inserter(UniqueVars), E);
+      }
+      return UniqueVars;
+    }
+
+    llvm::SmallVector<Expr*, 16> getSymbolicVarsUniqueToEachRHSSlice() {
+      llvm::SmallVector<Expr *, 16> UniqueVars;
+      for (auto NDSlice : RHSSlices) {
+        for (auto *E : NDSlice) {
+          getSymbolicVarsUniqueToExpression(std::back_inserter(UniqueVars), E);
+        }
+      }
+      return UniqueVars;
+    }
+
+    llvm::SmallVector<Expr*, 16> getSymbolicVarsUniqueToEachSlice(bool RHS=true) {
+      if(RHS)
+        return getSymbolicVarsUniqueToEachRHSSlice();
+      else
+        return getSymbolicVarsUniqueToEachLHSSlice();
+    }
+
+    void DeclareSymbolicVar(Expr *E) {
+      auto *Decl = _DeclareSymbolicVar(E);
+      ApproxIndexVarRefExpr *IndexVar = cast<ApproxIndexVarRefExpr>(E);
+      IndexVar->setDecl(Decl);
+    }
+
 
 };
 
@@ -195,7 +450,7 @@ class ApproxDeclareTensorDecl final : public ApproxDecl, public ValueDecl {
   Decl *getFunctor() const {return TensorFunctor;}
   void setFunctor(Decl *Functor) {TensorFunctor = Functor;}
 
-  llvm::ArrayRef<Expr*> getArraySlices() {return ArraySlices;}
+  llvm::ArrayRef<Expr*> getArraySlices() const {return ArraySlices;}
 };
 
 
