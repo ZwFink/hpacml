@@ -41,7 +41,7 @@ target_link_libraries(approx PRIVATE OpenMP::OpenMP_CXX)
 # set to RelWithDebInfo
 set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
-# find_package(nlohmann_json 3.2.0 REQUIRED)
+find_package(nlohmann_json 3.2.0 REQUIRED)
 find_package(HDF5 NAMES hdf5 COMPONENTS C shared REQUIRED NO_DEFAULT_PATH PATHS ${HDF5_Dir} ${HDF5_Dir}/share/cmake)
 
 
@@ -70,8 +70,7 @@ target_link_libraries(approx PRIVATE ${HDF5_LIBRARIES})
 target_link_libraries(approx PRIVATE ${TORCH_LIBRARIES})
 message(STATUS "Torch libraries dir: ${TORCH_LIBRARIES}")
 
-# link hdf5
-# target_link_libraries(approx PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(approx PRIVATE nlohmann_json::nlohmann_json)
 
 message("PACKAGE VERSION is: ${PACKAGE_VERSION}")
 string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION ${PACKAGE_VERSION})
