@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.14 FATAL_ERROR)
+project(approx LANGUAGES CXX C CUDA)
 set( CMAKE_VERBOSE_MAKEFILE on )
 
 # CMAKE_BUILD_TYPE was not set, default to Release.
