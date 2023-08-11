@@ -235,6 +235,9 @@ static void getNDArraySliceTy(ASTContext &C, QualType &SliceTy, QualType &ShapeT
     // the shape info, just an array of integers
     addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(ShapeTy));
 
+    // shapes after substituting approx index var ref expressions
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(ShapeTy));
+
     NDArraySliceRD->completeDefinition();
     NDArraySliceTy = C.getRecordType(NDArraySliceRD);
   }
@@ -974,11 +977,19 @@ Expr *AAIE) {
       CGF.Builder.CreatePtrToInt(SlicesStruct.getPointer(), CGF.IntPtrTy),
       FieldAddr);
 
-  Address ShapesStruct = CGApproxRuntimeEmitShape(CGF, ArraySlices);
+  Address ShapesStruct = CGApproxRuntimeEmitShapeWithAIVRExpansion(CGF, ArraySlices);
   FieldAddr = CGF.EmitLValueForField(
       ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 4));
   CGF.EmitStoreOfScalar(
       CGF.Builder.CreatePtrToInt(ShapesStruct.getPointer(), CGF.IntPtrTy),
+      FieldAddr);
+
+  // we have a second shape struct that we store shapes with AIVR substituted in
+  Address ShapesStructSecondary = CGApproxRuntimeEmitShapeWithAIVRExpansion(CGF, ArraySlices);
+  FieldAddr = CGF.EmitLValueForField(
+      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 5));
+  CGF.EmitStoreOfScalar(
+      CGF.Builder.CreatePtrToInt(ShapesStructSecondary.getPointer(), CGF.IntPtrTy),
       FieldAddr);
 
   numArraysCreated++;
@@ -1072,7 +1083,7 @@ Address CGApproxRuntime::CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int 
   return TensorShape;
 }
 
-Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
+Address CGApproxRuntime::CGApproxRuntimeEmitShapeWithAIVRExpansion(CodeGenFunction &CGF,
                                                       llvm::ArrayRef<Expr*> Slices) {
   auto numSlices = Slices.size();
 
@@ -1096,7 +1107,7 @@ Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
 
 }
 
-Address CGApproxRuntime::CGApproxRuntimeEmitLHSShape(CodeGenFunction &CGF,
+Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,
 llvm::ArrayRef<Expr*> Slices) {
   auto numSlices = Slices.size();
   Address AllocatedShapeStruct = CGApproxRuntimeAllocateShape(CGF, numSlices);
@@ -1543,7 +1554,7 @@ void CGApproxRuntime::emitApproxDeclareTensor(
                                      FunctorCollectionAddr);
 
   auto LHSSliceAddress = CGApproxRuntimeEmitSlices(*CGF, LHS);
-  auto LHSShapeAddress = CGApproxRuntimeEmitLHSShape(*CGF, LHS);
+  auto LHSShapeAddress = CGApproxRuntimeEmitShape(*CGF, LHS);
 
   CGApproxRuntimeSubstituteAIVRInShapes(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress);
 

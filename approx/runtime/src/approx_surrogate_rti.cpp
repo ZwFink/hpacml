@@ -5,6 +5,9 @@
 #include <cstring>
 #include <vector>
 #include <algorithm>
+#include "approx_surrogate.h"
+
+using Tensor = AbstractTensor<TorchTensorImpl>;
 
 
 std::vector<int> get_transpose_vector(std::vector<int>& newShape, std::vector<int>& shape) {
@@ -22,7 +25,6 @@ std::vector<int> get_transpose_vector(std::vector<int>& newShape, std::vector<in
 
 	return extended;
 }
-
 extern "C" {
 
 void __approx_runtime_tensor_cleanup(void*) {
@@ -71,6 +73,19 @@ std::ostream &operator<<(std::ostream &os, const tensor_shape_t &shape) {
         return os;
 }
 
+std::vector<int64_t> get_shape_from_slices(int nargs, slice_info_t *slices) {
+	std::vector<int64_t> shape;
+	for(int i = 0; i < nargs; i++) {
+		int shp = (slices[i].stop - slices[i].start) / slices[i].step;
+		if(shp % slices[i].step != 0) {
+			shp++;
+		}
+		shape.push_back(shp);
+	}
+	return shape;
+}
+
+
 extern "C" {
 
 typedef struct array_info {
@@ -82,14 +97,20 @@ typedef struct array_info {
 	// the cost is low and we don't have to re-allocate the shapes for the
 	// RHS when doing our analysis
 	tensor_shape_t *shapes;
+	tensor_shape_t *shapes_aivrsubstituted;
 
 	tensor_shape_t &shape() {
 		return *shapes;
 	}
 
+	tensor_shape_t &aivrshape() {
+		return *shapes_aivrsubstituted;
+	}
+
 	void set_ndim(int ndim) {
 		this->ndim = ndim;
 		this->shapes->ndim = ndim;
+		this->shapes_aivrsubstituted->ndim = ndim;
 	}
 } array_info_t;
 
@@ -121,15 +142,46 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
 		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
 		std::vector<int> RHSShape;
-		RHSShape.assign(argRHS.shapes->shapes, argRHS.shapes->shapes + argRHS.shapes->ndim);
+		RHSShape.assign(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->shapes + argRHS.shapes_aivrsubstituted->ndim);
 		auto transpose_vec = get_transpose_vector(LHSShape, RHSShape);
-		std::cout << "To transform shape: " << *argRHS.shapes << " to " << *shapesLHS << "\n";
+		std::cout << "To transform shape: " << *argRHS.shapes_aivrsubstituted << " to " << *shapesLHS << "\n";
 		for(int i = 0; i < transpose_vec.size(); i++) {
 			std::cout << transpose_vec[i] << " ";
 		}
 		std::cout << "\n";
 
 	}
+
+	std::vector<Tensor::tensor_t> RHSTensors;
+	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
+		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
+		// auto SHP = get_shape_from_slices(argRHS.shapes->ndim, argRHS.slices);
+		std::vector<int> SHP{argRHS.shapes->shapes, argRHS.shapes->shapes + argRHS.shapes->ndim};
+		std::vector<long int> SHP2;
+		std::vector<int> RHSShape;
+		RHSShape.assign(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->shapes + argRHS.shapes_aivrsubstituted->ndim);
+		auto transpose_vec_ = get_transpose_vector(LHSShape, RHSShape);
+		std::vector<long int> transpose_vec;
+		int SHP_idx = 0;
+		for(int i = 0; i < argRHS.shapes->ndim; i++) {
+			if(argRHS.shapes->shapes[i] < 0) {
+				argRHS.shapes->shapes[i] = SHP[SHP_idx];
+				SHP_idx++;
+			}
+			SHP2.push_back((long int) argRHS.shapes->shapes[i]);
+		}
+
+		for(auto i : transpose_vec_) {
+			transpose_vec.push_back((long int) i);
+		}
+		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP2, Tensor::float32);
+		blob = Tensor::transpose(blob, Tensor::makeArrayRef(transpose_vec.data(), transpose_vec.size()));
+
+		RHSTensors.push_back(blob);
+	}
+	Tensor::tensor_t *RHSTensor = new Tensor::tensor_t();
+	*RHSTensor = Tensor::cat(RHSTensors, -1);
+	std::cout << "Final tensor is: " << RHSTensor->sizes();;
 
 	return nullptr;
 }
@@ -185,12 +237,17 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 				// we need to turn this into [N,3]. To do this, we need to 
 				// find 3 by dividing N*3/N
 				int inner = shape_copy[i] / ipt_memory_info.shape()[i];
-				tensor_info.shape()[AIVRInsertPoint] = t_slice.aivrerepr;
+				tensor_info.shape()[AIVRInsertPoint] = ipt_memory_info.shape()[i];
 				tensor_info.shape()[slice_insert_pt] = inner;
+
+				tensor_info.aivrshape()[AIVRInsertPoint] = t_slice.aivrerepr;
+				tensor_info.aivrshape()[slice_insert_pt] = inner;
+
 				++AIVRInsertPoint;
 				++slice_insert_pt;
 			} else {
 				tensor_info.shape()[slice_insert_pt] = shape_copy[i];
+				tensor_info.aivrshape()[slice_insert_pt] = shape_copy[i];
 				++slice_insert_pt;
 			}
 		}

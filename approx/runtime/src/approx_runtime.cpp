@@ -72,6 +72,7 @@ public:
   SurrogateModel<GPUExecutionPolicy, CatTensorTranslator<double>, double> Model{
       "/usr/workspace/fink12/torch/model.pt", {NUM_ITEMS, 5}, {NUM_ITEMS, 1}, false};
 
+
   ApproxRuntimeConfiguration() {
       ExecuteBoth = false;
       count = 0;

@@ -33,15 +33,15 @@ inline void DtoHMemcpy(void *dest, void *src, size_t nBytes)
   cudaMemcpy(dest, src, nBytes, cudaMemcpyDeviceToHost);
 }
 
-void print_shape(at::Tensor &t)
-{
-  std::cout << "Shape: ";
-  for (int i = 0; i < t.dim(); i++)
-  {
-    std::cout << t.size(i) << " ";
-  }
-  std::cout << std::endl;
-}
+// void print_shape(at::Tensor &t)
+// {
+//   std::cout << "Shape: ";
+//   for (int i = 0; i < t.dim(); i++)
+//   {
+//     std::cout << t.size(i) << " ";
+//   }
+//   std::cout << std::endl;
+// }
 
 class CPUExecutionPolicy {
   public:
@@ -73,6 +73,95 @@ class GPUExecutionPolicy {
     }
 };
 
+template <typename TensorImpl>
+class AbstractTensor : private TensorImpl {
+  public:
+  using tensor_t = typename TensorImpl::tensor_t;
+  using tensor_options_t = typename TensorImpl::tensor_options_t;
+  using Device = typename TensorImpl::Device;
+  using Shape = typename TensorImpl::Shape;
+  template<typename T>
+  using ArrayRef = typename TensorImpl::template ArrayRef<T>;
+  static constexpr auto CUDA = TensorImpl::CUDA;
+  static constexpr auto CPU = TensorImpl::CPU;
+  static constexpr auto float64 = TensorImpl::float64;
+  static constexpr auto float32 = TensorImpl::float32;
+  template <typename Tensors>
+  static tensor_t cat(Tensors& T, int dim)
+  {
+    return TensorImpl::cat(T, dim);
+  }
+
+  static tensor_t empty(Shape shape, tensor_options_t opts)
+  {
+    return TensorImpl::empty(shape, opts);
+  }
+
+  static tensor_t transpose(tensor_t t, Shape newShape)
+  {
+    return TensorImpl::transpose(t, newShape);
+  }
+
+  static tensor_t from_blob(void *mem, Shape shape, tensor_options_t opts) {
+    return TensorImpl::from_blob(mem, shape, opts);
+  }
+  static tensor_t from_blob(void *mem, Shape shape, Shape strides, tensor_options_t opts) {
+    return TensorImpl::from_blob(mem, shape, strides, opts);
+  }
+
+template<typename T>
+  static ArrayRef<T> makeArrayRef(T *ptr, size_t size)
+  {
+    return TensorImpl::makeArrayRef(ptr, size);
+  }
+
+};
+
+class TorchTensorImpl {
+  public:
+  using tensor_t = torch::Tensor;
+  using tensor_options_t = torch::TensorOptions;
+  using Device = c10::Device;
+  template<typename T>
+  using ArrayRef = torch::ArrayRef<T>;
+  static constexpr auto CUDA = torch::kCUDA;
+  static constexpr auto CPU = torch::kCPU;
+  using Shape = torch::IntArrayRef;
+  static constexpr auto float64 = torch::kDouble;
+  static constexpr auto float32 = torch::kFloat;
+  template<typename Tensors>
+
+  static torch::Tensor cat(Tensors& T, int dim)
+  {
+    return torch::cat(T, dim);
+  }
+  static torch::Tensor empty(Shape shape, tensor_options_t opts)
+  {
+    return torch::empty(shape, opts);
+  }
+
+  static torch::Tensor transpose(torch::Tensor t, Shape newShape)
+  {
+    return t.permute(newShape);
+  }
+
+  static torch::Tensor from_blob(void *mem, Shape shape, tensor_options_t opts) {
+    return torch::from_blob(mem, shape, opts);
+  }
+  static torch::Tensor from_blob(void *mem, Shape shape, Shape strides, tensor_options_t opts) {
+    return torch::from_blob(mem, shape, strides, opts);
+  }
+
+  template<typename T>
+  static torch::ArrayRef<T> makeArrayRef(T *ptr, size_t size)
+  {
+    return torch::ArrayRef<T>(ptr, size);
+  }
+
+};
+
+
+using TensorType = AbstractTensor<TorchTensorImpl>;
 template <typename TypeInValue> class TensorTranslator {
   public:
     at::Tensor &tensor;
@@ -152,7 +241,7 @@ class MemcpyTensorTranslator : public TensorTranslator<TypeInValue> {
 
     at::Tensor prepareForInference(at::Tensor& t)
     {
-      return t.transpose(1, 0);
+      return TensorType::transpose(t, {1, 0});
     }
 
     ~MemcpyTensorTranslator()
@@ -167,24 +256,24 @@ class MemcpyTensorTranslator : public TensorTranslator<TypeInValue> {
 template <typename TypeInValue>
 class CatTensorTranslator : public TensorTranslator<TypeInValue> {
   public:
-    std::vector<torch::Tensor> allocatedTensors;
-    torch::Tensor tensor = torch::empty({0, 5}, torch::kFloat64);
+    std::vector<TensorType::tensor_t> allocatedTensors;
+    TensorType::tensor_t tensor = TensorType::empty({0, 5}, TensorType::float64);
     CatTensorTranslator(at::Tensor &tensor)
         : TensorTranslator<TypeInValue>{tensor} {
           for(int i = 0; i < 5; i++)
-            allocatedTensors.push_back(torch::empty({NUM_ITEMS,1}, torch::kFloat64));
+            allocatedTensors.push_back(TensorType::empty({NUM_ITEMS,1}, TensorType::float64));
         }
 
     at::Tensor &arrayToTensor(long numRows, long numCols, TypeInValue **array) {
       for (int i = 0; i < numCols; i++) {
-        at::Tensor temp = torch::from_blob((TypeInValue *)array[i],
-                                           {numRows, 1}, torch::kFloat64);
+        auto temp = TensorType::from_blob((TypeInValue *)array[i],
+                                           {numRows, 1}, TensorType::float64);
 
         allocatedTensors[i].narrow(0, this->insert_index, numRows).copy_(temp);
       }
 
       // auto tensor = torch::nested::as_nested_tensor(allocatedTensors);
-      auto tensor = torch::cat(allocatedTensors, 1);
+      auto tensor = TensorType::cat(allocatedTensors, 1);
       this->tensor = tensor;
       this->insert_index += numRows;
       return this->tensor;
@@ -192,14 +281,14 @@ class CatTensorTranslator : public TensorTranslator<TypeInValue> {
 
     void reset()
     {
-      this->tensor = torch::empty({0, 5}, torch::kFloat64);
+      this->tensor = TensorType::empty({0, 5}, TensorType::float64);
       this->insert_index = 0;
     }
 
     void tensorToArray(at::Tensor tensor, long numRows, long numCols,
                        TypeInValue **array) {}
 
-    at::Tensor prepareForInference(at::Tensor& t)
+    TensorType::tensor_t prepareForInference(TensorType::tensor_t& t)
     {
       return t;
     }
@@ -242,7 +331,7 @@ private:
   {
     // Transpose to get continuous memory and
     // perform single memcpy.
-    tensor = tensor.transpose(1, 0);
+    tensor = TensorType::transpose(tensor, {1, 0});
       for (long j = 0; j < numCols; j++) {
         auto tmp = tensor[j].contiguous();
         TypeInValue* ptr = tmp.data_ptr<TypeInValue>();
@@ -259,11 +348,11 @@ private:
                    at::ScalarType dType)
   {
     try {
-      module = torch::jit::load(model_path);
-      module.to(device);
-      module.to(dType);
-      module.eval();
-      tensorOptions = torch::TensorOptions().dtype(dType).pinned_memory(true);
+      // module = torch::jit::load(model_path);
+      // module.to(device);
+      // module.to(dType);
+      // module.eval();
+      // tensorOptions = torch::TensorOptions().dtype(dType).pinned_memory(true);
     } catch (const c10::Error& e) {
         std::cerr << "error loading the model\n";
     }
@@ -335,10 +424,10 @@ public:
   SurrogateModel(const char* model_path, at::IntArrayRef &&ipt_shape, at::IntArrayRef &&opt_shape, bool is_cpu = true)
       : model_path(model_path), is_cpu(is_cpu), input_shape(ipt_shape), output_shape(opt_shape)
   {
-    _load<TypeInValue>(model_path, ExecutionPolicy::device);
-    input_tensor = at::empty(input_shape, at::TensorOptions().dtype(torch::kFloat64));
-    output_tensor = at::empty(output_shape, at::TensorOptions().dtype(torch::kFloat64).device(ExecutionPolicy::device));
-    translator = std::make_unique<TensorTranslator>(input_tensor);
+    // _load<TypeInValue>(model_path, ExecutionPolicy::device);
+    // input_tensor = at::empty(input_shape, at::TensorOptions().dtype(torch::kFloat64));
+    // output_tensor = at::empty(output_shape, at::TensorOptions().dtype(torch::kFloat64).device(ExecutionPolicy::device));
+    // translator = std::make_unique<TensorTranslator>(input_tensor);
   }
 
   inline void evaluate(long num_elements,
