@@ -238,6 +238,9 @@ static void getNDArraySliceTy(ASTContext &C, QualType &SliceTy, QualType &ShapeT
     // shapes after substituting approx index var ref expressions
     addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(ShapeTy));
 
+    // Number of dimensions before substitution: this is set by the runtime
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntTypeForBitwidth(32, false));
+
     NDArraySliceRD->completeDefinition();
     NDArraySliceTy = C.getRecordType(NDArraySliceRD);
   }

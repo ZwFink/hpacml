@@ -98,6 +98,7 @@ typedef struct array_info {
 	// RHS when doing our analysis
 	tensor_shape_t *shapes;
 	tensor_shape_t *shapes_aivrsubstituted;
+	uint ndim_presubstitution;
 
 	tensor_shape_t &shape() {
 		return *shapes;
@@ -108,11 +109,44 @@ typedef struct array_info {
 	}
 
 	void set_ndim(int ndim) {
+		this->ndim_presubstitution = this->ndim;
 		this->ndim = ndim;
 		this->shapes->ndim = ndim;
 		this->shapes_aivrsubstituted->ndim = ndim;
 	}
 } array_info_t;
+
+}
+
+std::vector<int64_t>
+get_strides(array_info_t &arg) {
+	auto num_dims = arg.ndim;
+	std::vector<int64_t> strides(num_dims);
+
+    if (num_dims - 1 >= arg.ndim_presubstitution-1) {
+            strides[num_dims - 1] = 1;
+    } else {
+            strides[num_dims - 1] = arg.slices[num_dims - 1].step;
+    }
+
+    for(int i = num_dims - 2; i >= 0; i--) {
+		int64_t cur_stride = strides[i+1];
+		if(i +1 < arg.ndim_presubstitution) {
+			cur_stride *= (arg.slices[i+1].stop - arg.slices[i+1].step);
+		} else {
+			cur_stride *= arg.shape()[i+1];
+		}
+			if(i < arg.ndim_presubstitution) {
+				cur_stride *= arg.slices[i].step;
+			}
+
+		strides[i] = cur_stride;
+	}
+
+	return strides;
+}
+
+extern "C" {
 
 enum InternalReprType {
 	Memory = 0,
@@ -126,8 +160,6 @@ typedef struct internal_tensor_repr_data {
 	tensor_shape_t shape;
 	void *data;
 } internal_repr_metadata_t;
-
-
 
 void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
 	void **argsRHS_vpp = (void **)_argsRHS;
@@ -155,16 +187,24 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
 		auto SHP = Tensor::makeArrayRef(argRHS.shapes->shapes, argRHS.shapes->ndim);
 		auto RHSShape = Tensor::makeArrayRef(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->ndim);
+		auto Strides = get_strides(argRHS);
+		std::cout << "Strides are: ";
+		for(auto s: Strides) {
+			std::cout << s << ", ";
+		}
+		std::cout << "\n";
+
+		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP, Strides, Tensor::float32);
+
 		auto transpose_vec_ = get_transpose_vector(LHSShape, RHSShape);
-		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP, Tensor::float32);
 		blob = Tensor::transpose(blob, Tensor::makeArrayRef(transpose_vec_.data(), transpose_vec_.size()));
 
 		RHSTensors.push_back(blob);
 	}
 	Tensor::tensor_t *RHSTensor = new Tensor::tensor_t();
 	*RHSTensor = Tensor::cat(RHSTensors, -1);
-	std::cout << "Final tensor is: " << RHSTensor->sizes();;
-	// std::cout << *RHSTensor;
+	std::cout << "Final tensor is: " << RHSTensor->sizes() << "\n";;
+	std::cout << *RHSTensor;
 
 	return nullptr;
 }
