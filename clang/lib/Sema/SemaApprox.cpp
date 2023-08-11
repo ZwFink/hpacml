@@ -2392,22 +2392,26 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
     }
   }
 
-  if(!Start) {
+  if (!Start) {
     Start = ActOnIntegerConstant(SourceLocation(), 0).get();
-    Start = PerformImplicitConversion(Start, Context.IntTy, Sema::AA_Converting).get();
   }
+  Start =
+      PerformImplicitConversion(Start, Context.LongLongTy, Sema::AA_Converting)
+          .get();
 
-  if(Start) {
-    if(!Step) {
-      Step = ActOnIntegerConstant(SourceLocation(), 1).get();
-      Step = PerformImplicitConversion(Step, Context.IntTy, Sema::AA_Converting).get();
-    }
-    if(!Stop) {
-      Start = PerformImplicitConversion(Start, Context.IntTy, Sema::AA_Converting).get();
-      Stop = BuildBinOp(getCurScope(), SourceLocation(), BO_Add,
-                        Start, Step).get();
-    }
+  if (!Step) {
+    Step = ActOnIntegerConstant(SourceLocation(), 1).get();
   }
+  Step =
+      PerformImplicitConversion(Step, Context.LongLongTy, Sema::AA_Converting)
+          .get();
+  if (!Stop) {
+    Stop =
+        BuildBinOp(getCurScope(), SourceLocation(), BO_Add, Start, Step).get();
+  }
+  Stop =
+      PerformImplicitConversion(Stop, Context.LongLongTy, Sema::AA_Converting)
+          .get();
 
   ApproxSliceExpr::AIVREChildKind CK = ApproxSliceExpr::discoverChildKind(Start, Stop, Step);
 
@@ -2421,7 +2425,7 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
 }
 
 ExprResult Sema::ActOnApproxIndexVarRefExpr(IdentifierInfo *II, SourceLocation Loc) {
-  return new (Context)  ApproxIndexVarRefExpr(II, Context.getIntTypeForBitwidth(32, false), VK_LValue, OK_Ordinary, Loc);
+  return new (Context)  ApproxIndexVarRefExpr(II, Context.getIntTypeForBitwidth(64, false), VK_LValue, OK_Ordinary, Loc);
 }
 
 ApproxClause *Sema::ActOnApproxNNClause(ClauseKind Kind,

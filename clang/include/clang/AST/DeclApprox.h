@@ -161,7 +161,7 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
       ASTContext &C = getASTContext();
       DeclContext *DC = getDeclContext();
       VarDecl *SymbolicVar = VarDecl::Create(getASTContext(), DC, IndexVar->getBeginLoc(),
-                                             IndexVar->getEndLoc(), Id, C.getIntTypeForBitwidth(32, false), nullptr, SC_None);
+                                             IndexVar->getEndLoc(), Id, C.getIntTypeForBitwidth(64, false), nullptr, SC_None);
       return SymbolicVar;
     }
 

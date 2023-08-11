@@ -199,16 +199,16 @@ static void getSliceInfoTy(ASTContext &C, QualType &SliceInfoTy) {
     RecordDecl *sliceInfoRD = C.buildImplicitRecord("approx_slice_info_t");
     sliceInfoRD->startDefinition();
     // Start Index
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, false));
     // Stop Index
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, false));
     // Step
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, false));
 
     // the mode of this slice's AIVR, if any. See ApproxSliceExpr::AIVREChildKind
     addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
     // the program representation of this slice's AIVR, if any
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, true));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, true));
     sliceInfoRD->completeDefinition();
     SliceInfoTy = C.getRecordType(sliceInfoRD);
   }
@@ -251,7 +251,7 @@ static void getTensorShapeTy(ASTContext &C, QualType &TensorShapeTy) {
     addFieldToRecordDecl(C, TensorShapeRD, C.getIntTypeForBitwidth(32, false));
 
     // The shape info, just an array of integers
-    addFieldToRecordDecl(C, TensorShapeRD, C.getPointerType(C.getIntTypeForBitwidth(32, true)));
+    addFieldToRecordDecl(C, TensorShapeRD, C.getPointerType(C.getIntTypeForBitwidth(64, true)));
 
     TensorShapeRD->completeDefinition();
     TensorShapeTy = C.getRecordType(TensorShapeRD);
@@ -1063,9 +1063,10 @@ Address CGApproxRuntime::CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int 
   ASTContext &C = CGM.getContext();
   auto numSlices = ndim;
   QualType SliceTy;
-  QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(32, true);
+  QualType Int64Ty = CGF.getContext().getIntTypeForBitwidth(64, true);
+  QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(64, true);
 
-  SliceTy = C.getConstantArrayType(Int32Ty, llvm::APInt(32, numSlices),
+  SliceTy = C.getConstantArrayType(Int64Ty, llvm::APInt(32, numSlices),
                                           nullptr, ArrayType::Normal, 0);
   Twine ArrayName = "slice.shape_";
   Address SliceShapeArray = CGF.CreateMemTemp(SliceTy, ArrayName);
@@ -1119,6 +1120,7 @@ llvm::ArrayRef<Expr*> Slices) {
 
   ASTContext &C = CGM.getContext();
   QualType Int32Ty = C.getIntTypeForBitwidth(32, true);
+  QualType Int64Ty = C.getIntTypeForBitwidth(64, true);
   auto numSlices = Slices.size();
   auto SliceNDimsAddr = CGF.Builder.CreateStructGEP(Dest, 0);
   auto SliceBaseAddr = CGF.Builder.CreateStructGEP(Dest, 1);
@@ -1127,7 +1129,7 @@ llvm::ArrayRef<Expr*> Slices) {
 
   llvm::Value *SliceShapeArray = CGF.Builder.CreateLoad(SliceBaseAddr, false);
   
-  Address SliceBase = Address(SliceShapeArray, CGF.Int32Ty, clang::CharUnits::fromQuantity(32));
+  Address SliceBase = Address(SliceShapeArray, CGF.Int64Ty, clang::CharUnits::fromQuantity(64));
             
   for (size_t i = 0; i < numSlices; i++) {
     Address CurrentSlice = CGF.Builder.CreateConstGEP(SliceBase, i);
@@ -1140,7 +1142,7 @@ llvm::ArrayRef<Expr*> Slices) {
 void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::Value *Start, llvm::Value *Stop, llvm::Value *Step, Address Dest) {
   auto DestBB = CGF.createBasicBlock("slice.size.dest");
   auto IncBB = CGF.createBasicBlock("slice.size.inc");
-  QualType Int32Ty = CGF.getContext().getIntTypeForBitwidth(32, true);
+  QualType Int64Ty = CGF.getContext().getIntTypeForBitwidth(64, true);
   ASTContext &C = CGM.getContext();
   llvm::Value *StartValue = Start, *StopValue = Stop, *StepValue = Step;
   llvm::Value *Size = nullptr;
@@ -1149,23 +1151,23 @@ void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::V
   llvm::Value *StopMinusStart = CGF.Builder.CreateNSWSub(StopValue, StartValue);
   llvm::Value *StartMinusStopDivStep = CGF.Builder.CreateSDiv(StopMinusStart, StepValue);
 
-  Address SizeAddr = CGF.CreateMemTemp(Int32Ty, "slice.size");
-  CGF.EmitStoreOfScalar(StartMinusStopDivStep, SizeAddr, false, Int32Ty);
+  Address SizeAddr = CGF.CreateMemTemp(Int64Ty, "slice.size");
+  CGF.EmitStoreOfScalar(StartMinusStopDivStep, SizeAddr, false, Int64Ty);
 
   // if(StartMinusStopDivStep % Step == 0); ++Size;
   llvm::Value *StartMinusStopDivStepModStep = CGF.Builder.CreateSRem(StartMinusStopDivStep, StepValue);
-  llvm::Value *IsModZero = CGF.Builder.CreateICmpEQ(StartMinusStopDivStepModStep, llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0));
+  llvm::Value *IsModZero = CGF.Builder.CreateICmpEQ(StartMinusStopDivStepModStep, llvm::ConstantInt::get(CGF.Builder.getInt64Ty(), 0));
   CGF.Builder.CreateCondBr(IsModZero, DestBB, IncBB);
   CGF.EmitBlock(IncBB);
-  llvm::Value *StartMinusStopDivStepPlusOne = CGF.Builder.CreateAdd(StartMinusStopDivStep, llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 1));
-  CGF.EmitStoreOfScalar(StartMinusStopDivStepPlusOne, SizeAddr, false, Int32Ty);
+  llvm::Value *StartMinusStopDivStepPlusOne = CGF.Builder.CreateAdd(StartMinusStopDivStep, llvm::ConstantInt::get(CGF.Builder.getInt64Ty(), 1));
+  CGF.EmitStoreOfScalar(StartMinusStopDivStepPlusOne, SizeAddr, false, Int64Ty);
   CGF.Builder.CreateBr(DestBB);
 
 
   CGF.EmitBlock(DestBB);
   Size = CGF.Builder.CreateLoad(SizeAddr);
 
-  CGF.EmitStoreOfScalar(Size, Dest, false, Int32Ty);
+  CGF.EmitStoreOfScalar(Size, Dest, false, Int64Ty);
 }
 void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest) {
   ApproxSliceExpr *SliceExpr = dyn_cast_or_null<ApproxSliceExpr>(Slice);
@@ -1224,7 +1226,7 @@ void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice
 
   FieldAddr = CGF.EmitLValueForField(
       SliceStart, *std::next(SliceInfoRecord->field_begin(), 4));
-    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), SymbolVarRepr), FieldAddr);
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt64Ty(), SymbolVarRepr), FieldAddr);
   
 
 }

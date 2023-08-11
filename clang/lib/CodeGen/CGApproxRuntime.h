@@ -145,11 +145,11 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   // SliceInfoTy is a struct containing information about the slice for one
   // dimension. typedef struct slice_info_ty 
   // { 
-  //   int start; 
-  //   int stop; 
-  //   int step;
+  //   int64 start; 
+  //   int64 stop; 
+  //   int64 step;
   //   int aivre_mode;
-  //   int aivre_repr;
+  //   int64 aivre_repr;
   //} slice_info_t
   QualType SliceInfoTy;
 
@@ -168,7 +168,7 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
 
   //typedef struct tensor_shape {
   //	int ndim;
-  //	int *shapes;
+  //	int64 *shapes;
   //} tensor_shape_t;
   QualType TensorShapeTy;
 

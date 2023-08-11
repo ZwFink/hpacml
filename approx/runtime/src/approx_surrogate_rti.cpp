@@ -10,8 +10,8 @@
 using Tensor = AbstractTensor<TorchTensorImpl>;
 
 
-std::vector<int> get_transpose_vector(std::vector<int>& newShape, std::vector<int>& shape) {
-	std::vector<int> extended;
+std::vector<int64_t> get_transpose_vector(Tensor::ArrayRef<int64_t> newShape, Tensor::ArrayRef<int64_t> shape) {
+	std::vector<int64_t> extended;
 	extended.reserve(std::max(shape.size(), newShape.size()));
 
 	for(int i = 0; i < shape.size(); i++) {
@@ -31,11 +31,11 @@ void __approx_runtime_tensor_cleanup(void*) {
 	std::cout << "Cleanup function is called\n";
 }
 typedef struct slice_info_t {
-	uint32_t start;
-	uint32_t stop;
-	uint32_t step;
-	uint32_t aivrechildkind;
-	int32_t aivrerepr;
+	int64_t start;
+	int64_t stop;
+	int64_t step;
+	int aivrechildkind;
+	int64_t aivrerepr;
 } slice_info_t;
 
 // a tensor's shape is a list of integers,
@@ -45,7 +45,7 @@ typedef struct slice_info_t {
 // but can be changed later to combine the two
 typedef struct tensor_shape {
 	int ndim;
-	int *shapes;
+	int64_t *shapes;
 
 	void operator=(const tensor_shape &other) {
 		ndim = other.ndim;
@@ -54,7 +54,7 @@ typedef struct tensor_shape {
 		}
 	}
 
-	int& operator[](int idx) {
+	int64_t& operator[](int idx) {
 		return shapes[idx];
 	}
 
@@ -136,13 +136,11 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	slice_info_t *slicesLHS = (slice_info_t *)_slicesLHS;
 	tensor_shape_t *shapesLHS = (tensor_shape_t *)_shapesLHS;
 
- 	std::vector<int> LHSShape; 
-	LHSShape.assign(shapesLHS->shapes, shapesLHS->shapes + shapesLHS->ndim);
+	auto LHSShape = Tensor::makeArrayRef(shapesLHS->shapes, shapesLHS->ndim);
 
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
 		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
-		std::vector<int> RHSShape;
-		RHSShape.assign(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->shapes + argRHS.shapes_aivrsubstituted->ndim);
+		auto RHSShape = Tensor::makeArrayRef(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->ndim);
 		auto transpose_vec = get_transpose_vector(LHSShape, RHSShape);
 		std::cout << "To transform shape: " << *argRHS.shapes_aivrsubstituted << " to " << *shapesLHS << "\n";
 		for(int i = 0; i < transpose_vec.size(); i++) {
@@ -155,33 +153,18 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	std::vector<Tensor::tensor_t> RHSTensors;
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
 		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
-		// auto SHP = get_shape_from_slices(argRHS.shapes->ndim, argRHS.slices);
-		std::vector<int> SHP{argRHS.shapes->shapes, argRHS.shapes->shapes + argRHS.shapes->ndim};
-		std::vector<long int> SHP2;
-		std::vector<int> RHSShape;
-		RHSShape.assign(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->shapes + argRHS.shapes_aivrsubstituted->ndim);
+		auto SHP = Tensor::makeArrayRef(argRHS.shapes->shapes, argRHS.shapes->ndim);
+		auto RHSShape = Tensor::makeArrayRef(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->ndim);
 		auto transpose_vec_ = get_transpose_vector(LHSShape, RHSShape);
-		std::vector<long int> transpose_vec;
-		int SHP_idx = 0;
-		for(int i = 0; i < argRHS.shapes->ndim; i++) {
-			if(argRHS.shapes->shapes[i] < 0) {
-				argRHS.shapes->shapes[i] = SHP[SHP_idx];
-				SHP_idx++;
-			}
-			SHP2.push_back((long int) argRHS.shapes->shapes[i]);
-		}
-
-		for(auto i : transpose_vec_) {
-			transpose_vec.push_back((long int) i);
-		}
-		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP2, Tensor::float32);
-		blob = Tensor::transpose(blob, Tensor::makeArrayRef(transpose_vec.data(), transpose_vec.size()));
+		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP, Tensor::float32);
+		blob = Tensor::transpose(blob, Tensor::makeArrayRef(transpose_vec_.data(), transpose_vec_.size()));
 
 		RHSTensors.push_back(blob);
 	}
 	Tensor::tensor_t *RHSTensor = new Tensor::tensor_t();
 	*RHSTensor = Tensor::cat(RHSTensors, -1);
 	std::cout << "Final tensor is: " << RHSTensor->sizes();;
+	// std::cout << *RHSTensor;
 
 	return nullptr;
 }
@@ -207,12 +190,12 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 	}
 
 	// perhaps a bad idea
-	int *shape_copy = (int*) alloca(sizeof(int)*maxShape);
+	int64_t *shape_copy = (int64_t*) alloca(sizeof(int64_t)*maxShape);
 
 	for(int idx = 0; idx < numArgs; idx++) {
 		array_info_t &ipt_memory_info = *(array_info_t *)ipt_memory_rgns_vpp[idx];
 		array_info_t &tensor_info = *(array_info_t *)tensor_args_vpp[idx];
-		std::memcpy(shape_copy, &tensor_info.shape()[0], sizeof(int)*tensor_info.ndim);
+		std::memcpy(shape_copy, &tensor_info.shape()[0], sizeof(int64_t)*tensor_info.ndim);
 
 		int numAIVRFound = 0;
 		for(int i = 0; i < tensor_info.ndim; i++) {
@@ -236,7 +219,7 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 				// whose shape the compiler has found is [3*N]
 				// we need to turn this into [N,3]. To do this, we need to 
 				// find 3 by dividing N*3/N
-				int inner = shape_copy[i] / ipt_memory_info.shape()[i];
+				int64_t inner = shape_copy[i] / ipt_memory_info.shape()[i];
 				tensor_info.shape()[AIVRInsertPoint] = ipt_memory_info.shape()[i];
 				tensor_info.shape()[slice_insert_pt] = inner;
 
