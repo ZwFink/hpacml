@@ -132,7 +132,7 @@ get_strides(array_info_t &arg) {
     for(int i = num_dims - 2; i >= 0; i--) {
 		int64_t cur_stride = strides[i+1];
 		if(i +1 < arg.ndim_presubstitution) {
-			cur_stride *= (arg.slices[i+1].stop - arg.slices[i+1].step);
+			cur_stride *= (arg.slices[i+1].stop - arg.slices[i+1].start);
 		} else {
 			cur_stride *= arg.shape()[i+1];
 		}
@@ -204,7 +204,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	Tensor::tensor_t *RHSTensor = new Tensor::tensor_t();
 	*RHSTensor = Tensor::cat(RHSTensors, -1);
 	std::cout << "Final tensor is: " << RHSTensor->sizes() << "\n";;
-	std::cout << *RHSTensor;
+	// std::cout << *RHSTensor*;
 
 	return nullptr;
 }
