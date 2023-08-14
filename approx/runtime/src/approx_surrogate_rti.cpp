@@ -9,6 +9,11 @@
 
 using Tensor = AbstractTensor<TorchTensorImpl>;
 
+#ifdef DEBUG
+#define dbgs() std::cout
+#else
+#define dbgs() if(0) std::cout
+#endif
 
 std::vector<int64_t> get_transpose_vector(Tensor::ArrayRef<int64_t> newShape, Tensor::ArrayRef<int64_t> shape) {
 	std::vector<int64_t> extended;
@@ -172,7 +177,7 @@ typedef struct internal_tensor_repr_data {
 
 
 void __approx_runtime_tensor_cleanup(void* data) {
-	std::cout << "Cleanup function is called\n";
+	dbgs() << "Cleanup function is called\n";
 	internal_repr_metadata_t *metadata = (internal_repr_metadata_t *)data;
 	delete metadata;
 }
@@ -190,27 +195,31 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
 		auto RHSShape = Tensor::makeArrayRef(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->ndim);
 		auto transpose_vec = get_transpose_vector(LHSShape, RHSShape);
-		std::cout << "To transform shape: " << *argRHS.shapes_aivrsubstituted << " to " << *shapesLHS << "\n";
+		#ifdef DEBUG
+		dbgs() << "To transform shape: " << *argRHS.shapes_aivrsubstituted << " to " << *shapesLHS << "\n";
 		for(int i = 0; i < transpose_vec.size(); i++) {
 			std::cout << transpose_vec[i] << " ";
 		}
 		std::cout << "\n";
-
+		#endif
 	}
 
 	std::vector<Tensor::tensor_t> RHSTensors;
 	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->type);
-	std::cout << "Tensor data has type " << TypeOfTensorData << "\n";
+	dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
 		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
 		auto SHP = Tensor::makeArrayRef(argRHS.shapes->shapes, argRHS.shapes->ndim);
 		auto RHSShape = Tensor::makeArrayRef(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->ndim);
 		auto Strides = get_strides(argRHS);
-		std::cout << "Strides are: ";
+
+		#ifdef DEBUG
+		dbgs() << "Strides are: ";
 		for(auto s: Strides) {
-			std::cout << s << ", ";
+			dbgs() << s << ", ";
 		}
-		std::cout << "\n";
+		dbgs() << "\n";
+		#endif
 
 		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP, Strides, TypeOfTensorData);
 
@@ -231,8 +240,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
     } else {
             *LHSTensor = Tensor::cat(RHSTensors, -1);
     }
-    std::cout << "Final tensor is: " << LHSTensor->sizes() << "\n";;
-	// std::cout << *LHSTensor;
+    dbgs() << "Final tensor is: " << LHSTensor->sizes() << "\n";;
 
 	auto LibraryType = Tensor::getTensorLibraryType();
 	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
@@ -311,6 +319,7 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 		tensor_info.set_ndim(slice_insert_pt);
 	}
 
+	#ifdef DEBUG
 	// now go through and print all the shapes of the tensors
 	for(int idx = 0; idx < numArgs; idx++) {
 		array_info_t &tensor_info = *(array_info_t *)tensor_args_vpp[idx];
@@ -320,56 +329,59 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 		}
 		std::cout << "\n";
 	}
+	#endif
 }
 
 void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
-    std::cout << "Found " << numArgs << " arguments\n";
+    dbgs() << "Found " << numArgs << " arguments\n";
 	void **tensor_args = (void **)tensor;
 	void **slice_args = (void **)slice;
 	for(int idx = 0; idx < numArgs; idx++) {
-	array_info_t *tensor_info = (array_info_t *)tensor_args[idx];
-	array_info_t &tinfo = *tensor_info;
+	    array_info_t *tensor_info = (array_info_t *)tensor_args[idx];
+	    array_info_t &tinfo = *tensor_info;
 
-	array_info_t *functor_info = (array_info_t *)slice_args[idx];
-	array_info_t &finfo = *functor_info;
+	    array_info_t *functor_info = (array_info_t *)slice_args[idx];
+	    array_info_t &finfo = *functor_info;
 
-	for(int i = 0; i < tinfo.ndim; i++) {
-		auto &t_slice = tinfo.slices[i];
-		auto &f_slice = finfo.slices[i];
-		auto *t_ptr = tinfo.base;
-		auto t_type = tinfo.type;
+	    for(int i = 0; i < tinfo.ndim; i++) {
+	    	auto &t_slice = tinfo.slices[i];
+	    	auto &f_slice = finfo.slices[i];
+	    	auto *t_ptr = tinfo.base;
+	    	auto t_type = tinfo.type;
 
-		finfo.base = t_ptr;
-		finfo.type = t_type;
+	    	finfo.base = t_ptr;
+	    	finfo.type = t_type;
 
-		f_slice.start *= t_slice.start;
-		f_slice.stop *= t_slice.stop;
-		if(f_slice.step != 1) {
-			std::cout << "Step is not 1, this is not supported yet\n";
-		}
-		f_slice.step = t_slice.step;
+	    	f_slice.start *= t_slice.start;
+	    	f_slice.stop *= t_slice.stop;
+	    	if(f_slice.step != 1) {
+	    		std::cerr << "Step is not 1, this is not supported yet\n";
+	    	}
+	    	f_slice.step = t_slice.step;
 
-		finfo.shape()[i] *= tinfo.shape()[i];
+	    	finfo.shape()[i] *= tinfo.shape()[i];
 
+	    }
 	}
-	}
 
+	#ifdef DEBUG
 	for(int idx = 0; idx < numArgs; idx++) {
-	array_info_t *tensor_info = (array_info_t *)slice_args[idx];
-	array_info_t &tinfo = *tensor_info;
-	slice_info_t &sinfo = *tinfo.slices;
+	    array_info_t *tensor_info = (array_info_t *)slice_args[idx];
+	    array_info_t &tinfo = *tensor_info;
+	    slice_info_t &sinfo = *tinfo.slices;
 
-	std::cout << "Tensor has this many shapes: " << tinfo.ndim << "\n";
-	std::cout << "Tensor vase pointer is: " << tinfo.base << "\n";
+	    dbgs() << "Tensor has this many shapes: " << tinfo.ndim << "\n";
+	    dbgs() << "Tensor vase pointer is: " << tinfo.base << "\n";
 
-	for(int i = 0; i < tinfo.ndim; i++) {
-		std::cout << "Slice " << i << " has shape: " 
-		<< tinfo.slices[i].start << ", " << tinfo.slices[i].stop << ", " << tinfo.slices[i].step << "\n";
+	    for(int i = 0; i < tinfo.ndim; i++) {
+	    	dbgs() << "Slice " << i << " has shape: " 
+	    	<< tinfo.slices[i].start << ", " << tinfo.slices[i].stop << ", " << tinfo.slices[i].step << "\n";
+	    }
+	    for (int i = 0; i < tinfo.ndim; i++) {
+	    	dbgs() << "Tensor shape: " << tinfo.shape()[i] << "\n";
+	    }
 	}
-	for (int i = 0; i < tinfo.ndim; i++) {
-		std::cout << "Tensor shape: " << tinfo.shape()[i] << "\n";
-	}
-	}
+	#endif
 
 	
 }
@@ -388,12 +400,14 @@ void __approx_runtime_substitute_aivr_in_shapes(int ndim, void *_slices, void *_
 		}
 	}
 
-	std::cout << "Outputting shapes in aivr substitution\n";
+	#ifdef DEBUG
+	dbgs() << "Outputting shapes in aivr substitution\n";
 	for(int i = 0; i < ndim; i++) {
 		auto &shape = *shapes;
-		std::cout << shape[i] << " ";
+		dbgs() << shape[i] << " ";
 	}
-	std::cout << "\n";
+	dbgs() << "\n";
+	#endif
 
 }
 

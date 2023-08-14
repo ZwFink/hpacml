@@ -7,6 +7,11 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# if the cmake_build_type is debug
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+  add_definitions(-DDEBUG)
+endif()
+
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/;${CMAKE_MODULE_PATH}")
 
 find_package(OpenMP REQUIRED)
