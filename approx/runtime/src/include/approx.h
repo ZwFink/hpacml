@@ -27,6 +27,12 @@ typedef enum __aprox_datatype_hdf5{
     HDOUBLE
 }HPACDType;
 
+typedef enum __approx_tensor_library_type {
+  TORCH = 0,
+  TENSORFLOW = 1,
+  NUM_TENSOR_LIBRARIES = 2
+} __approx_tensor_library_type;
+
 bool __approx_skip_iteration(unsigned int i, float pr);
 void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
                         void *arg, bool cond, const char *region_name,

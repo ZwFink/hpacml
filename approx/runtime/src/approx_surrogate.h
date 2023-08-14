@@ -115,7 +115,13 @@ template<typename T>
     return TensorImpl::makeArrayRef(ptr, size);
   }
 
+  static int getTensorLibraryType() {
+    return TensorImpl::getTensorLibraryType();
+  }
+
 };
+
+using TensorLibraryType = __approx_tensor_library_type;
 
 class TorchTensorImpl {
   public:
@@ -129,8 +135,12 @@ class TorchTensorImpl {
   using Shape = torch::IntArrayRef;
   static constexpr auto float64 = torch::kDouble;
   static constexpr auto float32 = torch::kFloat;
-  template<typename Tensors>
 
+  static int getTensorLibraryType() {
+    return (int) TensorLibraryType::TORCH;
+  }
+
+  template<typename Tensors>
   static torch::Tensor cat(Tensors& T, int dim)
   {
     return torch::cat(T, dim);

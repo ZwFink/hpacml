@@ -27,9 +27,6 @@ std::vector<int64_t> get_transpose_vector(Tensor::ArrayRef<int64_t> newShape, Te
 }
 extern "C" {
 
-void __approx_runtime_tensor_cleanup(void*) {
-	std::cout << "Cleanup function is called\n";
-}
 typedef struct slice_info_t {
 	int64_t start;
 	int64_t stop;
@@ -156,10 +153,29 @@ enum InternalReprType {
 
 typedef struct internal_tensor_repr_data {
 	int type;
-	// we want an agnostic way to represent the shape
-	tensor_shape_t shape;
 	void *data;
+
+	~internal_tensor_repr_data() {
+		Tensor *T = (Tensor *)data;
+		delete T;
+	}
+
+	void set_library_type(int t) {
+		type = t;
+	}
+
+	void set_data(void *d) {
+		data = d;
+	}
+
 } internal_repr_metadata_t;
+
+
+void __approx_runtime_tensor_cleanup(void* data) {
+	std::cout << "Cleanup function is called\n";
+	internal_repr_metadata_t *metadata = (internal_repr_metadata_t *)data;
+	delete metadata;
+}
 
 void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
 	void **argsRHS_vpp = (void **)_argsRHS;
@@ -201,12 +217,17 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 
 		RHSTensors.push_back(blob);
 	}
-	Tensor::tensor_t *RHSTensor = new Tensor::tensor_t();
-	*RHSTensor = Tensor::cat(RHSTensors, -1);
-	std::cout << "Final tensor is: " << RHSTensor->sizes() << "\n";;
+	Tensor::tensor_t *LHSTensor = new Tensor::tensor_t();
+	*LHSTensor = Tensor::cat(RHSTensors, -1);
+	std::cout << "Final tensor is: " << LHSTensor->sizes() << "\n";;
 	// std::cout << *RHSTensor*;
 
-	return nullptr;
+	auto LibraryType = Tensor::getTensorLibraryType();
+	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
+	metadata->set_library_type(LibraryType);
+	metadata->set_data(LHSTensor);
+
+	return metadata;
 }
 
 enum AIVREChildKind {
