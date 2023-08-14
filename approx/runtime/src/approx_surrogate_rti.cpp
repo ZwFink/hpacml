@@ -199,6 +199,8 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	}
 
 	std::vector<Tensor::tensor_t> RHSTensors;
+	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->type);
+	std::cout << "Tensor data has type " << TypeOfTensorData << "\n";
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
 		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
 		auto SHP = Tensor::makeArrayRef(argRHS.shapes->shapes, argRHS.shapes->ndim);
@@ -210,17 +212,27 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 		}
 		std::cout << "\n";
 
-		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP, Strides, Tensor::float32);
+		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP, Strides, TypeOfTensorData);
 
-		auto transpose_vec_ = get_transpose_vector(LHSShape, RHSShape);
-		blob = Tensor::transpose(blob, Tensor::makeArrayRef(transpose_vec_.data(), transpose_vec_.size()));
+		if(nargsRHS > 1) {
+                        auto transpose_vec_ =
+                            get_transpose_vector(LHSShape, RHSShape);
+                        blob = Tensor::transpose(
+                            blob, Tensor::makeArrayRef(transpose_vec_.data(),
+                                                       transpose_vec_.size()));
+                }
 
 		RHSTensors.push_back(blob);
 	}
-	Tensor::tensor_t *LHSTensor = new Tensor::tensor_t();
-	*LHSTensor = Tensor::cat(RHSTensors, -1);
-	std::cout << "Final tensor is: " << LHSTensor->sizes() << "\n";;
-	// std::cout << *RHSTensor*;
+
+    Tensor::tensor_t *LHSTensor = new Tensor::tensor_t();
+    if (nargsRHS == 1) {
+            *LHSTensor = RHSTensors[0];
+    } else {
+            *LHSTensor = Tensor::cat(RHSTensors, -1);
+    }
+    std::cout << "Final tensor is: " << LHSTensor->sizes() << "\n";;
+	// std::cout << *LHSTensor;
 
 	auto LibraryType = Tensor::getTensorLibraryType();
 	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();

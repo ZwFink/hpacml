@@ -11,6 +11,7 @@
 
 #include <torch/script.h>  // One-stop header.
 #include "database/database.h"
+#include "approx_internal.h"
 
 #include <cuda_runtime.h>
 inline void DtoDMemcpy(void *dest, void *src, size_t nBytes)
@@ -82,6 +83,7 @@ class AbstractTensor : private TensorImpl {
   using Shape = typename TensorImpl::Shape;
   template<typename T>
   using ArrayRef = typename TensorImpl::template ArrayRef<T>;
+  using TensorDataTypeType = typename TensorImpl::TensorDataTypeType;
   static constexpr auto CUDA = TensorImpl::CUDA;
   static constexpr auto CPU = TensorImpl::CPU;
   static constexpr auto float64 = TensorImpl::float64;
@@ -119,12 +121,29 @@ template<typename T>
     return TensorImpl::getTensorLibraryType();
   }
 
+  template<typename T>
+  static TensorDataTypeType getTensorType() {
+    return TensorImpl::template getTensorType<T>();
+  }
+
+  static TensorDataTypeType getTensorDataTypeTypeFromApproxType(ApproxType Type) {
+    switch(Type) {
+      #define APPROX_TYPE(Enum, CType, nameOfType) \
+      case Enum:  \
+        return getTensorType<CType>();
+      #include "clang/Basic/approxTypes.def"
+      case INVALID:
+        std::cout << "INVALID DATA TYPE passed in argument list\n";
+    }
+  }
+
 };
 
 using TensorLibraryType = __approx_tensor_library_type;
 
 class TorchTensorImpl {
   public:
+
   using tensor_t = torch::Tensor;
   using tensor_options_t = torch::TensorOptions;
   using Device = c10::Device;
@@ -132,6 +151,7 @@ class TorchTensorImpl {
   using ArrayRef = torch::ArrayRef<T>;
   static constexpr auto CUDA = torch::kCUDA;
   static constexpr auto CPU = torch::kCPU;
+  using TensorDataTypeType = decltype(torch::kDouble);
   using Shape = torch::IntArrayRef;
   static constexpr auto float64 = torch::kDouble;
   static constexpr auto float32 = torch::kFloat;
@@ -166,6 +186,25 @@ class TorchTensorImpl {
   static torch::ArrayRef<T> makeArrayRef(T *ptr, size_t size)
   {
     return torch::ArrayRef<T>(ptr, size);
+  }
+
+  template<typename T>
+  static TensorDataTypeType getTensorType() {
+    if (std::is_same<T, double>::value) {
+      return torch::kDouble;
+    } else if (std::is_same<T, float>::value) {
+      return torch::kFloat;
+    } else if (std::is_same<T, int>::value) {
+      return torch::kInt;
+    } else if (std::is_same<T, long>::value) {
+      return torch::kLong;
+    } else if (std::is_same<T, short>::value) {
+      return torch::kShort;
+    } else if (std::is_same<T, unsigned char>::value) {
+      return torch::kByte;
+    } else {
+      assert(False && "Invalid type passed to getTensorType");
+    }
   }
 
 };

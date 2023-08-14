@@ -72,6 +72,12 @@ enum ApproxType : int8_t {
 #undef APPROX_TYPE
 };
 
+typedef enum __approx_tensor_library_type {
+  TORCH = 0,
+  TENSORFLOW = 1,
+  NUM_TENSOR_LIBRARIES = 2
+} __approx_tensor_library_type;
+
 void memoize_out(void (*accurate)(void *), void *arg,
                  approx_var_info_t *outputs, int num_outputs);
 
