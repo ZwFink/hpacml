@@ -2292,6 +2292,7 @@ ApproxVarListLocTy& Locs) {
   auto *Decl = ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, FunctorDecl, Arrays);
   IdResolver.AddDecl(Decl);
   S->AddDecl(Decl);
+  Decl->addAttr(ApproxTensorDeclAttr::CreateImplicit(Context));
 
   // temporarily always set to used so we can do code generation, when we implement the input/output part,
   // we should set the tensor to used there.
@@ -2426,6 +2427,11 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
 
 ExprResult Sema::ActOnApproxIndexVarRefExpr(IdentifierInfo *II, SourceLocation Loc) {
   return new (Context)  ApproxIndexVarRefExpr(II, Context.getIntTypeForBitwidth(64, false), VK_LValue, OK_Ordinary, Loc);
+}
+
+ExprResult Sema::ActOnApproxTensorRefExpr(IdentifierInfo *II, SourceLocation ILoc) {
+  llvm_unreachable("ApproxTensorRefExpr not implemented");
+  return ExprError();
 }
 
 ApproxClause *Sema::ActOnApproxNNClause(ClauseKind Kind,

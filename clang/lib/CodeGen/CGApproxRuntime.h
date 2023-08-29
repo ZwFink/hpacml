@@ -74,6 +74,7 @@ private:
   ///        size_t sz_elem;    // Size of elements in bytes
   ///        int8_t data_type; // Type of data float/double/int etc.
   ///        uint8_t dir;       // Direction of data: in/out/inout
+  ///        uint8_t is_tensor; // Is ptr to tensor metadata?
   ///    } approx_var_info_t;
   QualType VarInfoTy;
   llvm::Value *approxRTParams[ARG_END];

@@ -281,6 +281,8 @@ static void getVarInfoType(ASTContext &C, QualType &VarInfoTy) {
     addFieldToRecordDecl(C, VarInfoRD, C.getIntTypeForBitwidth(8, true));
     /// The directionality of this region in/out/inout
     addFieldToRecordDecl(C, VarInfoRD, C.getIntTypeForBitwidth(8, false));
+    /// Is this info_t wrapping a tensor?
+    addFieldToRecordDecl(C, VarInfoRD, C.getIntTypeForBitwidth(8, false));
     VarInfoRD->completeDefinition();
     VarInfoTy = C.getRecordType(VarInfoRD);
   }
@@ -799,6 +801,15 @@ llvm::Constant* CGApproxRuntime::getOrCreateName(StringRef Name, CodeGenFunction
   return NameStr;
 }
 
+bool isApproxDecl(Expr *E) {
+  if (auto *DRE = dyn_cast<DeclRefExpr>(E)) {
+    if (DRE->getDecl()->hasAttr<ApproxTensorDeclAttr>()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::pair<llvm::Value *, llvm::Value *>
 CGApproxRuntime::CGApproxRuntimeEmitData(
     CodeGenFunction &CGF,
@@ -818,7 +829,7 @@ CGApproxRuntime::CGApproxRuntimeEmitData(
 
   const auto *VarInfoRecord = VarInfoTy->getAsRecordDecl();
   unsigned Pos = 0;
-  enum VarInfoFieldID { PTR, VAR_NAME, NUM_ELEM, SZ_ELEM, DATA_TYPE, DIR };
+  enum VarInfoFieldID { PTR, VAR_NAME, NUM_ELEM, SZ_ELEM, DATA_TYPE, DIR, IS_TENSOR};
 
   for (auto P : Data) {
     llvm::Value *Addr;
@@ -827,6 +838,24 @@ CGApproxRuntime::CGApproxRuntimeEmitData(
     llvm::Value *SizeOfElement;
     Expr *E = P.first;
     Directionality Dir = P.second;
+
+
+    if(isApproxDecl(E)) {
+        llvm::dbgs() << "It's an approx decl\n";
+        Address addr = CGF.GetAddressOfTensor(E);
+        LValue Base = CGF.MakeAddrLValue(
+            CGF.Builder.CreateConstGEP(VarInfoArray, Pos), VarInfoTy);
+        auto *FieldT = *std::next(VarInfoRecord->field_begin(), PTR);
+        LValue BaseAddrLVal = CGF.EmitLValueForField(Base, FieldT);
+        CGF.EmitStoreOfScalar(CGF.Builder.CreatePtrToInt(addr.getPointer(), CGF.IntPtrTy),
+                              BaseAddrLVal);
+
+        LValue typeLVal = CGF.EmitLValueForField(
+            Base, *std::next(VarInfoRecord->field_begin(), IS_TENSOR));
+        CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, 1, false),
+                              typeLVal);
+        continue;
+    }
     
     std::tie(Addr, NumElements, SizeOfElement, TypeOfElement) =
         getPointerAndSize(CGF, E);
@@ -837,6 +866,8 @@ CGApproxRuntime::CGApproxRuntimeEmitData(
     LValue BaseAddrLVal = CGF.EmitLValueForField(Base, FieldT);
     CGF.EmitStoreOfScalar(CGF.Builder.CreatePtrToInt(Addr, CGF.IntPtrTy),
                           BaseAddrLVal);
+    Base = CGF.MakeAddrLValue(
+        CGF.Builder.CreateConstGEP(VarInfoArray, Pos), VarInfoTy);
 
     // Store VAR_NAME
     std::string ExprName = "";
@@ -864,6 +895,10 @@ CGApproxRuntime::CGApproxRuntimeEmitData(
     LValue typeLVal = CGF.EmitLValueForField(
         Base, *std::next(VarInfoRecord->field_begin(), DATA_TYPE));
     CGF.EmitStoreOfScalar(TypeOfElement, typeLVal);
+
+    typeLVal = CGF.EmitLValueForField(
+        Base, *std::next(VarInfoRecord->field_begin(), IS_TENSOR));
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, 0, false), typeLVal);
 
     // Store Dir
     Value *direction = llvm::ConstantInt::get(CGM.Int8Ty, Dir, false);
@@ -1567,6 +1602,7 @@ void CGApproxRuntime::emitApproxDeclareTensor(
                                             FunctorCollectionAddr);
   llvm::Value *InternalReprValue = CGF->Builder.CreatePointerCast(InternalRepr.getPointer(), CGF->VoidPtrTy);
 
+  CGF->AddDeclaredTensorLocalVar((VarDecl*) D, InternalRepr);
 
   llvm::FunctionCallee CleanFNCall = getTensorCleanupFn(CGM);
   llvm::SmallVector<llvm::Value *, 1> CallArgs;
