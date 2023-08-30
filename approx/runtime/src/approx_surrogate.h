@@ -70,7 +70,7 @@ class GPUExecutionPolicy {
     }
     static inline void transferFromDevice(void *dest, void *src, size_t nBytes)
     {
-      DtoDMemcpy(dest, src, nBytes);
+      DtoHMemcpy(dest, src, nBytes);
     }
 };
 
@@ -384,6 +384,7 @@ private:
       for (long j = 0; j < numCols; j++) {
         auto tmp = tensor[j].contiguous();
         TypeInValue* ptr = tmp.data_ptr<TypeInValue>();
+        // memcpy(array[j], ptr, sizeof(TypeInValue) * numRows);
         ExecutionPolicy::transferFromDevice(array[j], ptr,
                                             sizeof(TypeInValue) * numRows);
       }
@@ -397,10 +398,10 @@ private:
                    at::ScalarType dType)
   {
     try {
-      // module = torch::jit::load(model_path);
-      // module.to(device);
-      // module.to(dType);
-      // module.eval();
+      module = torch::jit::load(model_path);
+      module.to(device);
+      module.to(dType);
+      module.eval();
       // tensorOptions = torch::TensorOptions().dtype(dType).pinned_memory(true);
     } catch (const c10::Error& e) {
         std::cerr << "error loading the model\n";
@@ -449,6 +450,20 @@ private:
     }
   }
 
+  public:
+  inline void _eval_only(long num_elements,
+                        long num_in,
+                        size_t num_out,
+                        void *ipt_tens,
+                        TypeInValue** outputs)
+  {
+      at::Tensor input = *(at::Tensor *)ipt_tens;
+      input = input.to(ExecutionPolicy::device, true);
+
+      at::Tensor output = module.forward({input}).toTensor();
+      tensorToArray(output, num_elements, num_out, outputs);
+  }
+
 #else
   template <typename T>
   inline void _load(const std::string& model_path,
@@ -473,10 +488,7 @@ public:
   SurrogateModel(const char* model_path, at::IntArrayRef &&ipt_shape, at::IntArrayRef &&opt_shape, bool is_cpu = true)
       : model_path(model_path), is_cpu(is_cpu), input_shape(ipt_shape), output_shape(opt_shape)
   {
-    // _load<TypeInValue>(model_path, ExecutionPolicy::device);
-    // input_tensor = at::empty(input_shape, at::TensorOptions().dtype(torch::kFloat64));
-    // output_tensor = at::empty(output_shape, at::TensorOptions().dtype(torch::kFloat64).device(ExecutionPolicy::device));
-    // translator = std::make_unique<TensorTranslator>(input_tensor);
+    _load<TypeInValue>(model_path, ExecutionPolicy::device);
   }
 
   inline void evaluate(long num_elements,

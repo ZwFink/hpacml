@@ -5,6 +5,7 @@
 #include <cstring>
 #include <vector>
 #include <algorithm>
+#include "approx_internal.h"
 #include "approx_surrogate.h"
 
 using Tensor = AbstractTensor<TorchTensorImpl>;
@@ -150,32 +151,6 @@ get_strides(array_info_t &arg) {
 
 extern "C" {
 
-enum InternalReprType {
-	Memory = 0,
-	Torch = 1,
-	TensorFlow
-};
-
-typedef struct internal_tensor_repr_data {
-	int type;
-	void *data;
-
-	~internal_tensor_repr_data() {
-		Tensor *T = (Tensor *)data;
-		delete T;
-	}
-
-	void set_library_type(int t) {
-		type = t;
-	}
-
-	void set_data(void *d) {
-		data = d;
-	}
-
-} internal_repr_metadata_t;
-
-
 void __approx_runtime_tensor_cleanup(void* data) {
 	dbgs() << "Cleanup function is called\n";
 	internal_repr_metadata_t *metadata = (internal_repr_metadata_t *)data;
@@ -222,6 +197,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 		#endif
 
 		Tensor::tensor_t blob = Tensor::from_blob(argRHS.base, SHP, Strides, TypeOfTensorData);
+		blob = blob.to(Tensor::CUDA, true);
 
 		if(nargsRHS > 1) {
                         auto transpose_vec_ =
@@ -241,12 +217,14 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
             *LHSTensor = Tensor::cat(RHSTensors, -1);
     }
     dbgs() << "Final tensor is: " << LHSTensor->sizes() << "\n";;
+	// dbgs() << *LHSTensor;
 
 	auto LibraryType = Tensor::getTensorLibraryType();
 	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
 	metadata->set_library_type(LibraryType);
 	metadata->set_data(LHSTensor);
 
+	std::cout << "Internal repr has address: " << metadata << "\n";
 	return metadata;
 }
 

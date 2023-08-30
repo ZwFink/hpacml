@@ -70,7 +70,7 @@ public:
   int count;
   BaseDB *db;
   SurrogateModel<GPUExecutionPolicy, CatTensorTranslator<double>, double> Model{
-      "/usr/workspace/fink12/torch/model.pt", {NUM_ITEMS, 5}, {NUM_ITEMS, 1}, false};
+      "/u/zanef2/approx-llvm/approx/test_parse/model.pt", {NUM_ITEMS, 5}, {NUM_ITEMS, 1}, false};
 
 
   ApproxRuntimeConfiguration() {
@@ -299,18 +299,37 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
   }
   else if ( (MLType) ml_type == ML_INFER ){
     // I have not implemented this part
-    double **ipts = new double*[num_inputs];
-    double **opts = new double*[num_outputs];
-    for(int i = 0; i < num_inputs; i++){
-      ipts[i] = static_cast<double*>(input_vars[i].ptr);
+    bool have_tensors = false;
+    if(input_vars[0].is_tensor) {
+    internal_repr_metadata_t *metadata =
+        static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
+      std::cout << "The input is a tensor";
+      assert(num_inputs == 1 && "Only one input is supported for now");
+      std::cout << "Internal repr has haddress: " << metadata << "\n";
+      have_tensors = true;
+
     }
+
+  // if(output_vars[0].is_tensor) {
+      // std::cout << "The output is not a tensor" << std::endl;
+    // }
+    // double **ipts = new double*[num_inputs];
+    double **opts = new double*[num_outputs];
+    // for(int i = 0; i < num_inputs; i++){
+      // ipts[i] = static_cast<double*>(input_vars[i].ptr);
+    // }
     for(int i = 0; i < num_outputs; i++){
       opts[i] = static_cast<double*>(output_vars[i].ptr);
     }
-    RTEnv.Model.evaluate(input_vars[0].num_elem, num_inputs, num_outputs, ipts, 
-    opts);
+    if(have_tensors) {
+    internal_repr_metadata_t *metadata =
+        static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
+    RTEnv.Model._eval_only(output_vars[0].num_elem, num_inputs, num_outputs, metadata->data, opts);
+    }
+    // RTEnv.Model.evaluate(input_vars[0].num_elem, num_inputs, num_outputs, ipts, 
+    // opts);
     // accurateFN(arg);
-    delete [] ipts;
+    // delete [] ipts;
     delete [] opts;
   }
   else {

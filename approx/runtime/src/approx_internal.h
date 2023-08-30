@@ -63,6 +63,7 @@ typedef struct approx_var_info_t {
   size_t sz_elem;
   int8_t data_type;
   uint8_t dir;
+  uint8_t is_tensor;
 } approx_var_info_t;
 
 enum ApproxType : int8_t {
@@ -77,6 +78,32 @@ typedef enum __approx_tensor_library_type {
   TENSORFLOW = 1,
   NUM_TENSOR_LIBRARIES = 2
 } __approx_tensor_library_type;
+
+enum InternalReprType {
+	Memory = 0,
+	Torch = 1,
+	TensorFlow
+};
+
+typedef struct internal_tensor_repr_data {
+	int type;
+	void *data;
+
+	// ~internal_tensor_repr_data() {
+	// 	Tensor *T = (Tensor *)data;
+	// 	delete T;
+	// }
+
+	void set_library_type(int t) {
+		type = t;
+	}
+
+	void set_data(void *d) {
+		data = d;
+	}
+
+} internal_repr_metadata_t;
+
 
 void memoize_out(void (*accurate)(void *), void *arg,
                  approx_var_info_t *outputs, int num_outputs);
