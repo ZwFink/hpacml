@@ -2429,11 +2429,6 @@ ExprResult Sema::ActOnApproxIndexVarRefExpr(IdentifierInfo *II, SourceLocation L
   return new (Context)  ApproxIndexVarRefExpr(II, Context.getIntTypeForBitwidth(64, false), VK_LValue, OK_Ordinary, Loc);
 }
 
-ExprResult Sema::ActOnApproxTensorRefExpr(IdentifierInfo *II, SourceLocation ILoc) {
-  llvm_unreachable("ApproxTensorRefExpr not implemented");
-  return ExprError();
-}
-
 ApproxClause *Sema::ActOnApproxNNClause(ClauseKind Kind,
                                         ApproxVarListLocTy &Locs) {
   SourceLocation StartLoc = Locs.StartLoc;

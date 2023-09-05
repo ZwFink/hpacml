@@ -99,11 +99,7 @@ bool Parser::ParseApproxVarList(SmallVectorImpl<Expr *> &Vars,
          Tok.isNot(tok::annot_pragma_approx_end)) {
     ExprResult VarExpr =
         Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
-    Expr *Var = VarExpr.get();
-    if(DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(Var)) {
-      llvm::dbgs() << DRE->getDecl()->getName() << "\n";
-    }
-    if (VarExpr.isUsable()) {
+        if (VarExpr.isUsable()) {
       Vars.push_back(VarExpr.get());
     } else {
       SkipUntil(tok::comma, tok::r_paren, tok::annot_pragma_approx_end,
@@ -523,7 +519,6 @@ ApproxClause *Parser::ParseApproxIfClause(ClauseKind CK) {
 }
 
 ApproxClause *Parser::ParseApproxInClause(ClauseKind CK) {
-  llvm::dbgs() << "Are we in an approx scope when parsing the approx var list?" << getCurScope()->isApproxScope() << "\n";
   SourceLocation Loc = Tok.getLocation();
   SourceLocation LOpen = ConsumeAnyToken();
   SourceLocation RLoc;
