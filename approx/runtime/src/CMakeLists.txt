@@ -1,4 +1,5 @@
 configure_file(${LIBAPPROX_INC_DIR}/approx.h approx.h COPYONLY)
+configure_file(${LIBAPPROX_INC_DIR}/approx_debug.h approx_debug.h COPYONLY)
 message("libapprox is ${LIBAPPROX_INC_DIR}") 
 
 set(CLANG_SOURCE_INCLUDE "${LLVM_EXTERNAL_CLANG_SOURCE_DIR}/include/")
@@ -6,6 +7,7 @@ message("libapprox is ${CLANG_SOURCE_INCLUDE}")
 message("approx include is ${LIBAPPROX_INC_DIR}")
 
 set(LIBAPPROX_SOURCE_FILES
+    event.cpp
     approx_runtime.cpp
     approx_data_util.cpp
     approx_memoize_out.cpp
@@ -60,7 +62,6 @@ target_link_libraries(approx PRIVATE ${CUDA_LIBRARIES} cuda)
 target_link_libraries(approx PRIVATE ${CMAKE_DL_LIBS})
 target_link_libraries(approx PRIVATE ${HDF5_LIBRARIES})
 target_link_libraries(approx PRIVATE ${TORCH_LIBRARIES})
-target_link_libraries(approx PRIVATE hdf5)
 message(STATUS "Torch libraries dir: ${TORCH_LIBRARIES}")
 
 target_link_libraries(approx PRIVATE nlohmann_json::nlohmann_json)
@@ -70,3 +71,4 @@ set(LIBAPPROX_HEADERS_INSTALL_PATH "${APPROX_INSTALL_LIBDIR}/clang/${PACKAGE_VER
 
 install(TARGETS approx ${LIBAPPROX_INSTALL_KIND} DESTINATION "${APPROX_INSTALL_LIBDIR}")
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/approx.h DESTINATION ${LIBAPPROX_HEADERS_INSTALL_PATH})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/approx_debug.h DESTINATION ${LIBAPPROX_HEADERS_INSTALL_PATH})
