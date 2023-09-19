@@ -12,6 +12,7 @@
 #include <torch/script.h>  // One-stop header.
 #include "database/database.h"
 #include "approx_internal.h"
+#include "event.h"
 
 #include <cuda_runtime.h>
 inline void DtoDMemcpy(void *dest, void *src, size_t nBytes)
@@ -57,6 +58,11 @@ class CPUExecutionPolicy {
     {
       HtoHMemcpy(dest, src, nBytes);
     }
+
+    static inline void transferWithinDevice(void *dest, void *src, size_t nBytes)
+    {
+      HtoHMemcpy(dest, src, nBytes);
+    }
 };
 
 // TODO: We may want to later differentiate between 
@@ -71,6 +77,11 @@ class GPUExecutionPolicy {
     static inline void transferFromDevice(void *dest, void *src, size_t nBytes)
     {
       DtoHMemcpy(dest, src, nBytes);
+    }
+
+    static inline void transferWithinDevice(void *dest, void *src, size_t nBytes)
+    {
+      DtoDMemcpy(dest, src, nBytes);
     }
 };
 
@@ -364,6 +375,7 @@ private:
   at::Tensor input_tensor;
   at::Tensor output_tensor;
   std::unique_ptr<TensorTranslator> translator;
+  c10::InferenceMode guard{true};
 
 
 #ifdef __ENABLE_TORCH__
@@ -380,14 +392,19 @@ private:
   {
     // Transpose to get continuous memory and
     // perform single memcpy.
+    auto DTOHEv = EventRecorder::CreateGPUEvent("DtoH");
+    DTOHEv.recordStart();
     tensor = TensorType::transpose(tensor, {1, 0});
       for (long j = 0; j < numCols; j++) {
         auto tmp = tensor[j].contiguous();
         TypeInValue* ptr = tmp.data_ptr<TypeInValue>();
-        // memcpy(array[j], ptr, sizeof(TypeInValue) * numRows);
-        ExecutionPolicy::transferFromDevice(array[j], ptr,
+        // ExecutionPolicy::transferFromDevice(array[j], ptr,
+                                            // sizeof(TypeInValue) * numRows);
+        ExecutionPolicy::transferWithinDevice(array[j], ptr,
                                             sizeof(TypeInValue) * numRows);
       }
+    DTOHEv.recordEnd();
+    EventRecorder::LogEvent(DTOHEv);
     }
 
   // -------------------------------------------------------------------------
@@ -402,7 +419,6 @@ private:
       module.to(device);
       module.to(dType);
       module.eval();
-      // tensorOptions = torch::TensorOptions().dtype(dType).pinned_memory(true);
     } catch (const c10::Error& e) {
         std::cerr << "error loading the model\n";
     }
@@ -457,11 +473,15 @@ private:
                         void *ipt_tens,
                         TypeInValue** outputs)
   {
+      torch::NoGradGuard no_grad;
       at::Tensor input = *(at::Tensor *)ipt_tens;
-      input = input.to(ExecutionPolicy::device, true);
-
+      auto FPEvent = EventRecorder::CreateGPUEvent("Forward Pass");
+      FPEvent.recordStart();
       at::Tensor output = module.forward({input}).toTensor();
+      FPEvent.recordEnd();
+      EventRecorder::LogEvent(FPEvent);
       tensorToArray(output, num_elements, num_out, outputs);
+
   }
 
 #else
