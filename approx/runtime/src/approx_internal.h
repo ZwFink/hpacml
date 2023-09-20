@@ -17,7 +17,6 @@ extern "C" {
 #endif
 #include <stddef.h>
 #include <stdint.h>
-
 typedef float real_t;
 
 /** @struct approx_perfo_info_t
@@ -84,26 +83,6 @@ enum InternalReprType {
 	Torch = 1,
 	TensorFlow
 };
-
-typedef struct internal_tensor_repr_data {
-	int type;
-	void *data;
-
-	// ~internal_tensor_repr_data() {
-	// 	Tensor *T = (Tensor *)data;
-	// 	delete T;
-	// }
-
-	void set_library_type(int t) {
-		type = t;
-	}
-
-	void set_data(void *d) {
-		data = d;
-	}
-
-} internal_repr_metadata_t;
-
 
 void memoize_out(void (*accurate)(void *), void *arg,
                  approx_var_info_t *outputs, int num_outputs);

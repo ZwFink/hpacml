@@ -222,6 +222,26 @@ class TorchTensorImpl {
 
 
 using TensorType = AbstractTensor<TorchTensorImpl>;
+
+
+typedef struct internal_tensor_repr_data {
+	int type;
+	void *data;
+
+	~internal_tensor_repr_data() {
+		TensorType::tensor_t *T = (TensorType::tensor_t *)data;
+		delete T;
+	}
+
+	void set_library_type(int t) {
+		type = t;
+	}
+
+	void set_data(void *d) {
+		data = d;
+	}
+
+} internal_repr_metadata_t;
 template <typename TypeInValue> class TensorTranslator {
   public:
     at::Tensor &tensor;
