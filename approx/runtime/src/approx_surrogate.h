@@ -139,6 +139,18 @@ template<typename T>
     }
   }
 
+  static Device getDeviceForPointer(void *ptr) {
+    if (ptr == nullptr) {
+      return Device(CPU, static_cast<char>(0));
+    }
+    cudaPointerAttributes attributes;
+    cudaPointerGetAttributes(&attributes, ptr);
+    if (attributes.device == -1) {
+      return {CPU, static_cast<char>(0)};
+    } else {
+      return {CUDA, static_cast<char>(attributes.device)};
+    }
+  }
 };
 
 using TensorLibraryType = __approx_tensor_library_type;
@@ -153,6 +165,7 @@ class TorchTensorImpl {
   using ArrayRef = torch::ArrayRef<T>;
   static constexpr auto CUDA = torch::kCUDA;
   static constexpr auto CPU = torch::kCPU;
+  using TensorDeviceInstanceType = decltype(torch::kCUDA);
   using TensorDataTypeType = decltype(torch::kDouble);
   using Shape = torch::IntArrayRef;
   static constexpr auto float64 = torch::kDouble;
@@ -217,6 +230,7 @@ using TensorType = AbstractTensor<TorchTensorImpl>;
 
 typedef struct internal_tensor_repr_data {
 	int type;
+  TensorType::Device original_device{TensorType::CPU};
 	void *data;
 
 	~internal_tensor_repr_data() {
@@ -231,6 +245,10 @@ typedef struct internal_tensor_repr_data {
 	void set_data(void *d) {
 		data = d;
 	}
+
+  void set_device(TensorType::Device d) {
+    original_device = d;
+  }
 
 } internal_repr_metadata_t;
 template <typename TypeInValue> class TensorTranslator {

@@ -201,13 +201,14 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	auto LHSShape = Tensor::makeArrayRef(shapesLHS->shapes, shapesLHS->ndim);
 
 	std::vector<Tensor::tensor_t> RHSTensors;
-	// TODO: This should be changed to the type of the model (Uh-oh: We may not know the model type yet)
 	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->type);
 	dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
 	EventRecorder::GPUEvent TransferEvent = EventRecorder::CreateGPUEvent("To Tensor");
 	TransferEvent.recordStart();
 
 	auto AccessBounds = get_access_bounds((array_info_t**) argsRHS_vpp, nargsRHS);
+
+	TensorType::Device OriginalDevice{TensorType::CPU};
 	
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
 		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
@@ -230,11 +231,13 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 			base_offset += Strides[dim] * slice.start;
 
 		}
+		OriginalDevice = Tensor::getDeviceForPointer(argRHS.base);
 		auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argRHS.type);
-		auto options = Tensor::tensor_options_t().dtype(ThisType).device(Tensor::CUDA, 0);
+
+		auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
 		Tensor::tensor_t blob = Tensor::from_blob((float*) argRHS.base + base_offset, SHP, Strides, options);
-		// Tensor::tensor_t blob = Tensor::from_blob((double*) argRHS.base + base_offset, SHP, Strides, TypeOfTensorData);
-		// blob = blob.to(Tensor::CUDA, true);
+
+		blob = blob.to(Tensor::CUDA, true);
 
 		if(nargsRHS > 1) {
                         auto transpose_vec_ =
@@ -266,6 +269,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
 	metadata->set_library_type(LibraryType);
 	metadata->set_data(LHSTensor);
+	metadata->set_device(OriginalDevice);
 	EventRecorder::CPUEvent Deletion{"Delete"};
 
 	return metadata;
