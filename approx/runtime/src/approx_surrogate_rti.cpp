@@ -201,9 +201,10 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	auto LHSShape = Tensor::makeArrayRef(shapesLHS->shapes, shapesLHS->ndim);
 
 	std::vector<Tensor::tensor_t> RHSTensors;
+	// TODO: This should be changed to the type of the model (Uh-oh: We may not know the model type yet)
 	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->type);
 	dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
-	EventRecorder::GPUEvent TransferEvent = EventRecorder::CreateGPUEvent("HtoD");
+	EventRecorder::GPUEvent TransferEvent = EventRecorder::CreateGPUEvent("To Tensor");
 	TransferEvent.recordStart();
 
 	auto AccessBounds = get_access_bounds((array_info_t**) argsRHS_vpp, nargsRHS);
@@ -229,7 +230,8 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 			base_offset += Strides[dim] * slice.start;
 
 		}
-		auto options = Tensor::tensor_options_t().dtype(TypeOfTensorData).device(Tensor::CUDA, 0);
+		auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argRHS.type);
+		auto options = Tensor::tensor_options_t().dtype(ThisType).device(Tensor::CUDA, 0);
 		Tensor::tensor_t blob = Tensor::from_blob((float*) argRHS.base + base_offset, SHP, Strides, options);
 		// Tensor::tensor_t blob = Tensor::from_blob((double*) argRHS.base + base_offset, SHP, Strides, TypeOfTensorData);
 		// blob = blob.to(Tensor::CUDA, true);
@@ -241,6 +243,8 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
                             blob, Tensor::makeArrayRef(transpose_vec_.data(),
                                                        transpose_vec_.size()));
                 }
+		// change the dtype of blob to 'ThisType'
+		blob = blob.to(TypeOfTensorData);
 
 		RHSTensors.push_back(blob);
 	}
@@ -251,6 +255,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
     } else {
             *LHSTensor = Tensor::cat(RHSTensors, -1);
     }
+
     dbgs() << "Final tensor is: " << LHSTensor->sizes() << "\n";;
 
 	TransferEvent.recordEnd();

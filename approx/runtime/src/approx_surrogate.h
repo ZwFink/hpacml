@@ -14,6 +14,7 @@
 #include "approx_internal.h"
 #include "event.h"
 
+
 #include <cuda_runtime.h>
 inline void DtoDMemcpy(void *dest, void *src, size_t nBytes)
 {
@@ -34,16 +35,6 @@ inline void DtoHMemcpy(void *dest, void *src, size_t nBytes)
 {
   cudaMemcpy(dest, src, nBytes, cudaMemcpyDeviceToHost);
 }
-
-// void print_shape(at::Tensor &t)
-// {
-//   std::cout << "Shape: ";
-//   for (int i = 0; i < t.dim(); i++)
-//   {
-//     std::cout << t.size(i) << " ";
-//   }
-//   std::cout << std::endl;
-// }
 
 class CPUExecutionPolicy {
   public:
@@ -280,59 +271,6 @@ template <typename TypeInValue> class TensorTranslator {
                        TypeInValue **array) {}
 };
 
-template <typename TypeInValue, bool use_pinned=true>
-class MemcpyTensorTranslator : public TensorTranslator<TypeInValue> {
-  public:
-    TypeInValue *input_data;
-    torch::Tensor tensor;
-    MemcpyTensorTranslator(at::Tensor &tensor) : TensorTranslator<TypeInValue>{tensor}
-    {
-        this->input_data = nullptr;
-        if (use_pinned) {
-        cudaMallocHost((void **)&this->input_data,
-                       NUM_ITEMS * 5 * sizeof(TypeInValue));
-        } else {
-        this->input_data = new TypeInValue[NUM_ITEMS * 5];
-        }
-    }
-
-    at::Tensor &arrayToTensor(long numRows, long numCols, TypeInValue **array) {
-      // TypeInValue *input_data = this->tensor.template data_ptr<TypeInValue>();
-      for (int i = 0; i < numCols; i++) {
-        std::memcpy(this->input_data +
-                        (i*NUM_ITEMS + this->insert_index),
-                    reinterpret_cast<TypeInValue *>(array[i]),
-                    numRows * sizeof(TypeInValue));
-      }
-      this->insert_index += numRows;
-      if(this->insert_index == NUM_ITEMS)
-        this->tensor = torch::from_blob(this->input_data, {numCols, NUM_ITEMS}, torch::kFloat64);
-
-      return this->tensor;
-    }
-
-    void reset()
-    {
-      this->insert_index = 0;
-    }
-
-    void tensorToArray(at::Tensor tensor, long numRows, long numCols,
-                       TypeInValue **array) {}
-
-    at::Tensor prepareForInference(at::Tensor& t)
-    {
-      return TensorType::transpose(t, {1, 0});
-    }
-
-    ~MemcpyTensorTranslator()
-    {
-      if(use_pinned)
-        cudaFreeHost(this->input_data);
-      else
-        delete[] this->input_data;
-    }
-};
-
 template <typename TypeInValue>
 class CatTensorTranslator : public TensorTranslator<TypeInValue> {
   public:
@@ -412,7 +350,7 @@ private:
   {
     // Transpose to get continuous memory and
     // perform single memcpy.
-    auto DTOHEv = EventRecorder::CreateGPUEvent("DtoH");
+    auto DTOHEv = EventRecorder::CreateGPUEvent("From Tensor");
     DTOHEv.recordStart();
     tensor = TensorType::transpose(tensor, {1, 0});
       for (long j = 0; j < numCols; j++) {
@@ -541,14 +479,21 @@ public:
   }
 
   inline void evaluate(long num_elements,
-                       std::vector<const TypeInValue*> inputs,
-                       std::vector<TypeInValue*> outputs)
+                       std::vector<void *> inputs,
+                       std::vector<void*> outputs)
   {
     _evaluate(num_elements,
               inputs.size(),
               outputs.size(),
-              static_cast<const TypeInValue**>(inputs.data()),
-              static_cast<TypeInValue**>(outputs.data()));
+              reinterpret_cast<TypeInValue**>(inputs.data()),
+              reinterpret_cast<TypeInValue**>(outputs.data()));
+  }
+
+  inline void evaluate(long num_elements,
+                       void *ipt_tensor,
+                       std::vector<void*> outputs)
+  {
+    _eval_only(num_elements, 1, outputs.size(), ipt_tensor, reinterpret_cast<TypeInValue**>(outputs.data()));
   }
 };
 

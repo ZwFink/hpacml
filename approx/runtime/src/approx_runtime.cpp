@@ -298,39 +298,34 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
     }
   }
   else if ( (MLType) ml_type == ML_INFER ){
-    // I have not implemented this part
     bool have_tensors = false;
+
     if(input_vars[0].is_tensor) {
-    internal_repr_metadata_t *metadata =
-        static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
-      std::cout << "The input is a tensor";
-      assert(num_inputs == 1 && "Only one input is supported for now");
-      std::cout << "Internal repr has haddress: " << metadata << "\n";
+      assert(num_inputs == 1 && "Only one tensor input is supported");
       have_tensors = true;
-
     }
 
-  // if(output_vars[0].is_tensor) {
-      // std::cout << "The output is not a tensor" << std::endl;
-    // }
-    // double **ipts = new double*[num_inputs];
-    double **opts = new double*[num_outputs];
-    // for(int i = 0; i < num_inputs; i++){
-      // ipts[i] = static_cast<double*>(input_vars[i].ptr);
-    // }
-    for(int i = 0; i < num_outputs; i++){
-      opts[i] = static_cast<double*>(output_vars[i].ptr);
+    std::vector<void *> ipts;
+    std::vector<void *> opts;
+    ipts.reserve(num_inputs);
+    opts.reserve(num_outputs);
+
+    for(int i = 0; i < num_inputs; i++) {
+      ipts.push_back(input_vars[i].ptr);
     }
-    if(have_tensors) {
+    for(int i = 0; i < num_outputs; i++) {
+      opts.push_back(output_vars[i].ptr);
+    }
+
+   if (have_tensors) {
     internal_repr_metadata_t *metadata =
         static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
-    RTEnv.Model._eval_only(output_vars[0].num_elem, num_inputs, num_outputs, metadata->data, opts);
+      RTEnv.Model.evaluate(output_vars[0].num_elem,
+                             metadata->data, opts);
+    } else {
+      RTEnv.Model.evaluate(input_vars[0].num_elem,
+                           ipts, opts);
     }
-    // RTEnv.Model.evaluate(input_vars[0].num_elem, num_inputs, num_outputs, ipts, 
-    // opts);
-    // accurateFN(arg);
-    // delete [] ipts;
-    delete [] opts;
   }
   else {
     accurateFN(arg);
