@@ -86,6 +86,7 @@ class AbstractTensor : private TensorImpl {
   template<typename T>
   using ArrayRef = typename TensorImpl::template ArrayRef<T>;
   using TensorDataTypeType = typename TensorImpl::TensorDataTypeType;
+  using TensorDeviceInstanceType = typename TensorImpl::TensorDeviceInstanceType;
   static constexpr auto CUDA = TensorImpl::CUDA;
   static constexpr auto CPU = TensorImpl::CPU;
   static constexpr auto float64 = TensorImpl::float64;
@@ -141,14 +142,14 @@ template<typename T>
 
   static Device getDeviceForPointer(void *ptr) {
     if (ptr == nullptr) {
-      return Device(CPU, static_cast<char>(0));
+      return Device(CPU);
     }
     cudaPointerAttributes attributes;
     cudaPointerGetAttributes(&attributes, ptr);
-    if (attributes.device == -1) {
-      return {CPU, static_cast<char>(0)};
-    } else {
+    if (attributes.type == cudaMemoryTypeDevice || attributes.type == cudaMemoryTypeManaged) {
       return {CUDA, static_cast<char>(attributes.device)};
+    } else {
+      return {CPU};
     }
   }
 };
@@ -227,7 +228,6 @@ class TorchTensorImpl {
 
 using TensorType = AbstractTensor<TorchTensorImpl>;
 
-
 typedef struct internal_tensor_repr_data {
 	int type;
   TensorType::Device original_device{TensorType::CPU};
@@ -292,16 +292,16 @@ template <typename TypeInValue> class TensorTranslator {
 template <typename TypeInValue>
 class CatTensorTranslator : public TensorTranslator<TypeInValue> {
   public:
-    std::vector<TensorType::tensor_t> allocatedTensors;
+std::vector<TensorType::tensor_t> allocatedTensors;
     TensorType::tensor_t tensor = TensorType::empty({0, 5}, TensorType::float64);
     CatTensorTranslator(at::Tensor &tensor)
         : TensorTranslator<TypeInValue>{tensor} {
-          for(int i = 0; i < 5; i++)
+for(int i = 0; i < 5; i++)
             allocatedTensors.push_back(TensorType::empty({NUM_ITEMS,1}, TensorType::float64));
         }
 
     at::Tensor &arrayToTensor(long numRows, long numCols, TypeInValue **array) {
-      for (int i = 0; i < numCols; i++) {
+for (int i = 0; i < numCols; i++) {
         auto temp = TensorType::from_blob((TypeInValue *)array[i],
                                            {numRows, 1}, TensorType::float64);
 
@@ -317,7 +317,7 @@ class CatTensorTranslator : public TensorTranslator<TypeInValue> {
 
     void reset()
     {
-      this->tensor = TensorType::empty({0, 5}, TensorType::float64);
+this->tensor = TensorType::empty({0, 5}, TensorType::float64);
       this->insert_index = 0;
     }
 
