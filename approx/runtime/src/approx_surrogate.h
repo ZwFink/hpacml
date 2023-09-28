@@ -328,10 +328,6 @@ class SurrogateModel : public ExecutionPolicy
 private:
   const std::string model_path;
   const bool is_cpu;
-  at::IntArrayRef input_shape;
-  at::IntArrayRef output_shape;
-  at::Tensor input_tensor;
-  at::Tensor output_tensor;
   std::unique_ptr<TensorTranslator> translator;
   c10::InferenceMode guard{true};
 
@@ -438,7 +434,7 @@ private:
       at::Tensor output = module.forward({input}).toTensor();
       FPEvent.recordEnd();
       EventRecorder::LogEvent(FPEvent);
-      tensorToArray(output, num_elements, num_out, outputs);
+      // tensorToArray(output, num_elements, num_out, outputs);
 
   }
 
@@ -463,8 +459,16 @@ private:
   // public interface
   // -------------------------------------------------------------------------
 public:
-  SurrogateModel(const char* model_path, at::IntArrayRef &&ipt_shape, at::IntArrayRef &&opt_shape, bool is_cpu = true)
-      : model_path(model_path), is_cpu(is_cpu), input_shape(ipt_shape), output_shape(opt_shape)
+  SurrogateModel(std::string&& model_path, bool is_cpu = true)
+      : model_path(model_path), is_cpu(is_cpu)
+  {
+    if(model_path.empty())
+      return; 
+
+    _load<TypeInValue>(model_path, ExecutionPolicy::device);
+  }
+
+  void set_model(std::string&& model_path)
   {
     _load<TypeInValue>(model_path, ExecutionPolicy::device);
   }

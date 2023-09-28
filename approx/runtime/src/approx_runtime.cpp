@@ -91,6 +91,11 @@ public:
       db = new HDF5DB("test.h5");
     }
 
+    env_p = std::getenv("SURROGATE_MODEL");
+    if (env_p) {
+      Model.set_model(env_p);
+    }
+
     env_p = std::getenv("EXECUTE_MODE");
     if (!env_p) {
       Mode = EXECUTE;
