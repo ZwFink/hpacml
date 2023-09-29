@@ -237,32 +237,30 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 		auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
 		Tensor::tensor_t blob = Tensor::from_blob((float*) argRHS.base + base_offset, SHP, Strides, options);
 
-		blob = blob.to(Tensor::CUDA, true);
+		blob = blob.to(Tensor::CUDA, /*nonblocking=*/ true);
 
-		if(nargsRHS > 1) {
-                        auto transpose_vec_ =
-                            get_transpose_vector(LHSShape, RHSShape);
-                        blob = Tensor::transpose(
-                            blob, Tensor::makeArrayRef(transpose_vec_.data(),
-                                                       transpose_vec_.size()));
-                }
-		// change the dtype of blob to 'ThisType'
-		blob = blob.to(TypeOfTensorData);
+        if (nargsRHS > 1) {
+            auto transpose_vec_ =
+                get_transpose_vector(LHSShape, RHSShape);
+           blob = Tensor::transpose(
+                  blob, Tensor::makeArrayRef(transpose_vec_.data(),
+                  transpose_vec_.size()));
+        }
 
+        blob = blob.to(TypeOfTensorData);
 		RHSTensors.push_back(blob);
 	}
 
     Tensor::tensor_t *LHSTensor = new Tensor::tensor_t();
     if (nargsRHS == 1) {
-            *LHSTensor = RHSTensors[0];
+        *LHSTensor = RHSTensors[0];
     } else {
-            *LHSTensor = Tensor::cat(RHSTensors, -1);
+        *LHSTensor = Tensor::cat(RHSTensors, -1);
     }
 
     dbgs() << "Final tensor is: " << LHSTensor->sizes() << "\n";;
 
 	TransferEvent.recordEnd();
-	float ms = TransferEvent.elapsedTime();
 	EventRecorder::LogEvent(TransferEvent);
 
 	auto LibraryType = Tensor::getTensorLibraryType();
@@ -270,7 +268,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	metadata->set_library_type(LibraryType);
 	metadata->set_data(LHSTensor);
 	metadata->set_device(OriginalDevice);
-	EventRecorder::CPUEvent Deletion{"Delete"};
+	metadata->set_underlying_type((ApproxType) argsRHS->type);
 
 	return metadata;
 }

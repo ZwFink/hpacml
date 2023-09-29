@@ -10,6 +10,7 @@
 #include <string>
 
 #include <torch/script.h>  // One-stop header.
+#include <type_traits>
 #include "database/database.h"
 #include "approx_internal.h"
 #include "event.h"
@@ -229,6 +230,7 @@ class TorchTensorImpl {
 using TensorType = AbstractTensor<TorchTensorImpl>;
 
 typedef struct internal_tensor_repr_data {
+  ApproxType underlying_type;
 	int type;
   TensorType::Device original_device{TensorType::CPU};
 	void *data;
@@ -250,6 +252,10 @@ typedef struct internal_tensor_repr_data {
     original_device = d;
   }
 
+  void set_underlying_type(ApproxType t) {
+    underlying_type = t;
+  }
+
 } internal_repr_metadata_t;
 template <typename TypeInValue> class TensorTranslator {
   public:
@@ -263,12 +269,13 @@ template <typename TypeInValue> class TensorTranslator {
 
     // TODO: This can probably be optimized if we change the layout of 
     // this to match the other case (i.e., insert when it's in column-major, then transpose)
-    at::Tensor arrayToTensor(long numRows, long numCols, TypeInValue **array) {
+    template<typename DataType>
+    at::Tensor arrayToTensor(long numRows, long numCols, DataType **array) {
       auto tensorOptions = tensor.options();
       for (int i = 0; i < numCols; i++) {
         auto column =
             tensor.select(1, i).slice(0, insert_index, insert_index + numRows);
-        auto data = reinterpret_cast<TypeInValue *>(array[i]);
+        auto data = reinterpret_cast<DataType *>(array[i]);
         column.copy_(torch::from_blob(data, {numRows}, tensorOptions), false);
       }
       insert_index += numRows;
@@ -292,18 +299,23 @@ template <typename TypeInValue> class TensorTranslator {
 template <typename TypeInValue>
 class CatTensorTranslator : public TensorTranslator<TypeInValue> {
   public:
-std::vector<TensorType::tensor_t> allocatedTensors;
-    TensorType::tensor_t tensor = TensorType::empty({0, 5}, TensorType::float64);
-    CatTensorTranslator(at::Tensor &tensor)
-        : TensorTranslator<TypeInValue>{tensor} {
-for(int i = 0; i < 5; i++)
-            allocatedTensors.push_back(TensorType::empty({NUM_ITEMS,1}, TensorType::float64));
-        }
+    std::vector<TensorType::tensor_t> allocatedTensors;
+    TensorType::tensor_t tensor =
+        TensorType::empty({0, 5}, TensorType::float64);
+    CatTensorTranslator(at::Tensor &tensor) : TensorTranslator<TypeInValue> {
+      tensor
+    }
+    {
+      for (int i = 0; i < 5; i++)
+        allocatedTensors.push_back(
+            TensorType::empty({NUM_ITEMS, 1}, TensorType::float64));
+    }
 
-    at::Tensor &arrayToTensor(long numRows, long numCols, TypeInValue **array) {
-for (int i = 0; i < numCols; i++) {
-        auto temp = TensorType::from_blob((TypeInValue *)array[i],
-                                           {numRows, 1}, TensorType::float64);
+    template <typename DataType>
+    at::Tensor &arrayToTensor(long numRows, long numCols, DataType **array) {
+      for (int i = 0; i < numCols; i++) {
+        auto temp = TensorType::from_blob((TypeInValue *)array[i], {numRows, 1},
+                                          TensorType::float64);
 
         allocatedTensors[i].narrow(0, this->insert_index, numRows).copy_(temp);
       }
@@ -315,21 +327,63 @@ for (int i = 0; i < numCols; i++) {
       return this->tensor;
     }
 
-    void reset()
-    {
-this->tensor = TensorType::empty({0, 5}, TensorType::float64);
+    void reset() {
+      this->tensor = TensorType::empty({0, 5}, TensorType::float64);
       this->insert_index = 0;
     }
 
     void tensorToArray(at::Tensor tensor, long numRows, long numCols,
                        TypeInValue **array) {}
 
-    TensorType::tensor_t prepareForInference(TensorType::tensor_t& t)
-    {
+    TensorType::tensor_t prepareForInference(TensorType::tensor_t &t) {
       return t;
     }
-
 };
+
+namespace {
+template<typename Model>
+struct EvalDispatcher {
+  private:
+  void EvaluateDispatchForType(long num_elements, size_t num_in, size_t num_out,
+                       void **inputs, void **outputs, ApproxType Underlying, Model& M) {
+    switch(Underlying) {
+      #define APPROX_TYPE(Enum, CType, nameOfType) \
+      case Enum:  \
+        M._evaluate(num_elements, num_in, num_out, (CType **)inputs, (CType **)outputs); \
+        break;
+      #include "clang/Basic/approxTypes.def"
+      case INVALID:
+        std::cout << "INVALID DATA TYPE passed in argument list\n";
+    }
+  }
+
+  void EvaluateOnlyDispatchForType(long num_elements, size_t num_in, size_t num_out,
+                       void *ipt_tensor, void **outputs, ApproxType Underlying, Model& M) {
+    switch(Underlying) {
+      #define APPROX_TYPE(Enum, CType, nameOfType) \
+      case Enum:  \
+        M._eval_only(num_elements, num_in, num_out, ipt_tensor, (CType **)outputs); \
+        break;
+      #include "clang/Basic/approxTypes.def"
+      case INVALID:
+        std::cout << "INVALID DATA TYPE passed in argument list\n";
+    }
+  }
+  public:
+    inline void evaluate(long num_elements, size_t num_in, size_t num_out,
+                         void **inputs, void **outputs, ApproxType Underlying,
+                         Model &M) {
+    EvaluateDispatchForType(num_elements, num_in, num_out, inputs, outputs,
+                            Underlying, M);
+    }
+
+    inline void evaluate_only(long num_elements, size_t num_out, void *ipt,
+                              void **outputs, ApproxType Underlying, Model &M) {
+    EvaluateOnlyDispatchForType(num_elements, 1, num_out, ipt, outputs,
+                                Underlying, M);
+    }
+};
+}
 
 //! ----------------------------------------------------------------------------
 //! An implementation for a surrogate model
@@ -339,6 +393,8 @@ typename TypeInValue>
 class SurrogateModel : public ExecutionPolicy
 {
 
+  template<typename>
+  friend class EvalDispatcher;
   static_assert(std::is_floating_point<TypeInValue>::value,
                 "SurrogateModel supports floating-point values (floats, "
                 "doubles, or long doubles) only!");
@@ -415,11 +471,12 @@ private:
   // -------------------------------------------------------------------------
   // evaluate a torch model
   // -------------------------------------------------------------------------
+  template<typename DataType>
   inline void _evaluate(long num_elements,
                         long num_in,
                         size_t num_out,
-                        TypeInValue** inputs,
-                        TypeInValue** outputs)
+                        DataType** inputs,
+                        DataType** outputs)
   {
 
     auto input = translator->arrayToTensor(num_elements, num_in, inputs);
@@ -439,11 +496,12 @@ private:
   }
 
   public:
+  template<typename DataType>
   inline void _eval_only(long num_elements,
                         long num_in,
                         size_t num_out,
                         void *ipt_tens,
-                        TypeInValue** outputs)
+                        DataType** outputs)
   {
       torch::NoGradGuard no_grad;
       at::Tensor input = *(at::Tensor *)ipt_tens;
@@ -491,31 +549,44 @@ public:
     _load<TypeInValue>(model_path, ExecutionPolicy::device);
   }
 
-  inline void evaluate(long num_elements,
+  inline void evaluate(ApproxType Underlying,
+                       long num_elements,
                        long num_in,
                        size_t num_out,
-                       TypeInValue** inputs,
-                       TypeInValue** outputs)
+                       void** inputs,
+                       void** outputs)
   {
-    _evaluate(num_elements, num_in, num_out, inputs, outputs);
+    EvalDispatcher<std::remove_reference_t<decltype(*this)>> functor;
+    functor.evaluate(num_elements, num_in, num_out, inputs, outputs, Underlying, *this);
   }
 
-  inline void evaluate(long num_elements,
+  inline void evaluate(ApproxType Underlying, long num_elements,
                        std::vector<void *> inputs,
-                       std::vector<void*> outputs)
-  {
-    _evaluate(num_elements,
-              inputs.size(),
-              outputs.size(),
-              reinterpret_cast<TypeInValue**>(inputs.data()),
-              reinterpret_cast<TypeInValue**>(outputs.data()));
+                       std::vector<void *> outputs) {
+    evaluate(Underlying, num_elements, inputs.size(), outputs.size(),
+             reinterpret_cast<void **>(inputs.data()),
+             reinterpret_cast<void **>(outputs.data()));
   }
 
-  inline void evaluate(long num_elements,
+  inline void evaluate(ApproxType Underlying, long num_elements, size_t num_out, void *ipt,
+                       void **outputs) {
+    eval_with_tensor_input(Underlying, num_elements, 1, ipt, outputs);
+  }
+
+  inline void evaluate(ApproxType Underlying, long num_elements,
                        void *ipt_tensor,
                        std::vector<void*> outputs)
   {
-    _eval_only(num_elements, 1, outputs.size(), ipt_tensor, reinterpret_cast<TypeInValue**>(outputs.data()));
+    eval_with_tensor_input(Underlying, num_elements, outputs.size(), ipt_tensor, reinterpret_cast<void**>(outputs.data()));
+  }
+
+  inline void eval_with_tensor_input(ApproxType Underlying, long num_elements,
+                       size_t num_out, void *ipt_tensor,
+                        void **outputs
+                       )
+  {
+    EvalDispatcher<std::remove_reference_t<decltype(*this)>> functor;
+    functor.evaluate_only(num_elements, num_out, ipt_tensor, outputs, Underlying, *this);
   }
 };
 
