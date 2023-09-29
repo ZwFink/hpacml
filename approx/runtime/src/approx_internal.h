@@ -17,7 +17,6 @@ extern "C" {
 #endif
 #include <stddef.h>
 #include <stdint.h>
-
 typedef float real_t;
 
 /** @struct approx_perfo_info_t
@@ -63,6 +62,7 @@ typedef struct approx_var_info_t {
   size_t sz_elem;
   int8_t data_type;
   uint8_t dir;
+  uint8_t is_tensor;
 } approx_var_info_t;
 
 enum ApproxType : int8_t {
@@ -70,6 +70,18 @@ enum ApproxType : int8_t {
 #include "clang/Basic/approxTypes.def"
   INVALID
 #undef APPROX_TYPE
+};
+
+typedef enum __approx_tensor_library_type {
+  TORCH = 0,
+  TENSORFLOW = 1,
+  NUM_TENSOR_LIBRARIES = 2
+} __approx_tensor_library_type;
+
+enum InternalReprType {
+	Memory = 0,
+	Torch = 1,
+	TensorFlow
 };
 
 void memoize_out(void (*accurate)(void *), void *arg,

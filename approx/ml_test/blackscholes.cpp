@@ -16,7 +16,7 @@
 // uncomment to output device statistics
 //#define APPROX_DEV_STATS 1
 //#include <approx_debug.h>
-//#include <omp.h>
+#include <omp.h>
 #include <cassert>
 #include <iostream>
 
@@ -29,6 +29,8 @@
 #define fptype double
 #define real fptype
 
+// #define NUMOPTS 2048
+#define NUMOPTS 16777216
 void writeQualityFile(char *fileName, void *ptr, int type, size_t numElements){
     FILE *fd = fopen(fileName, "wb");
     assert(fd && "Could Not Open File\n");
@@ -48,6 +50,7 @@ void writeQualityFile(char *fileName, void *ptr, int type, size_t numElements){
 void readData(FILE *fd, double **data,  size_t* numElements){
     assert(fd && "File pointer is not valid\n");
     fread(numElements, sizeof(size_t),1,fd);
+    *numElements = NUMOPTS;
     size_t elements = *numElements;
     double *ptr = (double*) malloc (sizeof(double)*elements);
     assert(ptr && "Could Not allocate pointer\n");
@@ -326,23 +329,27 @@ int bs_thread(void *tid_ptr) {
     // get 'BLOCK_SIZE' from environment
     int BLOCK_SIZE = std::getenv("BLOCK_SIZE") ? atoi(std::getenv("BLOCK_SIZE")) : 1024;
 
-    int end = 4194304;
-    int blocksize = BLOCK_SIZE;
+    int end = NUMOPTS;
+    int blocksize = end;
 
-    for(int _ = 0; _ < 10; _++)
+    #pragma approx declare tensor_functor(bs_ipt: [pp,0:5] = ([pp], [pp], [pp], [pp], [pp]))
+
+    for(int _ = 0; _ < 2; _++)
     {
-    double tst = 0;
+    double tst = omp_get_wtime();
     for (i=0; i<end; i+=blocksize) {
+        #pragma approx declare tensor(ipt_tensor: bs_ipt(sptprice[i:blocksize], strike[i:blocksize], rate[i:blocksize], volatility[i:blocksize],    \
+                                otime[i:blocksize]))
 
-#pragma approx ml(infer) in(sptprice[i:blocksize], strike[i:blocksize], rate[i:blocksize], volatility[i:blocksize],    \
-                                otime[i:blocksize]) out(prices[i:blocksize]) label("test_region")
+#pragma approx ml(infer) in(ipt_tensor) out(prices[i:blocksize]) label("test_region")
+        #pragma omp target teams distribute parallel for map(from: prices[0:end]) map(to: sptprice[0:end], strike[0:end], rate[0:end], volatility[0:end], otime[0:end])
         for(int j = i; j < i+blocksize; j++)                        
         {
             prices[j] = BlkSchlsEqEuroNoDiv( sptprice[j], strike[j],
                     rate[j], volatility[j], otime[j],
                     0);}
     }
-    double tend = 0;
+    double tend = omp_get_wtime();
     printf("Elapsed: %f\n", tend-tst);
     }
 
@@ -391,6 +398,7 @@ int main (int argc, char **argv)
     readData(file,&volatility, &numOptions);  
     readData(file,&otime, &numOptions);  
     prices = (fptype*) malloc(sizeof(fptype)*numOptions);
+    std::cout << " Num Options: " << numOptions << "\n";
 
     int tid=0;
     // startMeasure();

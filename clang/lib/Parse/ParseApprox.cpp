@@ -99,7 +99,7 @@ bool Parser::ParseApproxVarList(SmallVectorImpl<Expr *> &Vars,
          Tok.isNot(tok::annot_pragma_approx_end)) {
     ExprResult VarExpr =
         Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
-    if (VarExpr.isUsable()) {
+        if (VarExpr.isUsable()) {
       Vars.push_back(VarExpr.get());
     } else {
       SkipUntil(tok::comma, tok::r_paren, tok::annot_pragma_approx_end,
@@ -600,8 +600,6 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_approx_start));
   /// This should be a function call;
   // assume approx array section scope
-  unsigned ScopeFlags = Scope::ApproxArraySectionScope | getCurScope()->getFlags();
-  ParseScope ApproxScope(this, ScopeFlags);
 #define PARSER_CALL(method) ((*this).*(method))
 
   StmtResult Directive = StmtError();
@@ -626,7 +624,6 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   if (Tok.is(tok::eod) || Tok.is(tok::eof)) {
     PP.Diag(Tok, diag::err_pragma_approx_expected_directive);
     ConsumeAnyToken();
-    ApproxScope.Exit();
     return Directive;
   }
 
@@ -634,10 +631,11 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   DeclKind DK;
   while (Tok.isNot(tok::annot_pragma_approx_end)) {
     if (isApproxClause(Tok, CK)) {
+      unsigned ScopeFlags = Scope::ApproxArraySectionScope | getCurScope()->getFlags();
+      ParseScope ApproxScope(this, ScopeFlags);
       ApproxClause *Clause = PARSER_CALL(ParseApproxClause[CK])(CK);
       if (!Clause) {
         SkipUntil(tok::annot_pragma_approx_end);
-        ApproxScope.Exit();
         return Directive;
       }
       Clauses.push_back(Clause);
@@ -646,14 +644,12 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
 
       if(!Decl.get()) {
         SkipUntil(tok::annot_pragma_approx_end);
-        ApproxScope.Exit();
         return Directive;
       }
       Decls.push_back(Decl);
       }else {
       PP.Diag(Tok, diag::err_pragma_approx_unrecognized_directive);
       SkipUntil(tok::annot_pragma_approx_end);
-      ApproxScope.Exit();
       return Directive;
     }
   }
@@ -678,6 +674,5 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
       (Sema::CompoundScopeRAII(Actions), ParseStatement());
   AssociatedStmtPtr = AssociatedStmt.get();
   Directive = Actions.ActOnApproxDirective(AssociatedStmtPtr, Clauses, Locs);
-  ApproxScope.Exit();
   return Directive;
 }

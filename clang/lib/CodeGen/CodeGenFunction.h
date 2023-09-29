@@ -2729,6 +2729,10 @@ public:
     return it->second;
   }
 
+  void AddDeclaredTensorLocalVar(const VarDecl *VD, Address Addr) {
+    setAddrOfLocalVar(VD, Addr);
+  }
+
   /// Given an opaque value expression, return its LValue mapping if it exists,
   /// otherwise create one.
   LValue getOrCreateOpaqueLValueMapping(const OpaqueValueExpr *e);
@@ -3592,6 +3596,7 @@ public:
   void EmitOMPInteropDirective(const OMPInteropDirective &S);
   void EmitOMPParallelMaskedDirective(const OMPParallelMaskedDirective &S);
   void EmitApproxDirective(const ApproxDirective &S);
+  Address GetAddressOfTensor(const Expr *E);
 
   /// Emit device code for the target directive.
   static void EmitOMPTargetDeviceFunction(CodeGenModule &CGM,

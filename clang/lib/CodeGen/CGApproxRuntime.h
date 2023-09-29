@@ -74,6 +74,7 @@ private:
   ///        size_t sz_elem;    // Size of elements in bytes
   ///        int8_t data_type; // Type of data float/double/int etc.
   ///        uint8_t dir;       // Direction of data: in/out/inout
+  ///        uint8_t is_tensor; // Is ptr to tensor metadata?
   ///    } approx_var_info_t;
   QualType VarInfoTy;
   llvm::Value *approxRTParams[ARG_END];
@@ -145,11 +146,11 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   // SliceInfoTy is a struct containing information about the slice for one
   // dimension. typedef struct slice_info_ty 
   // { 
-  //   int start; 
-  //   int stop; 
-  //   int step;
+  //   int64 start; 
+  //   int64 stop; 
+  //   int64 step;
   //   int aivre_mode;
-  //   int aivre_repr;
+  //   int64 aivre_repr;
   //} slice_info_t
   QualType SliceInfoTy;
 
@@ -168,7 +169,7 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
 
   //typedef struct tensor_shape {
   //	int ndim;
-  //	int *shapes;
+  //	int64 *shapes;
   //} tensor_shape_t;
   QualType TensorShapeTy;
 
@@ -224,9 +225,9 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   Address CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF, Expr *AAIE);
   Address CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
   Address CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int ndim);
-  Address CGApproxRuntimeEmitShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  Address CGApproxRuntimeEmitShapeWithAIVRExpansion(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
   Address CGApproxRuntimeEmitShape(CodeGenFunction& CGF, Address Dest, llvm::ArrayRef<Expr*> Slices);
-  Address CGApproxRuntimeEmitLHSShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr *> Slices);
+  Address CGApproxRuntimeEmitShape(CodeGenFunction &CGF, llvm::ArrayRef<Expr *> Slices);
   void CGApproxRuntimeSubstituteAIVRInShapes(CodeGenFunction &CGF, int ndim, Address Slices, Address Shapes);
   void CGApproxRuntimeEmitSliceSize(CodeGenFunction &CGF, Expr *Slice, Address Dest);
   void CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::Value *Start, llvm::Value *Stop, llvm::Value *Step, Address Dest);

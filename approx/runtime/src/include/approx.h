@@ -27,6 +27,7 @@ typedef enum __aprox_datatype_hdf5{
     HDOUBLE
 }HPACDType;
 
+
 bool __approx_skip_iteration(unsigned int i, float pr);
 void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
                         void *arg, bool cond, const char *region_name,
@@ -39,6 +40,7 @@ void __approx_runtime_substitute_aivr_in_shapes(int ndim, void *_slices, void *_
 void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice);
 void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memory_regns, void *tensors);
 void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS);
+void __approx_runtime_tensor_cleanup(void *data);
 
 extern float __approx_perfo_rate__;
 extern int __approx_perfo_step__;

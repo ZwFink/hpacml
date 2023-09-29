@@ -1968,7 +1968,10 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       // OpenMp sections in the same language mode.
 
       Scope *CurScope = getCurScope();
-      if ( !CurScope->isApproxScope() && (!getLangOpts().OpenMP || Tok.isNot(tok::colon))) {
+      bool onlyAASS = 
+                      !(CurScope->isApproxTensorDeclScope() ||
+                      CurScope->isApproxTensorFunctorDeclScope());
+      if ( (CurScope->isApproxArraySectionScope()) || ( onlyAASS && (!getLangOpts().OpenMP || Tok.isNot(tok::colon)))) {
         if (!getLangOpts().CPlusPlus23) {
           ExprResult Idx;
           if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {

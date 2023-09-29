@@ -2900,3 +2900,11 @@ llvm::Value *CodeGenFunction::emitBoolVecConversion(llvm::Value *SrcVec,
 
   return Builder.CreateShuffleVector(SrcVec, ShuffleMask, Name);
 }
+
+
+Address CodeGenFunction::GetAddressOfTensor(const Expr *E) {
+  auto *DRE = dyn_cast<DeclRefExpr>(E);
+  assert(DRE && "Expected a DeclRefExpr");
+  auto *Decl = cast<ValueDecl>(DRE->getDecl());
+  return GetAddrOfLocalVar((VarDecl*) Decl);
+}
