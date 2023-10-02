@@ -70,14 +70,12 @@ public:
   int count;
   BaseDB *db;
   SurrogateModel<GPUExecutionPolicy, CatTensorTranslator<double>, double> Model{
-      "/u/zanef2/approx-llvm/approx/test_parse/model.pt", {NUM_ITEMS, 5}, {NUM_ITEMS, 1}, false};
+      "/scratch/mzu/zanef2/surrogates/SurrogateBenchmarks/models/hotspot3d/model.pt", false};
 
 
   ApproxRuntimeConfiguration() {
       ExecuteBoth = false;
       count = 0;
-
-    // DataProfiler = new HDF5DataWriter("test.h5");
 
     const char *env_p = std::getenv("EXECUTE_BOTH");
     if (env_p){
@@ -148,6 +146,7 @@ public:
       const char *fName = env_p; 
       register_petrubate(fName, type);
     }
+
 
  // This is not the optimal way. Since, we will 
  // always use the same random numbers.
@@ -322,9 +321,9 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
       opts.push_back(output_vars[i].ptr);
     }
 
-   if (have_tensors) {
-    internal_repr_metadata_t *metadata =
-        static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
+    if (have_tensors) {
+      internal_repr_metadata_t *metadata =
+          static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
       RTEnv.Model.evaluate(static_cast<ApproxType>(metadata->underlying_type),
                            output_vars[0].num_elem, metadata->data, opts);
     } else {
