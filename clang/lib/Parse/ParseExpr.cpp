@@ -2012,10 +2012,36 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             ConsumeAnyToken();
           }
 
+          // here I need to peel off the layers of indirection
+          // before I get to the actual slice.
+          // I'll do this by parsing the expression as a postfix expression
+          bool was_nested = false;
+          if (Tok.is(tok::identifier) && NextToken().is(tok::l_square)) {
+            llvm::dbgs() << "We've identified indirection. About to parse\n";
+            // The problem here is that we throw away the LHS.
+            // We don't use it like we should. How can we parse
+            // the next expression and use the LHS?
+            // As is, access1[access2[0:N]] becomes
+            // access2[0:N]
+            // How can we make the following AST Node that uses LHS?
+            // What if I just add another Expr* to 
+            // ActOnApproxArraySliceExpr?
+            auto NextBase = ParseExpression();
+            LHS = NextBase;
+            was_nested = true;
+            auto *NextBaseExpr = NextBase.get();
+            llvm::dbgs() << "Dumping the nextbase expr\n";
+            NextBaseExpr->dump();
+            llvm::dbgs() << "\n";
+          } else {
+            llvm::dbgs() << "Not an identifier, parsing ndtensorslice\n";
           ParseApproxNDTensorSlice(Slice, tok::r_square);
+          }
 
+          if(!was_nested) {
           LHS = Actions.ActOnApproxArraySliceExpr(LHS.get(), Loc, Slice, Tok.getLocation(), indirection_depth);
           LHS = Actions.CorrectDelayedTyposInExpr(LHS);
+          }
 
           while(indirection_depth > 1) {
             indirection_depth--;

@@ -321,6 +321,13 @@ void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::Toke
   unsigned ScopeFlags = Scope::ApproxSliceScope | getCurScope()->getFlags();
   ParseScope ApproxScope(this, ScopeFlags);
 
+  // peek at the next token
+  // this won't actually work because you could in theory 
+  // have something like this: a[(c+10)[b]]
+  if(Tok.is(tok::identifier) && NextToken().is(tok::l_square)) {
+    llvm::dbgs() << "Identified a nested slice\n";
+  }
+
   while (Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
     // Parse a slice expression
     auto Expr = ParseSliceExpression();
@@ -410,11 +417,21 @@ ExprResult Parser::ParseSliceExpression()
   SourceLocation ColonLocSecond = SourceLocation();
   SourceLocation StepLocation = SourceLocation();
 
+  // the problem here is that we expect start to be the expression
+  // that immediately follows the 'identifier['
+  // however, what fllows /may/ be another 'identifier['
+  // in the case where we have identifier[identifier[...]]
+
 
   // TODO: Here we are potentially parsing OpenMP array section expression because
   // We should only parse up to a colon or the ']'
   if (Tok.isNot(tok::colon)) {
     auto StartResult = ParseExpression();
+    if(Tok.is(tok::identifier)) {
+      auto Id = Tok.getIdentifierInfo();
+      llvm::dbgs() << "Identifier: " << Id->getName() 
+      << " is start expression\n";
+    }
     StartLocation = StartResult.get()->getBeginLoc();
     if (StartResult.isInvalid()) {
       llvm::dbgs() << "Invalid start expression\n";

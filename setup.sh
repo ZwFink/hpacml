@@ -56,7 +56,8 @@ if [ ! -f $clang_bin ]; then
 fi
 
 torch_d=`spack location -i py-torch`
-hdf5_d=`spack location -i hdf5`
+#hdf5_d=`spack location -i hdf5`
+hdf5_d=/sw/spack/delta-2022-03/apps/hdf5/1.13.1-gcc-11.2.0-jb4yx45
 echo HDF5 directory: $hdf5_d
 
 torch_d=$(echo $torch_d/lib/python3.*/site-packages/torch/share/cmake/Torch)
