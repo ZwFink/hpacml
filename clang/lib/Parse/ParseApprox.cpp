@@ -324,6 +324,7 @@ void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::Toke
   while (Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
     // Parse a slice expression
     auto Expr = ParseSliceExpression();
+    ApproxSliceExpr *SliceRes = dyn_cast<ApproxSliceExpr>(Expr.get());
 
     if (Expr.isInvalid()) {
       llvm::dbgs() << "The stride expression is invalid\n";
@@ -356,10 +357,22 @@ void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &S
   while (Tok.isNot(tok::r_paren)) {
     // Parse a slice expression
     ApproxNDTensorSlice Slice;
-    BalancedDelimiterTracker T2(*this, tok::l_square, tok::r_square);
-    T2.consumeOpen();
+
+    int depth = 0;
+    while(Tok.is(tok::l_square)) {
+      depth += 1;
+      ConsumeAnyToken();
+    }
+
     ParseApproxNDTensorSlice(Slice, tok::r_square);
-    T2.consumeClose();
+
+    while(Tok.is(tok::r_square)) {
+      depth -= 1;
+      ConsumeAnyToken();
+    }
+    
+    if(depth != 0)
+      llvm_unreachable("Mismatched brackets");
 
     Slices.push_back(Slice);
 

@@ -2305,10 +2305,11 @@ ExprResult
 Sema::ActOnApproxArraySliceExpr(Expr *Base,
 SourceLocation Loc,
                                 ArrayRef<Expr *> Slice,
-                                SourceLocation RLOC
+                                SourceLocation RLOC,
+                                int indirection_depth
 ) {
   return ApproxArraySliceExpr::Create(Context, Base, Slice, Context.DependentTy,
-                                            RLOC);
+                                            RLOC, indirection_depth);
 }
 
 ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,

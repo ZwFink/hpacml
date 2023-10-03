@@ -139,13 +139,16 @@ class ApproxArraySliceExpr final
 private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   friend TrailingObjects;
   unsigned numDims = 0;
+  int indirection_depth = 0;
   SourceLocation RBracketLoc;
 
     ApproxArraySliceExpr(Expr *Base, llvm::ArrayRef<Expr *> DSlices,
                          QualType Type, ExprValueKind VK, ExprObjectKind OK,
-                         SourceLocation RBLoc)
+                         SourceLocation RBLoc, int indirection_depth)
         : Expr(ApproxArraySliceExprClass, Type, VK, OK), RBracketLoc{RBLoc} {
       numDims = DSlices.size();
+      this->indirection_depth = indirection_depth;
+
       setBase(Base);
       setDimensionSlices(DSlices);
     setDependence(computeDependence(this));
@@ -157,17 +160,19 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
 
   static ApproxArraySliceExpr *Create(const ASTContext &C, Expr *Base,
                                       llvm::ArrayRef<Expr *> DSlices,
-                                      QualType Type, SourceLocation RBLoc) {
+                                      QualType Type, SourceLocation RBLoc,
+                                      int indirection_depth) {
     void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(1 + DSlices.size()),
                            alignof(ApproxArraySliceExpr));
     return new (Mem) ApproxArraySliceExpr(Base, DSlices, Type, VK_LValue,
-                                          OK_Ordinary, RBLoc);
+                                          OK_Ordinary, RBLoc, indirection_depth);
   }
 
   const Expr *getBase() const { return getTrailingObjects<Expr *>()[0];}
   Expr *getBase() { return getTrailingObjects<Expr *>()[0];}
 
   bool hasBase() const { return getBase() != nullptr;}
+  int getIndirectionDepth() const { return indirection_depth; }
 
   QualType getBaseOriginalType(const Expr *Base);
   void setBase(Expr *E) { getTrailingObjects<Expr *>()[0] = E;}

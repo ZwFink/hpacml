@@ -5782,7 +5782,8 @@ public:
 
   ExprResult ActOnApproxArraySliceExpr(Expr *Base, SourceLocation Loc,
                                        ArrayRef<Expr *> Slice,
-                                       SourceLocation RLOC);
+                                       SourceLocation RLOC,
+                                       int indirection_depth = 1);
 
   ExprResult ActOnApproxArraySectionExpr(Expr *Base, SourceLocation LBLoc,
                                          Expr *LowerBound,
