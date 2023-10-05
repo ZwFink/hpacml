@@ -826,8 +826,10 @@ void ASTStmtWriter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *E) {
 
 void ASTStmtWriter::VisitApproxArraySliceExpr(ApproxArraySliceExpr *E) {
   VisitExpr(E);
+  Record.push_back(E->getNumIndirections());
   Record.push_back(E->getNumDimensionSlices());
-  Record.AddStmt(E->getBase());
+  for(Expr *Indirection : E->getIndirections())
+    Record.AddStmt(Indirection);
   for(Expr *Dim : E->getSlices())
     Record.AddStmt(Dim);
 

@@ -1530,8 +1530,11 @@ void StmtPrinter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *Node) {
 }
 
 void StmtPrinter::VisitApproxArraySliceExpr(ApproxArraySliceExpr *Node) {
-  if(Node->getBase())
-    PrintExpr(Node->getBase());
+  if(Node->hasIndirections()) {
+    for (auto *IndirectionExpr : Node->getIndirections()) {
+      PrintExpr(IndirectionExpr);
+    }
+  }
   for(int i = 0; i < Node->getIndirectionDepth(); i++)
     OS << "[";
 

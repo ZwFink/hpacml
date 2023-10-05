@@ -969,7 +969,7 @@ Expr *AAIE) {
 
   LValue ArrayInfoStart = CGF.MakeAddrLValue(ArrayInfo, SurrogateInfo.NDArraySliceTy);
 
-  Expr *ArrayBase = E->getBase();
+  Expr *ArrayBase = E->getIndirections()[0];
   QualType BaseTy;
 
   llvm::Value *BasePtr = nullptr;

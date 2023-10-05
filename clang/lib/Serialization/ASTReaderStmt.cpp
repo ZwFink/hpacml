@@ -955,9 +955,16 @@ void ASTStmtReader::VisitApproxArraySectionExpr(ApproxArraySectionExpr *E) {
 
 void ASTStmtReader::VisitApproxArraySliceExpr(ApproxArraySliceExpr *E) {
   VisitExpr(E);
+  unsigned NumIndirections = Record.readInt();
   unsigned NumDims = Record.readInt();
+  E->setNumIndirections(NumIndirections);
   E->setNumDimensionSlices(NumDims);
-  E->setBase(Record.readSubExpr());
+
+  SmallVector<Expr*, 8> Indirections(NumIndirections);
+  for(unsigned i = 0; i < NumIndirections; ++i)
+    Indirections[i] = Record.readSubExpr();
+  E->setIndirections(Indirections);
+
   SmallVector<Expr *, 8> Dims(NumDims);
   for(unsigned i = 0; i < NumDims; ++i)
     Dims[i] = Record.readSubExpr();

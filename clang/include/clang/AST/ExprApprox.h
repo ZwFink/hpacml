@@ -139,17 +139,19 @@ class ApproxArraySliceExpr final
 private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   friend TrailingObjects;
   unsigned numDims = 0;
+  int num_indirections = 0;
   int indirection_depth = 0;
   SourceLocation RBracketLoc;
 
-    ApproxArraySliceExpr(Expr *Base, llvm::ArrayRef<Expr *> DSlices,
+    ApproxArraySliceExpr(llvm::ArrayRef<Expr*> Indirections, llvm::ArrayRef<Expr *> DSlices,
                          QualType Type, ExprValueKind VK, ExprObjectKind OK,
                          SourceLocation RBLoc, int indirection_depth)
         : Expr(ApproxArraySliceExprClass, Type, VK, OK), RBracketLoc{RBLoc} {
       numDims = DSlices.size();
+      this->num_indirections = Indirections.size();
       this->indirection_depth = indirection_depth;
 
-      setBase(Base);
+      setIndirections(Indirections);
       setDimensionSlices(DSlices);
     setDependence(computeDependence(this));
     }
@@ -158,57 +160,62 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   explicit ApproxArraySliceExpr(EmptyShell Empty)
       : Expr(ApproxArraySliceExprClass, Empty) {}
 
-  static ApproxArraySliceExpr *Create(const ASTContext &C, Expr *Base,
+  static ApproxArraySliceExpr *Create(const ASTContext &C, llvm::ArrayRef<Expr*> Indirections,
                                       llvm::ArrayRef<Expr *> DSlices,
                                       QualType Type, SourceLocation RBLoc,
                                       int indirection_depth) {
-    void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(1 + DSlices.size()),
+    void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(Indirections.size() + DSlices.size()),
                            alignof(ApproxArraySliceExpr));
-    return new (Mem) ApproxArraySliceExpr(Base, DSlices, Type, VK_LValue,
+    return new (Mem) ApproxArraySliceExpr(Indirections, DSlices, Type, VK_LValue,
                                           OK_Ordinary, RBLoc, indirection_depth);
   }
 
-  const Expr *getBase() const { return getTrailingObjects<Expr *>()[0];}
-  Expr *getBase() { return getTrailingObjects<Expr *>()[0];}
-
-  bool hasBase() const { return getBase() != nullptr;}
+  bool hasIndirections() const { return num_indirections > 0; }
   int getIndirectionDepth() const { return indirection_depth; }
 
+  void setIndirections(llvm::ArrayRef<Expr*> Indirections) {
+    assert(Indirections.size() == static_cast<size_t>(num_indirections) && "Wrong number of indirections");
+    llvm::copy(Indirections, getTrailingObjects<Expr *>());
+  }
   QualType getBaseOriginalType(const Expr *Base);
-  void setBase(Expr *E) { getTrailingObjects<Expr *>()[0] = E;}
   void setDimensionSlices(llvm::ArrayRef<Expr *> DSlices) {
-    assert(DSlices.size() == numDims && "Wrong number of dimension slices");
-    llvm::copy(DSlices, getTrailingObjects<Expr *>() + 1);
+    assert(DSlices.size() == static_cast<size_t>(numDims) && "Wrong number of dimension slices");
+    llvm::copy(DSlices, getTrailingObjects<Expr *>() + num_indirections);
   }
 
   unsigned getNumDimensionSlices() const { return numDims; }
   void setNumDimensionSlices(unsigned N) { numDims = N; }
 
+  unsigned getNumIndirections() const { return num_indirections; }
+  void setNumIndirections(unsigned N) { num_indirections = N; }
+
   SourceLocation getBeginLoc() const LLVM_READONLY {
-    if(hasBase())
-      return getBase()->getBeginLoc();
+    if(hasIndirections())
+      return getIndirections()[0]->getBeginLoc();
     return getTrailingObjects<Expr *>()[1]->getBeginLoc();
   }
 
   SourceLocation getEndLoc() const LLVM_READONLY {return RBracketLoc;}
   void setEndLoc(SourceLocation L) { RBracketLoc = L; }
 
-  unsigned numTrailingObjects(OverloadToken<Expr *>) const { return numDims + 1; }
+  unsigned numTrailingObjects(OverloadToken<Expr *>) const { return numDims + num_indirections; }
 
   SourceLocation getExprLoc() const LLVM_READONLY {
     return getTrailingObjects<Expr *>()[0]->getBeginLoc();
   }
 
-  ArrayRef<Expr *> getSlices() { return llvm::ArrayRef(getTrailingObjects<Expr *>() + 1, numDims); }
+  ArrayRef<Expr *> getSlices() { return llvm::ArrayRef(getTrailingObjects<Expr *>() + num_indirections, numDims); }
+  ArrayRef<Expr *> getIndirections() { return llvm::ArrayRef(getTrailingObjects<Expr *>(), num_indirections); }
+  const ArrayRef<Expr *> getIndirections() const { return llvm::ArrayRef(getTrailingObjects<Expr *>(), num_indirections); }
 
   child_range children() {
     Stmt **Begin = reinterpret_cast<Stmt **>(getTrailingObjects<Expr *>());
-    return child_range(Begin, Begin + numDims + 1);
+    return child_range(Begin, Begin + numDims + num_indirections);
   }
 
   const_child_range children() const { 
     Stmt *const *Begin = reinterpret_cast<Stmt *const *>(getTrailingObjects<Expr *>());
-    return const_child_range(Begin, Begin + numDims + 1);
+    return const_child_range(Begin, Begin + numDims + num_indirections);
   }
 };
 
