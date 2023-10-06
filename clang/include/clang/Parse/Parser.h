@@ -32,6 +32,7 @@
 #include "llvm/Support/SaveAndRestore.h"
 #include <memory>
 #include <optional>
+#include <utility>
 #include <stack>
 
 namespace clang {
@@ -3525,12 +3526,18 @@ private:
 
   using ApproxNDTensorSlice = SmallVector<Expr *, 8>;
   using ApproxNDTensorSliceCollection = SmallVector<ApproxNDTensorSlice, 16>;
-  // TODO: Probably refactor needed: We don't need the location shere, because we can get them
-  // We may want a later version that uses just the locations and not the cached tokens.
+  // when indirection is used, we may have already parsed the first 
+  // part of the first slice expression. This method finishes parsing that
+  // first slice, then parses the others.
+  void ParseApproxNDTensorSlice(SmallVectorImpl<Expr *> &Vars,
+                                SmallVectorImpl<Expr *> &FirstSliceParts,
+                                tok::TokenKind EndToken);
   void ParseApproxNDTensorSlice(SmallVectorImpl<Expr *> &Vars, 
                                       tok::TokenKind EndToken);
   void ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &Slices);
+  std::pair<SourceLocation, ExprResult> ParsePartOfSliceExpression();
   ExprResult ParseSliceExpression();                                
+  ExprResult ParseApproxTensorDeclArgs(ExprResult LHS, SourceLocation OpenBracketLoc);
   bool ParseApproxVarList(SmallVectorImpl<Expr*> &Vars, SourceLocation &ELoc);
 
 public:

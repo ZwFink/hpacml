@@ -2004,7 +2004,6 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         ColonProtectionRAIIObject RAII(*this);
         if(CurScope->isApproxTensorDeclScope()
         || CurScope->isApproxTensorFunctorDeclScope()) {
-          ApproxNDTensorSlice Slice;
 
           int indirection_depth = 1;
           while(Tok.is(tok::l_square)) {
@@ -2012,53 +2011,17 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
             ConsumeAnyToken();
           }
 
-          llvm::SmallVector<Expr*, 8> Indirections;
-          Indirections.push_back(LHS.get());
+          if (CurScope->isApproxTensorDeclScope())
+            LHS = ParseApproxTensorDeclArgs(LHS, Loc);
+          else {
+            llvm::SmallVector<Expr *, 8> Indirection;
+            llvm::SmallVector<Expr*, 8> Slices;
 
-          if (CurScope->isApproxTensorDeclScope()) {
-            while (Tok.isNot(tok::colon)) {
-              ExprResult Indirection = ParseExpression();
-              Indirection = Actions.CorrectDelayedTyposInExpr(Indirection);
-              Indirections.push_back(Indirection.get());
-            }
+            ParseApproxNDTensorSlice(Slices, tok::r_square);
+            LHS = Actions.ActOnApproxArraySliceExpr(Indirection, Loc, Slices, Tok.getLocation(), indirection_depth);
           }
-          // here I need to peel off the layers of indirection
-          // before I get to the actual slice.
-          // I'll do this by parsing the expression as a postfix expression
-          // bool was_nested = false;
-          // if (Tok.is(tok::identifier) && NextToken().is(tok::l_square)) {
-            // llvm::dbgs() << "We've identified indirection. About to parse\n";
-            // The problem here is that we throw away the LHS.
-            // We don't use it like we should. How can we parse
-            // the next expression and use the LHS?
-            // As is, access1[access2[0:N]] becomes
-            // access2[0:N]
-            // How can we make the following AST Node that uses LHS?
-            // What if I just add another Expr* to 
-            // ActOnApproxArraySliceExpr?
-            // auto NextBase = ParseExpression();
-            // LHS = NextBase;
-            // was_nested = true;
-            // auto *NextBaseExpr = NextBase.get();
-            // llvm::dbgs() << "Dumping the nextbase expr\n";
-            // NextBaseExpr->dump();
-            // llvm::dbgs() << "\n";
-            // llvm::dbgs() << "Current LHS before doing more parsing: \n";
-            // LHS.get()->dump();
-            // LHS = ParseExpression();
-          // } else {
-            // llvm::dbgs() << "Not an identifier, parsing ndtensorslice\n";
-          // }
-          ParseApproxNDTensorSlice(Slice, tok::r_square);
 
-          // if(!was_nested) {
-          LHS = Actions.ActOnApproxArraySliceExpr(Indirections, Loc, Slice, Tok.getLocation(), indirection_depth);
-          llvm::dbgs() << "Dumping the LHS (AASE)\n";
-          LHS.get()->dump();
           LHS = Actions.CorrectDelayedTyposInExpr(LHS);
-          // } else {
-            // break;
-          // }
 
           while(indirection_depth > 1) {
             indirection_depth--;
@@ -2067,7 +2030,6 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
 
           // Match the ']'.
           T.consumeClose();
-          return LHS;
           break;
 
         }

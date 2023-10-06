@@ -1794,11 +1794,7 @@ void DeclPrinter::VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctor
     if (j != 0)
       Out << ", ";
 
-    for (unsigned i = 0; i < AASE->getNumDimensionSlices(); i++) {
-      if (i != 0)
-        Out << ", ";
-      AASE->printPretty(Out, nullptr, Policy, 0);
-    }
+    AASE->printPretty(Out, nullptr, Policy, 0);
   }
 
   Out << ")";

@@ -2345,8 +2345,6 @@ ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,
   }
 
   if (Start) {
-    Start->dump();
-    llvm::dbgs() << "\n";
     auto Res =
         PerformApproxImplicitIntegerConversion(Start->getExprLoc(), Start);
     if (Res.isInvalid())

@@ -190,9 +190,7 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
   void setNumIndirections(unsigned N) { num_indirections = N; }
 
   SourceLocation getBeginLoc() const LLVM_READONLY {
-    if(hasIndirections())
-      return getIndirections()[0]->getBeginLoc();
-    return getTrailingObjects<Expr *>()[1]->getBeginLoc();
+    return getTrailingObjects<Expr *>()[0]->getBeginLoc();
   }
 
   SourceLocation getEndLoc() const LLVM_READONLY {return RBracketLoc;}
