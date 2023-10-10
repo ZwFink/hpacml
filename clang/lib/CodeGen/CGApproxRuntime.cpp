@@ -1005,7 +1005,7 @@ Expr *AAIE) {
   FieldAddr = CGF.EmitLValueForField(
       ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 2));
 
-  llvm::ArrayRef<Expr *> ArraySlices = E->getSlices();
+  auto ArraySlices = E->getSlices();
   auto NumDims = ArraySlices.size();
   CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, NumDims, false),
                         FieldAddr);
