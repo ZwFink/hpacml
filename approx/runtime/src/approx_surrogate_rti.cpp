@@ -366,32 +366,28 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 	    array_info_t *functor_info = (array_info_t *)slice_args[idx];
 	    array_info_t &finfo = *functor_info;
 
-	    for(int i = 0; i < tinfo.ndim; i++) {
-	    	auto &t_slice = tinfo.slices[i];
-	    	auto &f_slice = finfo.slices[i];
-	    	auto *t_ptr = tinfo.base;
-	    	auto t_type = tinfo.type;
+        finfo.base = tinfo.base;
+        finfo.type = tinfo.type;
 
-	    	finfo.base = t_ptr;
-	    	finfo.type = t_type;
+   		for(int i = 0; i < tinfo.ndim; i++) {
+	      auto &t_slice = tinfo.slices[i];
+	      auto &f_slice = finfo.slices[i];
+		  size_t base = 0;
 
-			size_t base = 0;
+		  base = f_slice.start - t_slice.start;
 
-			base = f_slice.start - t_slice.start;
+		  f_slice.start = t_slice.start;
+		  f_slice.stop = t_slice.stop;
 
-			f_slice.start = t_slice.start;
-			f_slice.stop = t_slice.stop;
+		  f_slice.start += base;
+		  f_slice.stop += base;
 
-			f_slice.start += base;
-			f_slice.stop += base;
+    	  if(f_slice.step != 1) {
+    	  	std::cerr << "Step is not 1, this is not supported yet\n";
+    	  }
+    	  f_slice.step = t_slice.step;
 
-	    	if(f_slice.step != 1) {
-	    		std::cerr << "Step is not 1, this is not supported yet\n";
-	    	}
-	    	f_slice.step = t_slice.step;
-
-	    	finfo.shape()[i] *= tinfo.shape()[i];
-
+    	  finfo.shape()[i] *= tinfo.shape()[i];
 	    }
 	}
 
