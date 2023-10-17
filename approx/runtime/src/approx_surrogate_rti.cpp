@@ -96,8 +96,9 @@ std::vector<int64_t> get_shape_from_slices(int nargs, slice_info_t *slices) {
 extern "C" {
 
 typedef struct array_info {
-	void *base;
-	int8_t type;
+	intptr_t *bases;
+	int8_t *types;
+	uint n_indirections;
 	uint ndim;
 	slice_info_t *slices;
 	// yes, we end up duplicating ndim, but that's fine.
@@ -201,7 +202,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	auto LHSShape = Tensor::makeArrayRef(shapesLHS->shapes, shapesLHS->ndim);
 
 	std::vector<Tensor::tensor_t> RHSTensors;
-	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->type);
+	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->types[0]);
 	dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
 	EventRecorder::GPUEvent TransferEvent = EventRecorder::CreateGPUEvent("To Tensor");
 	TransferEvent.recordStart();
@@ -231,11 +232,11 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 			base_offset += Strides[dim] * slice.start;
 
 		}
-		OriginalDevice = Tensor::getDeviceForPointer(argRHS.base);
-		auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argRHS.type);
+		OriginalDevice = Tensor::getDeviceForPointer((void*)argRHS.bases[0]);
+		auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argRHS.types[0]);
 
 		auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
-		Tensor::tensor_t blob = Tensor::from_blob((float*) argRHS.base + base_offset, SHP, Strides, options);
+		Tensor::tensor_t blob = Tensor::from_blob((float*) argRHS.bases[0] + base_offset, SHP, Strides, options);
 
 		blob = blob.to(Tensor::CUDA, /*nonblocking=*/ true);
 
@@ -268,7 +269,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	metadata->set_library_type(LibraryType);
 	metadata->set_data(LHSTensor);
 	metadata->set_device(OriginalDevice);
-	metadata->set_underlying_type((ApproxType) argsRHS->type);
+	metadata->set_underlying_type((ApproxType) argsRHS->types[0]);
 
 	return metadata;
 }
@@ -366,10 +367,13 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 	    array_info_t *functor_info = (array_info_t *)slice_args[idx];
 	    array_info_t &finfo = *functor_info;
 
-        finfo.base = tinfo.base;
-        finfo.type = tinfo.type;
+        // here we assign the pointers instead of values because
+		// there will not be any bases allocated for the functor
+		// so copying the values would be incorrect
+        finfo.bases = tinfo.bases;
+		finfo.types = tinfo.types;
 
-   		for(int i = 0; i < tinfo.ndim; i++) {
+        for(int i = 0; i < tinfo.ndim; i++) {
 	      auto &t_slice = tinfo.slices[i];
 	      auto &f_slice = finfo.slices[i];
 		  size_t base = 0;

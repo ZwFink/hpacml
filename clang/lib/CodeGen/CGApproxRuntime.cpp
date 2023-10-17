@@ -220,11 +220,14 @@ static void getNDArraySliceTy(ASTContext &C, QualType &SliceTy, QualType &ShapeT
 
     RecordDecl *NDArraySliceRD = C.buildImplicitRecord("approx_ndarray_slice_t");
     NDArraySliceRD->startDefinition();
-    // Void pointer to the array
-    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntPtrType());
+    // Void pointer pointer to the arrays
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(C.getIntPtrType()));
 
-    // indicator for the underlying type
-    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntTypeForBitwidth(8, false));
+    // indicator for the underlying type of each base
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getPointerType(C.getIntTypeForBitwidth(8, false)));
+
+    // Number of bases
+    addFieldToRecordDecl(C, NDArraySliceRD, C.getIntTypeForBitwidth(32, false));
 
     // Number of dimensions
     addFieldToRecordDecl(C, NDArraySliceRD, C.getIntTypeForBitwidth(32, false));
@@ -969,72 +972,103 @@ Expr *AAIE) {
 
   LValue ArrayInfoStart = CGF.MakeAddrLValue(ArrayInfo, SurrogateInfo.NDArraySliceTy);
 
+  auto Bases = E->getIndirections();
   Expr *ArrayBase = nullptr;
-  if(E->hasIndirections()) 
-    ArrayBase = E->getIndirections()[0];
-  QualType BaseTy;
 
-  llvm::Value *BasePtr = nullptr;
+  QualType VoidPtrArrayTy =
+      C.getConstantArrayType(C.getIntPtrType(), llvm::APInt(64, Bases.size()),
+                             nullptr, ArrayType::Normal, 0);
+  QualType Int8PtrArrayTy = C.getConstantArrayType(
+      C.getIntTypeForBitwidth(8, false), llvm::APInt(64, Bases.size()), nullptr,
+      ArrayType::Normal, 0);
 
-  // Base may be a null pointer if we are emitting array info for a functor decl
-  if(ArrayBase) {
-    BaseTy = E->getBaseOriginalType(ArrayBase);
-    BasePtr = CGF.Builder.CreatePtrToInt(CGF.EmitScalarExpr(ArrayBase), CGF.IntPtrTy);
-  }
-  else {
-    BaseTy = C.getIntTypeForBitwidth(32, false);
-    BasePtr = llvm::ConstantPointerNull::get(CGF.VoidPtrTy);
-  }
+  Address BaseArray = CGF.CreateMemTemp(VoidPtrArrayTy, "base.array");
+
+  Address TypeArray = CGF.CreateMemTemp(Int8PtrArrayTy, "type.array");
+
+  LValue FieldAddr;
+
+  for(int i = 0; i < Bases.size(); i++) {
+    ArrayBase = Bases[i];
+    QualType BaseTy;
+
+    llvm::Value *BasePtr = nullptr;
+    auto BaseDestAddr = CGF.Builder.CreateConstArrayGEP(BaseArray, i);
+    auto TypeDestAddr = CGF.Builder.CreateConstArrayGEP(TypeArray, i);
 
 
-  LValue FieldAddr = CGF.EmitLValueForField(
-      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 0));
-  CGF.EmitStoreOfScalar(BasePtr, FieldAddr);
+    // Base may be a null pointer if we are emitting array info for a functor decl
+    if(ArrayBase) {
+      BaseTy = E->getBaseOriginalType(ArrayBase);
+      BasePtr = CGF.Builder.CreatePtrToInt(CGF.EmitScalarExpr(ArrayBase), CGF.IntPtrTy);
+    } else {
+      BaseTy = C.getIntTypeForBitwidth(32, false);
+      BasePtr = llvm::ConstantPointerNull::get(CGF.VoidPtrTy);
+    }
 
+    LValue BaseDestLV = CGF.MakeAddrLValue(BaseDestAddr, CGF.getContext().getIntPtrType());
+    CGF.EmitStoreOfScalar(BasePtr, BaseDestLV);
   
-  int8_t TyKind = -1;
-  if(ArrayBase) {
-    TyKind = getArrPointeeApproxType(CGF, BaseTy);
-  }
+    int8_t TyKind = -1;
+    if(ArrayBase) {
+      TyKind = getArrPointeeApproxType(CGF, BaseTy);
+    }
 
-  FieldAddr = CGF.EmitLValueForField(
-      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 1));
-  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, TyKind, false),
-                        FieldAddr);
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, TyKind, false),
+                          TypeDestAddr, false, C.getPointerType(C.getIntTypeForBitwidth(8, false)));
 
-  FieldAddr = CGF.EmitLValueForField(
+    }
+
+    FieldAddr = CGF.EmitLValueForField(
+        ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 0));
+    CGF.EmitStoreOfScalar(BaseArray.getPointer(), FieldAddr);
+
+    FieldAddr = CGF.EmitLValueForField(
+        ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 1));
+    CGF.EmitStoreOfScalar(TypeArray.getPointer(),
+                          FieldAddr);
+                        
+    FieldAddr = CGF.EmitLValueForField(
       ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 2));
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, Bases.size(), false),
+                          FieldAddr);
 
-  auto ArraySlices = E->getSlices();
-  auto NumDims = ArraySlices.size();
-  CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, NumDims, false),
-                        FieldAddr);
+    FieldAddr = CGF.EmitLValueForField(
+        ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 3));
 
-  Address SlicesStruct = CGApproxRuntimeEmitSlices(CGF, ArraySlices);
-  FieldAddr = CGF.EmitLValueForField(
-      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 3));
-  CGF.EmitStoreOfScalar(
-      CGF.Builder.CreatePtrToInt(SlicesStruct.getPointer(), CGF.IntPtrTy),
-      FieldAddr);
+    auto ArraySlices = E->getSlices();
+    auto NumDims = ArraySlices.size();
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, NumDims, false),
+                          FieldAddr);
 
-  Address ShapesStruct = CGApproxRuntimeEmitShapeWithAIVRExpansion(CGF, ArraySlices);
-  FieldAddr = CGF.EmitLValueForField(
-      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 4));
-  CGF.EmitStoreOfScalar(
-      CGF.Builder.CreatePtrToInt(ShapesStruct.getPointer(), CGF.IntPtrTy),
-      FieldAddr);
+    Address SlicesStruct = CGApproxRuntimeEmitSlices(CGF, ArraySlices);
+    FieldAddr = CGF.EmitLValueForField(
+        ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 4));
+    CGF.EmitStoreOfScalar(
+        CGF.Builder.CreatePtrToInt(SlicesStruct.getPointer(), CGF.IntPtrTy),
+        FieldAddr);
 
-  // we have a second shape struct that we store shapes with AIVR substituted in
-  Address ShapesStructSecondary = CGApproxRuntimeEmitShapeWithAIVRExpansion(CGF, ArraySlices);
-  FieldAddr = CGF.EmitLValueForField(
-      ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 5));
-  CGF.EmitStoreOfScalar(
-      CGF.Builder.CreatePtrToInt(ShapesStructSecondary.getPointer(), CGF.IntPtrTy),
-      FieldAddr);
+    Address ShapesStruct =
+        CGApproxRuntimeEmitShapeWithAIVRExpansion(CGF, ArraySlices);
+    FieldAddr = CGF.EmitLValueForField(
+        ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 5));
+    CGF.EmitStoreOfScalar(
+        CGF.Builder.CreatePtrToInt(ShapesStruct.getPointer(), CGF.IntPtrTy),
+        FieldAddr);
 
-  numArraysCreated++;
+    // we have a second shape struct that we store shapes with AIVR substituted
+    // in
+    Address ShapesStructSecondary =
+        CGApproxRuntimeEmitShapeWithAIVRExpansion(CGF, ArraySlices);
+    FieldAddr = CGF.EmitLValueForField(
+        ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 6));
+    CGF.EmitStoreOfScalar(CGF.Builder.CreatePtrToInt(
+                              ShapesStructSecondary.getPointer(), CGF.IntPtrTy),
+                          FieldAddr);
 
-  return ArrayInfo;
+    numArraysCreated++;
+
+    return ArrayInfo;
 }
 
 void CGApproxRuntime::CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF) {

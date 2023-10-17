@@ -197,7 +197,11 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
     }
 
   ArrayRef<Expr *> getIndirectionsFromTrailing() const { return llvm::ArrayRef(getTrailingObjects<Expr *>(), num_indirections); }
-  ArrayRef<Expr *> getSlicesFromTrailing() const { return llvm::ArrayRef(getTrailingObjects<Expr *>() + num_indirections, numDims); }
+  ArrayRef<Expr *> getSlicesFromTrailing() const {
+    // we may get either slices either from a child indirection or directly from
+    // the indirections. We supply both here so they can be found in the AST traversal
+    return llvm::ArrayRef(getTrailingObjects<Expr *>(), numDims + num_indirections);
+  }
 
   public:
   explicit ApproxArraySliceExpr(EmptyShell Empty)
@@ -226,7 +230,9 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
     llvm::copy(DSlices, getTrailingObjects<Expr *>() + num_indirections);
   }
 
-  unsigned getNumDimensionSlices() const { return numDims; }
+  unsigned getNumDimensionSlices() {
+    return getSlices().size();
+  }
   void setNumDimensionSlices(unsigned N) { numDims = N; }
 
   unsigned getNumIndirections() const { return getIndirections().size(); }
