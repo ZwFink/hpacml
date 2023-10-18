@@ -11,6 +11,7 @@
 #include "event.h"
 
 using Tensor = AbstractTensor<TorchTensorImpl>;
+using AccessBounds = std::vector<std::pair<size_t,size_t>>;
 
 #ifdef DEBUG
 #define dbgs() std::cout
@@ -126,32 +127,6 @@ typedef struct array_info {
 
 }
 
-std::vector<std::pair<size_t,size_t>> get_access_bounds(array_info_t **args, int nargs) {
-	std::vector<std::pair<size_t,size_t>> bounds;
-	array_info_t &_arg = *args[0];
-	bounds.reserve(_arg.ndim_presubstitution);
-
-	for(int i = 0; i < _arg.ndim_presubstitution; i++) {
-		bounds.emplace_back(std::make_pair(0,0));
-		auto& bound = bounds[i];
-		bound.first = std::numeric_limits<size_t>::max();
-		bound.second = std::numeric_limits<size_t>::min();
-	}
-
-	for(int arg = 0; arg < nargs; arg++) {
-		array_info_t &arr_arg = *args[arg];
-		for(int dim = 0; dim < arr_arg.ndim_presubstitution; dim++) {
-			auto &slice = arr_arg.slices[dim];
-			auto &bound = bounds[dim];
-			bound.first = std::min(bound.first, static_cast<size_t>(slice.start));
-			bound.second = std::max(bound.second, static_cast<size_t>(slice.stop));
-		}
-	}
-	return bounds;
-}
-
-
-
 std::vector<int64_t>
 get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 	auto num_dims = arg.ndim;
@@ -184,6 +159,56 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 	return strides;
 }
 
+Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBounds &access_bounds) {
+	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) memory_descr->types[0]);
+	auto OriginalDevice = Tensor::getDeviceForPointer((void*)memory_descr->bases[base]);
+	
+	auto SHP = Tensor::makeArrayRef(memory_descr->shapes->shapes, memory_descr->shapes->ndim);
+	auto RHSShape = Tensor::makeArrayRef(memory_descr->shapes_aivrsubstituted->shapes, memory_descr->shapes_aivrsubstituted->ndim);
+	auto Strides = get_strides(*memory_descr, access_bounds);
+
+	size_t base_offset = 0;
+	for(int dim = 0; dim < memory_descr->ndim_presubstitution; dim++) {
+		auto &slice = memory_descr->slices[dim];
+
+		base_offset += Strides[dim] * slice.start;
+	}
+
+	auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) memory_descr->types[base]);
+	auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
+
+ 	// TODO: See if we actually need this float* cast
+	auto blob = Tensor::from_blob((float*) memory_descr->bases[base] + base_offset, SHP, Strides, options);
+	blob = blob.to(Tensor::CUDA, /*nonblocking=*/ true);
+
+	return blob;
+}
+
+std::vector<std::pair<size_t,size_t>> get_access_bounds(array_info_t **args, int nargs) {
+	std::vector<std::pair<size_t,size_t>> bounds;
+	array_info_t &_arg = *args[0];
+	bounds.reserve(_arg.ndim_presubstitution);
+
+	for(int i = 0; i < _arg.ndim_presubstitution; i++) {
+		bounds.emplace_back(std::make_pair(0,0));
+		auto& bound = bounds[i];
+		bound.first = std::numeric_limits<size_t>::max();
+		bound.second = std::numeric_limits<size_t>::min();
+	}
+
+	for(int arg = 0; arg < nargs; arg++) {
+		array_info_t &arr_arg = *args[arg];
+		for(int dim = 0; dim < arr_arg.ndim_presubstitution; dim++) {
+			auto &slice = arr_arg.slices[dim];
+			auto &bound = bounds[dim];
+			bound.first = std::min(bound.first, static_cast<size_t>(slice.start));
+			bound.second = std::max(bound.second, static_cast<size_t>(slice.stop));
+		}
+	}
+	return bounds;
+}
+
+
 extern "C" {
 
 void __approx_runtime_tensor_cleanup(void* data) {
@@ -210,46 +235,23 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	auto AccessBounds = get_access_bounds((array_info_t**) argsRHS_vpp, nargsRHS);
 
 	TensorType::Device OriginalDevice{TensorType::CPU};
-	
+
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
-		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
-		auto SHP = Tensor::makeArrayRef(argRHS.shapes->shapes, argRHS.shapes->ndim);
-		auto RHSShape = Tensor::makeArrayRef(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->ndim);
-		auto Strides = get_strides(argRHS, AccessBounds);
+       auto ThisTens = memory_to_tensor(
+           (array_info_t *)argsRHS_vpp[RHSArg], argsRHS->n_indirections-1, AccessBounds);
+		for(int indirection = argsRHS->n_indirections - 2; indirection >= 0; indirection--) {
+			auto OldTens = ThisTens;
+			auto original_shape = ThisTens.sizes();
+			ThisTens = memory_to_tensor(
+				(array_info_t *)argsRHS_vpp[RHSArg], indirection, AccessBounds);
 
-		#ifdef DEBUG
-		dbgs() << "Strides are: ";
-		for(auto s: Strides) {
-			dbgs() << s << ", ";
+			// Flatten the tensor -- we are using 1-D based indices to access N-D data
+			ThisTens = ThisTens.flatten();
+			ThisTens = ThisTens.index({OldTens.flatten()});
+			ThisTens = ThisTens.reshape(original_shape);
 		}
-		dbgs() << "\n";
-		#endif
 
-		size_t base_offset = 0;
-		for(int dim = 0; dim < argRHS.ndim_presubstitution; dim++) {
-			auto &slice = argRHS.slices[dim];
-
-			base_offset += Strides[dim] * slice.start;
-
-		}
-		OriginalDevice = Tensor::getDeviceForPointer((void*)argRHS.bases[0]);
-		auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argRHS.types[0]);
-
-		auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
-		Tensor::tensor_t blob = Tensor::from_blob((float*) argRHS.bases[0] + base_offset, SHP, Strides, options);
-
-		blob = blob.to(Tensor::CUDA, /*nonblocking=*/ true);
-
-        if (nargsRHS > 1) {
-            auto transpose_vec_ =
-                get_transpose_vector(LHSShape, RHSShape);
-           blob = Tensor::transpose(
-                  blob, Tensor::makeArrayRef(transpose_vec_.data(),
-                  transpose_vec_.size()));
-        }
-
-        blob = blob.to(TypeOfTensorData);
-		RHSTensors.push_back(blob);
+        RHSTensors.push_back(ThisTens);
 	}
 
     Tensor::tensor_t *LHSTensor = new Tensor::tensor_t();
@@ -273,6 +275,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 
 	return metadata;
 }
+
 
 enum AIVREChildKind {
     STANDALONE,
@@ -372,6 +375,7 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 		// so copying the values would be incorrect
         finfo.bases = tinfo.bases;
 		finfo.types = tinfo.types;
+		finfo.n_indirections = tinfo.n_indirections;
 
         for(int i = 0; i < tinfo.ndim; i++) {
 	      auto &t_slice = tinfo.slices[i];

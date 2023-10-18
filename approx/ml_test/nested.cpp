@@ -3,62 +3,36 @@
 #include <iostream>
 #include <vector>
 
-#define N 100
+// #define N 100
 
 
 int main() {
-    int *data = new int[N];
-    // int *opt_first = new int[N];
-    // int *opt_second = new int[N];
-    int *access1 = new int[N];
-    int *access2 = new int[N];
-    // int *access3 = new int[N];
-    // std::vector<int*> accesses;
-    // accesses.push_back(access2);
-    // accesses.push_back(access1);
-    // accesses.push_back(data);
+    int N = 10;
+    float *data = new float[N*N];
+    int *access1 = new int[N*N];
+    long *access2 = new long[N*N];
 
 
-    // for(int i = 0; i < N; i++) {
-    //     opt_first[i] = -1;
-    //     opt_second[i] = -1;
-    //     data[i] = i;
-    //     access1[i] = 99-i;
-    //     access2[i] = 99-i;
-    //     access3[i] = i;
-    // }
-
-    // for(int i = 0; i < N; i++) {
-    //     opt_first[i] = data[access2[access1[i]]];
-    // }
-    // for(int i = 0; i < N; i++) {
-    //     std::cout << opt_first[i] << " ";
-    // }
-    // std::cout << "\n";
-
-    // for(int i = 0; i < N; i++) {
-    //     opt_second[i] = accesses[0][i];
-    // }
-    // for(int i = 1; i < accesses.size(); i++) {
-    //     for(int j = 0; j < N; j++) {
-    //         opt_second[j] = accesses[i][(int)opt_second[j]];
-    //     }
-    // }
-
-    // for(int i = 0; i < N; i++) {
-    //     std::cout << opt_second[i] << " ";
-    // }
-    // std::cout << "\n";
+    for(int i = 0; i < N; i++){
+        data[i] = i;
+        access1[i] = N-1-i;
+        access2[i] = i;
+    }
 
 
-
-    // #pragma approx declare tensor_functor(fn: [i] = ([i]))
-    // #pragma approx declare tensor(ten: fn(data[0:N]))
-
-    // auto data2 = data[access1[access2[50]]];
-
-    // std::cout << data2 << "\n";
-    #pragma approx declare tensor_functor(fn: [i] = ([[i]]))
+    std::cout << "data ptr is: " << (void*) data << std::endl;
+    std::cout << "access 1 ptr is: " << (void*) access1 << std::endl;
+    std::cout << "access 2 ptr is: " << (void*) access2 << std::endl;
+    #pragma approx declare tensor_functor(fn: [i] = ([i]))
     #pragma approx declare tensor(ten: fn(data[access1[access2[0:N]]]))
+
+    for(int i = 0; i < N*N; i++){
+        data[i] = i;
+        access1[i] = (N*N)-1-i;
+        access2[i] = access1[i];
+    }
+
+    #pragma approx declare tensor_functor(fn2: [i,j] = ([i,j]))
+    #pragma approx declare tensor(ten2: fn2(data[access1[access2[0:N,0:N]]]))
 
 }
