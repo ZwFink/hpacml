@@ -237,13 +237,14 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	TensorType::Device OriginalDevice{TensorType::CPU};
 
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
+		array_info_t *thisArg = (array_info_t *)argsRHS_vpp[RHSArg];
        auto ThisTens = memory_to_tensor(
-           (array_info_t *)argsRHS_vpp[RHSArg], argsRHS->n_indirections-1, AccessBounds);
-		for(int indirection = argsRHS->n_indirections - 2; indirection >= 0; indirection--) {
+           thisArg, thisArg->n_indirections-1, AccessBounds);
+		for(int indirection = thisArg->n_indirections - 2; indirection >= 0; indirection--) {
 			auto OldTens = ThisTens;
 			auto original_shape = ThisTens.sizes();
 			ThisTens = memory_to_tensor(
-				(array_info_t *)argsRHS_vpp[RHSArg], indirection, AccessBounds);
+				thisArg, indirection, AccessBounds);
 
 			// Flatten the tensor -- we are using 1-D based indices to access N-D data
 			ThisTens = ThisTens.flatten();
