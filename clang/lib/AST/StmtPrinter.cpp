@@ -1530,17 +1530,31 @@ void StmtPrinter::VisitApproxArraySectionExpr(ApproxArraySectionExpr *Node) {
 }
 
 void StmtPrinter::VisitApproxArraySliceExpr(ApproxArraySliceExpr *Node) {
-  if(Node->getBase())
-    PrintExpr(Node->getBase());
-  OS << "[";
+  int num_to_close = 0;
+  if (Node->hasIndirections()) {
+    for (auto *IndirectionExpr : Node->getIndirections()) {
+      PrintExpr(IndirectionExpr);
+      if (isa<DeclRefExpr>(IndirectionExpr)) {
+        OS << "[";
+        num_to_close++;
+      }
+    }
+  } else {
+    OS << "[";
+    num_to_close++;
+  }
 
   auto Slices = Node->getSlices();
-  for(unsigned i = 0; i < Node->getNumDimensionSlices(); i++) {
+  for (unsigned i = 0; i < Node->getNumDimensionSlices(); i++) {
     if (i != 0)
       OS << ", ";
     VisitApproxSliceExpr(dyn_cast<ApproxSliceExpr>(Slices[i]));
   }
-  OS << "]";
+
+  while (num_to_close) {
+    OS << "]";
+    num_to_close--;
+  }
 }
 
 void StmtPrinter::VisitApproxSliceExpr(ApproxSliceExpr *Node) {

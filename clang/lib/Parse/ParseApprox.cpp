@@ -18,6 +18,7 @@
 #include "llvm/Support/Debug.h"
 
 #include <iostream>
+#include <utility>
 
 using namespace clang;
 using namespace llvm;
@@ -257,6 +258,34 @@ StmtResult Parser::ParseApproxDecl(DeclKind DK) {
   return Res;
 }
 
+ExprResult
+Parser::ParseApproxTensorDeclArgs(ExprResult LHS, SourceLocation OpenBracketLoc) {
+  static int DeclParseDepth = 0;
+  int myParseDepth = 0;
+  llvm::SmallVector<Expr*, 8> Indirections;
+  llvm::SmallVector<Expr*, 8> Slices;
+
+  Indirections.push_back(LHS.get());
+
+  // this can be either bunch of arrayslices representing indirection,
+  // or it'll be the start of an actual slice, such as '0'
+  // if the current token is not a colon, then we've parsed an indirection.
+  ExprResult RHS = ParseExpression();
+
+  if(Tok.isNot(tok::colon)) {
+    Indirections.push_back(RHS.get());
+    return Actions.ActOnApproxArraySliceExpr(Indirections, OpenBracketLoc, Slices, Tok.getLocation(), 1);
+  }
+
+  // I've found a colon and so I have partially parsed the first slice in the ndtensor slice
+  // Our parse for this so far looks like (assume some indirection): functor_name(a[b[0:
+  llvm::SmallVector<Expr*, 8> SliceParts;
+  SliceParts.push_back(RHS.get());
+  ParseApproxNDTensorSlice(Slices, SliceParts, tok::r_square);
+
+  return Actions.ActOnApproxArraySliceExpr(Indirections, OpenBracketLoc, Slices, Tok.getLocation(), 1);
+}
+
 ApproxDeclareTensorFunctorDecl *Parser::ParseApproxTensorFunctorDecl(DeclKind DK, SourceLocation Loc) {
   unsigned ScopeFlags = Scope::ApproxTensorFunctorDeclScope | getCurScope()->getFlags();
   ParseScope ApproxScope(this, ScopeFlags);
@@ -284,7 +313,8 @@ ApproxDeclareTensorFunctorDecl *Parser::ParseApproxTensorFunctorDecl(DeclKind DK
     return nullptr;
   ParseApproxNDTensorSlice(Slices, tok::r_square);
   auto RSQLoc = Tok.getLocation();
-  ExprResult LHSRes = Actions.ActOnApproxArraySliceExpr(nullptr, Begin, Slices, RSQLoc);
+  llvm::SmallVector<Expr*,1> Base;
+  ExprResult LHSRes = Actions.ActOnApproxArraySliceExpr(Base, Begin, Slices, RSQLoc);
   if(LHSRes.isInvalid())
     return nullptr;
   Expr *LHS = LHSRes.get();
@@ -317,6 +347,48 @@ ApproxDeclareTensorFunctorDecl *Parser::ParseApproxTensorFunctorDecl(DeclKind DK
   return Actions.ActOnApproxTFDecl(DK, S, NameID, LHS, IptArrayExprs, Locs);
 }
 
+// we may have partially parsed the first slice in the ND tensor slice.
+void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, SmallVectorImpl<Expr*>& FirstSliceParts, tok::TokenKind EndToken) { 
+
+  // if we haven't yet parsed any part of it, go ahead and parse like regular.
+  if(FirstSliceParts.size() == 0) {
+    ParseApproxNDTensorSlice(Slices, EndToken);
+    return;
+  }
+
+  SourceLocation ColonLocFirst = SourceLocation();
+  SourceLocation ColonLocSecond = SourceLocation();
+
+  ExprResult StartResult;
+  ExprResult StopResult;
+  ExprResult StepResult;
+
+  // if we have already parsed the start
+  if(FirstSliceParts.size() == 1) {
+    StartResult = ExprResult(FirstSliceParts[0]);
+    std::tie(ColonLocFirst, StopResult) = ParsePartOfSliceExpression();
+  }
+  // if we have already parsed start and stop
+  else if(FirstSliceParts.size() == 2) {
+    StopResult = ExprResult(FirstSliceParts[1]);
+  }
+
+  if(Tok.is(tok::colon)) {
+    std::tie(ColonLocSecond, StepResult) = ParsePartOfSliceExpression();
+  }
+
+  Slices.push_back(Actions
+                       .ActOnApproxSliceExpr(
+                           StartResult.get()->getBeginLoc(), StartResult.get(),
+                           ColonLocFirst, StopResult.get(), ColonLocSecond,
+                           StepResult.get(), StopResult.get()->getEndLoc())
+                       .get());
+
+  if(Tok.is(tok::comma)) {
+    ConsumeAnyToken();
+    ParseApproxNDTensorSlice(Slices, EndToken);
+  }
+}
 void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::TokenKind EndToken) {
   unsigned ScopeFlags = Scope::ApproxSliceScope | getCurScope()->getFlags();
   ParseScope ApproxScope(this, ScopeFlags);
@@ -324,6 +396,7 @@ void Parser::ParseApproxNDTensorSlice(SmallVectorImpl<Expr *>& Slices, tok::Toke
   while (Tok.isNot(EndToken) && Tok.isNot(tok::r_square)) {
     // Parse a slice expression
     auto Expr = ParseSliceExpression();
+    ApproxSliceExpr *SliceRes = dyn_cast<ApproxSliceExpr>(Expr.get());
 
     if (Expr.isInvalid()) {
       llvm::dbgs() << "The stride expression is invalid\n";
@@ -356,10 +429,22 @@ void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &S
   while (Tok.isNot(tok::r_paren)) {
     // Parse a slice expression
     ApproxNDTensorSlice Slice;
-    BalancedDelimiterTracker T2(*this, tok::l_square, tok::r_square);
-    T2.consumeOpen();
+
+    int depth = 0;
+    while(Tok.is(tok::l_square)) {
+      depth += 1;
+      ConsumeAnyToken();
+    }
+
     ParseApproxNDTensorSlice(Slice, tok::r_square);
-    T2.consumeClose();
+
+    while(Tok.is(tok::r_square)) {
+      depth -= 1;
+      ConsumeAnyToken();
+    }
+    
+    if(depth != 0)
+      llvm_unreachable("Mismatched brackets");
 
     Slices.push_back(Slice);
 
@@ -385,6 +470,19 @@ void Parser::ParseApproxNDTensorSliceCollection(ApproxNDTensorSliceCollection &S
 
 }
 
+std::pair<SourceLocation, ExprResult> Parser::ParsePartOfSliceExpression() {
+  ExprResult Result = ExprError();
+  SourceLocation PreceedingColonLoc = SourceLocation();
+
+  if (Tok.is(tok::colon)) {
+    PreceedingColonLoc = Tok.getLocation();
+    ConsumeAnyToken();
+  }
+
+  Result = ParseAssignmentExpression();
+  return std::make_pair(PreceedingColonLoc, Result);
+}
+
 ExprResult Parser::ParseSliceExpression()
 {
   Expr *Start = nullptr;
@@ -401,7 +499,7 @@ ExprResult Parser::ParseSliceExpression()
   // TODO: Here we are potentially parsing OpenMP array section expression because
   // We should only parse up to a colon or the ']'
   if (Tok.isNot(tok::colon)) {
-    auto StartResult = ParseExpression();
+    auto StartResult = ParseAssignmentExpression();
     StartLocation = StartResult.get()->getBeginLoc();
     if (StartResult.isInvalid()) {
       llvm::dbgs() << "Invalid start expression\n";
@@ -414,7 +512,7 @@ ExprResult Parser::ParseSliceExpression()
   {
     ColonLocFirst = Tok.getLocation();
     ConsumeAnyToken();
-    auto StopResult = ParseExpression();
+    auto StopResult = ParseAssignmentExpression();
     StopLocation = StopResult.get()->getBeginLoc();
     if (StopResult.isInvalid()) {
       llvm::dbgs() << "Invalid stop expression\n";
@@ -428,7 +526,7 @@ ExprResult Parser::ParseSliceExpression()
   {
     ColonLocSecond = Tok.getLocation();
     ConsumeAnyToken();
-    auto StepResult = ParseExpression();
+    auto StepResult = ParseAssignmentExpression();
     StepLocation = StepResult.get()->getBeginLoc();
     if (StepResult.isInvalid()) {
       llvm::dbgs() << "Invalid step expression\n";

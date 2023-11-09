@@ -430,8 +430,11 @@ ExprDependence clang::computeDependence(ApproxArraySectionExpr *E) {
 
 ExprDependence clang::computeDependence(ApproxArraySliceExpr *E) {
   auto D = ExprDependence::None;
-  if(E->getBase()) 
-    D |= E->getBase()->getDependence();
+  if(E->hasIndirections()) {
+    for (auto *IndirectionBase : E->getIndirections()) {
+      D |= IndirectionBase->getDependence();
+    }
+  }
   for(auto *DimSlice : E->getSlices())
     D |= DimSlice->getDependence();
 

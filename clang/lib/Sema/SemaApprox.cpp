@@ -2300,15 +2300,13 @@ ApproxVarListLocTy& Locs) {
   return Decl;
 }
 
-
-ExprResult
-Sema::ActOnApproxArraySliceExpr(Expr *Base,
-SourceLocation Loc,
-                                ArrayRef<Expr *> Slice,
-                                SourceLocation RLOC
-) {
-  return ApproxArraySliceExpr::Create(Context, Base, Slice, Context.DependentTy,
-                                            RLOC);
+ExprResult Sema::ActOnApproxArraySliceExpr(ArrayRef<Expr *> Indirections,
+                                           SourceLocation Loc,
+                                           ArrayRef<Expr *> Slice,
+                                           SourceLocation RLOC,
+                                           int indirection_depth) {
+  return ApproxArraySliceExpr::Create(Context,Indirections, Slice, Context.DependentTy,
+                                            RLOC, indirection_depth);
 }
 
 ExprResult Sema::ActOnApproxSliceExpr(SourceLocation LBLoc, Expr *Start,

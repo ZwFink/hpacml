@@ -1949,7 +1949,8 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
 
       // Reject array indices starting with a lambda-expression. '[[' is
       // reserved for attributes.
-      if (CheckProhibitedCXX11Attribute()) {
+      // [[ can legally appear when declaring a tensor functor
+      if (!getCurScope()->isApproxTensorFunctorDeclScope() && CheckProhibitedCXX11Attribute()) {
         (void)Actions.CorrectDelayedTyposInExpr(LHS);
         return ExprError();
       }
@@ -2003,12 +2004,29 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         ColonProtectionRAIIObject RAII(*this);
         if(CurScope->isApproxTensorDeclScope()
         || CurScope->isApproxTensorFunctorDeclScope()) {
-          ApproxNDTensorSlice Slice;
 
-          ParseApproxNDTensorSlice(Slice, tok::r_square);
+          int indirection_depth = 1;
+          while(Tok.is(tok::l_square)) {
+            indirection_depth++;
+            ConsumeAnyToken();
+          }
 
-          LHS = Actions.ActOnApproxArraySliceExpr(LHS.get(), Loc, Slice, Tok.getLocation());
+          if (CurScope->isApproxTensorDeclScope())
+            LHS = ParseApproxTensorDeclArgs(LHS, Loc);
+          else {
+            llvm::SmallVector<Expr *, 8> Indirection;
+            llvm::SmallVector<Expr*, 8> Slices;
+
+            ParseApproxNDTensorSlice(Slices, tok::r_square);
+            LHS = Actions.ActOnApproxArraySliceExpr(Indirection, Loc, Slices, Tok.getLocation(), indirection_depth);
+          }
+
           LHS = Actions.CorrectDelayedTyposInExpr(LHS);
+
+          while(indirection_depth > 1) {
+            indirection_depth--;
+            ConsumeAnyToken();
+          }
 
           // Match the ']'.
           T.consumeClose();

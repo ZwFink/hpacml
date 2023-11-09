@@ -5780,9 +5780,10 @@ public:
                                               Expr *ColumnIdx,
                                               SourceLocation RBLoc);
 
-  ExprResult ActOnApproxArraySliceExpr(Expr *Base, SourceLocation Loc,
+  ExprResult ActOnApproxArraySliceExpr(ArrayRef<Expr*> Indirections, SourceLocation Loc,
                                        ArrayRef<Expr *> Slice,
-                                       SourceLocation RLOC);
+                                       SourceLocation RLOC,
+                                       int indirection_depth = 1);
 
   ExprResult ActOnApproxArraySectionExpr(Expr *Base, SourceLocation LBLoc,
                                          Expr *LowerBound,

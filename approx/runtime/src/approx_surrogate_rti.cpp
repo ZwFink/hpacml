@@ -11,6 +11,7 @@
 #include "event.h"
 
 using Tensor = AbstractTensor<TorchTensorImpl>;
+using AccessBounds = std::vector<std::pair<size_t,size_t>>;
 
 #ifdef DEBUG
 #define dbgs() std::cout
@@ -96,8 +97,9 @@ std::vector<int64_t> get_shape_from_slices(int nargs, slice_info_t *slices) {
 extern "C" {
 
 typedef struct array_info {
-	void *base;
-	int8_t type;
+	intptr_t *bases;
+	int8_t *types;
+	uint n_indirections;
 	uint ndim;
 	slice_info_t *slices;
 	// yes, we end up duplicating ndim, but that's fine.
@@ -124,32 +126,6 @@ typedef struct array_info {
 } array_info_t;
 
 }
-
-std::vector<std::pair<size_t,size_t>> get_access_bounds(array_info_t **args, int nargs) {
-	std::vector<std::pair<size_t,size_t>> bounds;
-	array_info_t &_arg = *args[0];
-	bounds.reserve(_arg.ndim_presubstitution);
-
-	for(int i = 0; i < _arg.ndim_presubstitution; i++) {
-		bounds.emplace_back(std::make_pair(0,0));
-		auto& bound = bounds[i];
-		bound.first = std::numeric_limits<size_t>::max();
-		bound.second = std::numeric_limits<size_t>::min();
-	}
-
-	for(int arg = 0; arg < nargs; arg++) {
-		array_info_t &arr_arg = *args[arg];
-		for(int dim = 0; dim < arr_arg.ndim_presubstitution; dim++) {
-			auto &slice = arr_arg.slices[dim];
-			auto &bound = bounds[dim];
-			bound.first = std::min(bound.first, static_cast<size_t>(slice.start));
-			bound.second = std::max(bound.second, static_cast<size_t>(slice.stop));
-		}
-	}
-	return bounds;
-}
-
-
 
 std::vector<int64_t>
 get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
@@ -183,6 +159,56 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 	return strides;
 }
 
+Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBounds &access_bounds) {
+	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) memory_descr->types[0]);
+	auto OriginalDevice = Tensor::getDeviceForPointer((void*)memory_descr->bases[base]);
+	
+	auto SHP = Tensor::makeArrayRef(memory_descr->shapes->shapes, memory_descr->shapes->ndim);
+	auto RHSShape = Tensor::makeArrayRef(memory_descr->shapes_aivrsubstituted->shapes, memory_descr->shapes_aivrsubstituted->ndim);
+	auto Strides = get_strides(*memory_descr, access_bounds);
+
+	size_t base_offset = 0;
+	for(int dim = 0; dim < memory_descr->ndim_presubstitution; dim++) {
+		auto &slice = memory_descr->slices[dim];
+
+		base_offset += Strides[dim] * slice.start;
+	}
+
+	auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) memory_descr->types[base]);
+	auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
+
+ 	// TODO: See if we actually need this float* cast
+	auto blob = Tensor::from_blob((float*) memory_descr->bases[base] + base_offset, SHP, Strides, options);
+	blob = blob.to(Tensor::CUDA, /*nonblocking=*/ true);
+
+	return blob;
+}
+
+std::vector<std::pair<size_t,size_t>> get_access_bounds(array_info_t **args, int nargs) {
+	std::vector<std::pair<size_t,size_t>> bounds;
+	array_info_t &_arg = *args[0];
+	bounds.reserve(_arg.ndim_presubstitution);
+
+	for(int i = 0; i < _arg.ndim_presubstitution; i++) {
+		bounds.emplace_back(std::make_pair(0,0));
+		auto& bound = bounds[i];
+		bound.first = std::numeric_limits<size_t>::max();
+		bound.second = std::numeric_limits<size_t>::min();
+	}
+
+	for(int arg = 0; arg < nargs; arg++) {
+		array_info_t &arr_arg = *args[arg];
+		for(int dim = 0; dim < arr_arg.ndim_presubstitution; dim++) {
+			auto &slice = arr_arg.slices[dim];
+			auto &bound = bounds[dim];
+			bound.first = std::min(bound.first, static_cast<size_t>(slice.start));
+			bound.second = std::max(bound.second, static_cast<size_t>(slice.stop));
+		}
+	}
+	return bounds;
+}
+
+
 extern "C" {
 
 void __approx_runtime_tensor_cleanup(void* data) {
@@ -201,7 +227,7 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	auto LHSShape = Tensor::makeArrayRef(shapesLHS->shapes, shapesLHS->ndim);
 
 	std::vector<Tensor::tensor_t> RHSTensors;
-	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->type);
+	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->types[0]);
 	dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
 	EventRecorder::GPUEvent TransferEvent = EventRecorder::CreateGPUEvent("To Tensor");
 	TransferEvent.recordStart();
@@ -209,46 +235,24 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	auto AccessBounds = get_access_bounds((array_info_t**) argsRHS_vpp, nargsRHS);
 
 	TensorType::Device OriginalDevice{TensorType::CPU};
-	
+
 	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
-		array_info_t& argRHS = *(array_info_t *)argsRHS_vpp[RHSArg];
-		auto SHP = Tensor::makeArrayRef(argRHS.shapes->shapes, argRHS.shapes->ndim);
-		auto RHSShape = Tensor::makeArrayRef(argRHS.shapes_aivrsubstituted->shapes, argRHS.shapes_aivrsubstituted->ndim);
-		auto Strides = get_strides(argRHS, AccessBounds);
+		array_info_t *thisArg = (array_info_t *)argsRHS_vpp[RHSArg];
+       auto ThisTens = memory_to_tensor(
+           thisArg, thisArg->n_indirections-1, AccessBounds);
+		for(int indirection = thisArg->n_indirections - 2; indirection >= 0; indirection--) {
+			auto OldTens = ThisTens;
+			auto original_shape = ThisTens.sizes();
+			ThisTens = memory_to_tensor(
+				thisArg, indirection, AccessBounds);
 
-		#ifdef DEBUG
-		dbgs() << "Strides are: ";
-		for(auto s: Strides) {
-			dbgs() << s << ", ";
+			// Flatten the tensor -- we are using 1-D based indices to access N-D data
+			ThisTens = ThisTens.flatten();
+			ThisTens = ThisTens.index({OldTens.flatten()});
+			ThisTens = ThisTens.reshape(original_shape);
 		}
-		dbgs() << "\n";
-		#endif
 
-		size_t base_offset = 0;
-		for(int dim = 0; dim < argRHS.ndim_presubstitution; dim++) {
-			auto &slice = argRHS.slices[dim];
-
-			base_offset += Strides[dim] * slice.start;
-
-		}
-		OriginalDevice = Tensor::getDeviceForPointer(argRHS.base);
-		auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argRHS.type);
-
-		auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
-		Tensor::tensor_t blob = Tensor::from_blob((float*) argRHS.base + base_offset, SHP, Strides, options);
-
-		blob = blob.to(Tensor::CUDA, /*nonblocking=*/ true);
-
-        if (nargsRHS > 1) {
-            auto transpose_vec_ =
-                get_transpose_vector(LHSShape, RHSShape);
-           blob = Tensor::transpose(
-                  blob, Tensor::makeArrayRef(transpose_vec_.data(),
-                  transpose_vec_.size()));
-        }
-
-        blob = blob.to(TypeOfTensorData);
-		RHSTensors.push_back(blob);
+        RHSTensors.push_back(ThisTens);
 	}
 
     Tensor::tensor_t *LHSTensor = new Tensor::tensor_t();
@@ -268,10 +272,11 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	metadata->set_library_type(LibraryType);
 	metadata->set_data(LHSTensor);
 	metadata->set_device(OriginalDevice);
-	metadata->set_underlying_type((ApproxType) argsRHS->type);
+	metadata->set_underlying_type((ApproxType) argsRHS->types[0]);
 
 	return metadata;
 }
+
 
 enum AIVREChildKind {
     STANDALONE,
@@ -366,32 +371,32 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 	    array_info_t *functor_info = (array_info_t *)slice_args[idx];
 	    array_info_t &finfo = *functor_info;
 
-	    for(int i = 0; i < tinfo.ndim; i++) {
-	    	auto &t_slice = tinfo.slices[i];
-	    	auto &f_slice = finfo.slices[i];
-	    	auto *t_ptr = tinfo.base;
-	    	auto t_type = tinfo.type;
+        // here we assign the pointers instead of values because
+		// there will not be any bases allocated for the functor
+		// so copying the values would be incorrect
+        finfo.bases = tinfo.bases;
+		finfo.types = tinfo.types;
+		finfo.n_indirections = tinfo.n_indirections;
 
-	    	finfo.base = t_ptr;
-	    	finfo.type = t_type;
+        for(int i = 0; i < tinfo.ndim; i++) {
+	      auto &t_slice = tinfo.slices[i];
+	      auto &f_slice = finfo.slices[i];
+		  size_t base = 0;
 
-			size_t base = 0;
+		  base = f_slice.start - t_slice.start;
 
-			base = f_slice.start - t_slice.start;
+		  f_slice.start = t_slice.start;
+		  f_slice.stop = t_slice.stop;
 
-			f_slice.start = t_slice.start;
-			f_slice.stop = t_slice.stop;
+		  f_slice.start += base;
+		  f_slice.stop += base;
 
-			f_slice.start += base;
-			f_slice.stop += base;
+    	  if(f_slice.step != 1) {
+    	  	std::cerr << "Step is not 1, this is not supported yet\n";
+    	  }
+    	  f_slice.step = t_slice.step;
 
-	    	if(f_slice.step != 1) {
-	    		std::cerr << "Step is not 1, this is not supported yet\n";
-	    	}
-	    	f_slice.step = t_slice.step;
-
-	    	finfo.shape()[i] *= tinfo.shape()[i];
-
+    	  finfo.shape()[i] *= tinfo.shape()[i];
 	    }
 	}
 

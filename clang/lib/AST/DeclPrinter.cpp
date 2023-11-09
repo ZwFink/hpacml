@@ -1788,23 +1788,16 @@ void DeclPrinter::VisitApproxDeclareTensorFunctorDecl(ApproxDeclareTensorFunctor
   }
   Out << "]";
   Out << " = (";
-  ApproxNDTensorSliceCollection &RHS = D->getRHSSlices();
-  for(unsigned j = 0 ; j < RHS.size(); j++){
-    auto &Slices = RHS[j];
-    if(j != 0)
+  auto RHS = D->getRHSSliceExprs();
+  for (unsigned j = 0; j < RHS.size(); j++) {
+    ApproxArraySliceExpr *AASE = dyn_cast<ApproxArraySliceExpr>(RHS[j]);
+    if (j != 0)
       Out << ", ";
-    Out << "[";
-    for(unsigned i = 0; i < Slices.size(); i++){
-      if(i != 0)
-        Out << ", ";
-      Slices[i]->printPretty(Out, nullptr, Policy, 0);
-    }
-    Out << "]";
+
+    AASE->printPretty(Out, nullptr, Policy, 0);
   }
 
   Out << ")";
-
-
   Out << ")";
 }
 
