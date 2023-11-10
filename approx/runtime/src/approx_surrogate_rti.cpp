@@ -208,6 +208,50 @@ std::vector<std::pair<size_t,size_t>> get_access_bounds(array_info_t **args, int
 	return bounds;
 }
 
+std::vector<torch::Tensor> manually_broadcast(std::vector<torch::Tensor> tensors) {
+    // Compute the output shape by aligning the shapes on the right and filling in with ones
+    size_t max_len = 0;
+    for (const auto& tensor : tensors) {
+        max_len = std::max(max_len, tensor.sizes().size());
+    }
+
+    std::vector<int64_t> output_shape(max_len, 1);
+    for (const auto& tensor : tensors) {
+        auto tensor_shape = tensor.sizes();
+        for (size_t i = 0; i < tensor_shape.size(); ++i) {
+            size_t reversed_index = max_len - 1 - i;
+            size_t tensor_reversed_index = tensor_shape.size() - 1 - i;
+            output_shape[reversed_index] = std::max(output_shape[reversed_index], tensor_shape[tensor_reversed_index]);
+        }
+    }
+
+
+    std::vector<torch::Tensor> broadcasted_tensors;
+    for (auto& tensor : tensors) {
+        // Compute the broadcasted strides for each tensor
+        auto tensor_shape = tensor.sizes();
+        std::vector<int64_t> expanded_shape(max_len, 1);
+        std::copy(tensor_shape.begin(), tensor_shape.end(), expanded_shape.end() - tensor_shape.size());
+        std::vector<int64_t> tensor_strides = tensor.strides().vec();
+        tensor_strides.resize(max_len, 0);  // Extend strides with zeros
+        std::vector<int64_t> broadcasted_strides(max_len);
+
+        for (size_t i = 0; i < max_len-1; ++i) {
+            broadcasted_strides[i] = (expanded_shape[i] != 1) ? tensor_strides[i] : 0;
+        }
+
+		// Note: We'll use the original shape/stride for the final dimension: this is because
+		// we are going to concatenate the tensors along this dimension, so we don't need them to
+		// actually match.
+		broadcasted_strides[max_len-1] = tensor.strides()[tensor.dim()-1];
+		output_shape[max_len-1] = tensor_shape[tensor_shape.size()-1];
+
+        // Create a view with the new shape and strides
+        broadcasted_tensors.push_back(torch::as_strided(tensor, output_shape, broadcasted_strides));
+    }
+
+    return broadcasted_tensors;
+}
 
 extern "C" {
 
