@@ -286,6 +286,10 @@ private llvm::TrailingObjects<ApproxArraySliceExpr, Expr*> {
     Stmt *const *Begin = reinterpret_cast<Stmt *const *>(getTrailingObjects<Expr *>());
     return const_child_range(Begin, Begin + numDims + num_indirections);
   }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ApproxArraySliceExprClass;
+  }
 };
 
 class ApproxIndexVarRefExpr : public Expr {
