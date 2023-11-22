@@ -178,8 +178,10 @@ Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBo
 	auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) memory_descr->types[base]);
 	auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
 
- 	// TODO: See if we actually need this float* cast
-	auto blob = Tensor::from_blob((float*) memory_descr->bases[base] + base_offset, SHP, Strides, options);
+	auto elem_size = Tensor::getElementSizeForType(TypeOfTensorData);
+	intptr_t offset_base_ptr = (intptr_t) memory_descr->bases[base] + base_offset*elem_size;
+
+	auto blob = Tensor::from_blob((void*) offset_base_ptr, SHP, Strides, options);
 	blob = blob.to(Tensor::CUDA, /*nonblocking=*/ true);
 
 	return blob;
