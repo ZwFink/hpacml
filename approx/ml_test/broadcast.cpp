@@ -22,7 +22,7 @@ int main() {
 
 
     #pragma approx declare tensor_functor(fn: [i, 0:6] = ([i*3:i*3+3], [i*2:i*2+2], [i] ))
-    // int fgh = 5;
+    int fgh = 5;
     #pragma approx declare tensor(ten: fn(data[0:1], data[0:2*N], data[10:11]))
 
     float *nrows = data;
@@ -31,8 +31,10 @@ int main() {
     #pragma approx declare tensor(cnnten: cnnipt(data[0:N, 0:N, 0:N, 0:N], data[access1[0:N,0:N,0:N,0:N]]))
     }
 
-    // #pragma approx declare tensor_functor(cnnipt: [niter, 0:2, x, y, z] = ([niter, x, y, z], [niter, x,y,z]))
-    // #pragma approx declare tensor(cnnten: cnnipt(data[0:N, 0:N, 0:N, 0:N], data[access1[0:N,0:N,0:N,0:N]]))
+    float scalar = 50;
+    float *scalar_ptr = &scalar;
+    #pragma approx declare tensor_functor(broadcast_scalar: [i, 0:2] = ([i], [i]))
+    #pragma approx declare tensor(broadcast_scalar_ten: broadcast_scalar(data[0:N], scalar_ptr[0:1]))
 
 }
 

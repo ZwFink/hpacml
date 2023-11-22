@@ -9,6 +9,7 @@
 #include "approx_internal.h"
 #include "approx_surrogate.h"
 #include "event.h"
+#include <torch/serialize.h>
 
 using Tensor = AbstractTensor<TorchTensorImpl>;
 using AccessBounds = std::vector<std::pair<size_t,size_t>>;
@@ -436,6 +437,7 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 		  f_slice.stop += base;
 
     	  if(f_slice.step != 1) {
+			std::cerr << "Found step " << f_slice.step << "\n";
     	  	std::cerr << "Step is not 1, this is not supported yet\n";
     	  }
     	  f_slice.step = t_slice.step;
