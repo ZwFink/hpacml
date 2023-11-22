@@ -153,6 +153,10 @@ template<typename T>
       return {CPU};
     }
   }
+
+  static size_t getElementSizeForType(TensorDataTypeType T) {
+    return TensorImpl::getElementSizeForType(T);
+  }
 };
 
 using TensorLibraryType = __approx_tensor_library_type;
@@ -224,6 +228,9 @@ class TorchTensorImpl {
     }
   }
 
+  static size_t getElementSizeForType(TensorDataTypeType T) {
+    return torch::elementSize(T);
+  }
 };
 
 

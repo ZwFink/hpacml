@@ -260,7 +260,6 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
       // }
       for (auto Slice : RHSSlices) {
         for (auto *E : Slice) {
-          E->dump();
           Collector.Collect(E);
         }
       }
