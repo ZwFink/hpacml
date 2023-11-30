@@ -3522,6 +3522,7 @@ private:
 
   StmtResult ParseApproxDecl(approx::DeclKind DK);
   ApproxDeclareTensorDecl *ParseApproxTensorDecl(approx::DeclKind DK, SourceLocation Loc);
+  ApproxDeclareTensorDecl *ParseApproxTensorDeclAnonymous(approx::DeclKind DK, SourceLocation Loc);
   ApproxDeclareTensorFunctorDecl *ParseApproxTensorFunctorDecl(approx::DeclKind DK, SourceLocation Loc);
 
   using ApproxNDTensorSlice = SmallVector<Expr *, 8>;

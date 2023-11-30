@@ -1936,6 +1936,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::ApproxArraySliceExprClass:
     case Stmt::ApproxSliceExprClass:
     case Stmt::ApproxIndexVarRefExprClass:
+    case Stmt::ApproxCompoundExprClass:
     case Stmt::OMPArraySectionExprClass:
     case Stmt::OMPArrayShapingExprClass:
     case Stmt::OMPIteratorExprClass:

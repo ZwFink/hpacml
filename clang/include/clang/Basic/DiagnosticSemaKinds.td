@@ -10495,6 +10495,8 @@ def err_approx_array_section_use : Error<"Approx array section is not allowed he
 def err_approx_array_slice_use : Error<"Approx array slice is not allowed here">;
 def err_approx_slice_use : Error<"Approx slice is not allowed here">;
 def err_approx_index_var_ref_use : Error<"Approx index variable reference is not allowed here">;
+def err_approx_tensor_ref_use : Error<"Approx tensor reference is not allowed here">;
+def err_approx_compound_expr_use: Error<"Approx compound expr is not allowed here">;
 def err_approx_array_shaping_use : Error<"Approx array shaping operation is not allowed here">;
 def err_approx_iterator_use : Error<"Approx iterator is not allowed here">;
 def err_approx_typecheck_section_value : Error<"subscripted value is not an array or pointer">;

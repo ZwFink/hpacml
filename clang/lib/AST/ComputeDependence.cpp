@@ -458,6 +458,13 @@ ExprDependence clang::computeDependence(ApproxIndexVarRefExpr *E) {
   return ExprDependence::None;
 }
 
+ExprDependence clang::computeDependence(ApproxCompoundExpr *E) {
+  auto D = ExprDependence::None;
+  for (auto *ChildExpr : E->getExpressions())
+    D |= ChildExpr->getDependence();
+  return D;
+}
+
 ExprDependence clang::computeDependence(OMPArraySectionExpr *E) {
   auto D = E->getBase()->getDependence();
   if (auto *LB = E->getLowerBound())

@@ -991,6 +991,20 @@ void ASTStmtReader::VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
   E->setExprLoc(E->getBeginLoc());
 }
 
+void ASTStmtReader::VisitApproxCompoundExpr(ApproxCompoundExpr *E) {
+  VisitExpr(E);
+  unsigned NumDecls = Record.readInt();
+  unsigned NumExprs = Record.readInt();
+  E->setNumDeclarations(NumDecls);
+  E->setNumExpressions(NumExprs);
+
+  llvm::SmallVector<Expr *, 8> Exprs(NumExprs);
+  for (unsigned i = 0; i < NumExprs; ++i)
+    Exprs[i] = Record.readSubExpr();
+  E->setExpressions(Exprs);
+
+}
+
 void ASTStmtReader::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {
   VisitExpr(E);
   E->setBase(Record.readSubExpr());

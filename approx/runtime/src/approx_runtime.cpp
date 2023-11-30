@@ -308,6 +308,11 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
       assert(num_inputs == 1 && "Only one tensor input is supported");
       have_tensors = true;
     }
+    if(output_vars[0].is_tensor) {
+      assert(num_outputs == 1 && "Only one tensor output is supported");
+      have_tensors = true;
+      return;
+    }
 
     std::vector<void *> ipts;
     std::vector<void *> opts;

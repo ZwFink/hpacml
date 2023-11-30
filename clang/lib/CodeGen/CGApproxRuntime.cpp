@@ -844,7 +844,6 @@ CGApproxRuntime::CGApproxRuntimeEmitData(
 
 
     if(isApproxDecl(E)) {
-        llvm::dbgs() << "It's an approx decl\n";
         Address addr = CGF.GetAddressOfTensor(E);
         LValue Base = CGF.MakeAddrLValue(
             CGF.Builder.CreateConstGEP(VarInfoArray, Pos), VarInfoTy);
@@ -858,6 +857,30 @@ CGApproxRuntime::CGApproxRuntimeEmitData(
         CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, 1, false),
                               typeLVal);
         continue;
+    } else if(ApproxCompoundExpr *ACE = dyn_cast<ApproxCompoundExpr>(E)) {
+      assert(ACE->getExpressions().size() == 1 && "Expected only one expression");
+
+      DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(ACE->getExpressions()[0]);
+      ApproxDeclareTensorDecl *ADTD = dyn_cast<ApproxDeclareTensorDecl>(DRE->getDecl());
+      ADTD->setDirectionality(ApproxDeclareTensorDecl::Direction::TENSOR_TO_MEM);
+
+      auto LVals = CGF.EmitApproxCompoundExpr(*cast<ApproxCompoundExpr>(E));
+      assert(LVals.size() == 1 && "Expected only one LValue");
+
+      Address addr = LVals[0].getAddress(CGF);
+      LValue Base = CGF.MakeAddrLValue(
+          CGF.Builder.CreateConstGEP(VarInfoArray, Pos), VarInfoTy);
+      auto *FieldT = *std::next(VarInfoRecord->field_begin(), PTR);
+      LValue BaseAddrLVal = CGF.EmitLValueForField(Base, FieldT);
+      CGF.EmitStoreOfScalar(
+          CGF.Builder.CreatePtrToInt(addr.getPointer(), CGF.IntPtrTy),
+          BaseAddrLVal);
+
+      LValue typeLVal = CGF.EmitLValueForField(
+          Base, *std::next(VarInfoRecord->field_begin(), IS_TENSOR));
+      CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int8Ty, 1, false),
+                            typeLVal);
+      continue;
     }
     
     std::tie(Addr, NumElements, SizeOfElement, TypeOfElement) =
@@ -1571,8 +1594,15 @@ namespace {
 
 void CGApproxRuntime::emitApproxDeclareTensor(
     CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
-  llvm::dbgs() << "Emitting approx declare tensor for tensor " << D->getName()
+
+      if(D->getDirectionality() == ApproxDeclareTensorDecl::Direction::TENSOR_TO_MEM) {
+        llvm::dbgs() << "Emitting approx declare tensor for output tensor " << D->getName()
                << "\n";
+      }
+      else if(D->getDirectionality() == ApproxDeclareTensorDecl::Direction::MEM_TO_TENSOR) {
+        llvm::dbgs() << "Emitting approx declare tensor for input tensor " << D->getName() 
+              << "\n";
+      }
 
   auto *TensorFunctor =
       dyn_cast<ApproxDeclareTensorFunctorDecl>(D->getFunctor());

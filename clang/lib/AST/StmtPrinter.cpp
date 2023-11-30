@@ -1578,6 +1578,22 @@ void StmtPrinter::VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *Node) {
   OS << Node->getName();
 }
 
+void StmtPrinter::VisitApproxCompoundExpr(ApproxCompoundExpr *Node) {
+  for(auto *D : Node->getDeclarations()) {
+    OS << "Unsupporte declaration print";
+    OS << ", ";
+  }
+
+  if(Node->getNumDeclarations()) {
+    OS << "; ";
+  }
+
+  for(auto *C : Node->getExpressions()) {
+    PrintExpr(C);
+    OS << ", ";
+  }
+}
+
 void StmtPrinter::VisitOMPArraySectionExpr(OMPArraySectionExpr *Node) {
   PrintExpr(Node->getBase());
   OS << "[";

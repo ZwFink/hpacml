@@ -387,33 +387,69 @@ class ApproxDeclareTensorFunctorDecl final : public ApproxDecl, public ValueDecl
 
 };
 
+class TensorFunctorCall {
+  public:
+  enum class Directionality {
+    MEM_TO_TENSOR,
+    TENSOR_TO_MEM
+  };
+
+  private:
+  Decl *FunctorDecl;
+  llvm::SmallVector<Expr*, 8> Args;
+  Directionality Dir;
+
+  public:
+
+
+  TensorFunctorCall(Decl *FunctorDecl, llvm::ArrayRef<Expr*> Args)
+      : FunctorDecl{FunctorDecl}, Args{Args}, Dir{Directionality::MEM_TO_TENSOR} {}
+
+  TensorFunctorCall(Decl *FunctorDecl, llvm::ArrayRef<Expr*> Args, Directionality Dir)
+      : FunctorDecl{FunctorDecl}, Args{Args}, Dir{Dir} {}
+
+  Decl *getFunctorDecl() const {return FunctorDecl;}
+  llvm::ArrayRef<Expr*> getArgs() const {return Args;}
+  Directionality getDirectionality() const {return Dir;}
+
+  void setDirectionality(Directionality Dir) {this->Dir = Dir;}
+  void setFunctorDecl(Decl *FunctorDecl) {this->FunctorDecl = FunctorDecl;}
+  void setArgs(llvm::ArrayRef<Expr*> Args) {this->Args.assign(Args.begin(), Args.end());}
+};
+
 class ApproxDeclareTensorDecl final : public ApproxDecl, public ValueDecl {
-  Decl *TensorFunctor;
+  public:
+  using Direction = TensorFunctorCall::Directionality;
+
+private:
+  TensorFunctorCall FunctorCall;
   DeclarationName TensorName;
   llvm::SmallVector<Expr*, 8> ArraySlices;
+
+  public:
     ApproxDeclareTensorDecl(SourceLocation StartLoc, SourceLocation EndLoc,
                             DeclarationName TensorName, DeclContext *DC,
                             QualType T, Decl *FunctorDecl,
-                            llvm::ArrayRef<Expr *> ArraySlices)
+                            llvm::ArrayRef<Expr *> ArraySlices,
+                            Direction TensorDirection)
         : ApproxDecl(approx::DK_T, StartLoc, EndLoc),
           ValueDecl{Decl::Kind::ApproxDeclareTensor, DC, StartLoc, TensorName,
                     T},
-          TensorFunctor{FunctorDecl}, TensorName{TensorName} {
-      this->ArraySlices.append(ArraySlices.begin(), ArraySlices.end());
-    }
-
+          FunctorCall{FunctorDecl, ArraySlices}, TensorName{TensorName} {
+            FunctorCall.setDirectionality(TensorDirection);
+          }
   // build an empty decl
   ApproxDeclareTensorDecl()
       : ApproxDecl(approx::DK_T, SourceLocation(), SourceLocation()),
         ValueDecl{Decl::Kind::ApproxDeclareTensor, nullptr, SourceLocation(), DeclarationName(), QualType()},
-        TensorFunctor{nullptr}, TensorName{}, ArraySlices{} {}
+        FunctorCall{nullptr, {}}, TensorName{} {}
 
-  public:
   static ApproxDeclareTensorDecl *Create(ASTContext &C, DeclContext *DC,
                                          SourceRange SR,
                                          DeclarationName TensorName,
                                          QualType T, Decl *FunctorDecl,
-                                         llvm::ArrayRef<Expr *> ArraySlices);
+                                         llvm::ArrayRef<Expr *> ArraySlices,
+                                         Direction Dir = Direction::MEM_TO_TENSOR);
 
   static bool classof(const Decl *D) {
     return classofKind(D->getKind());
@@ -441,15 +477,19 @@ class ApproxDeclareTensorDecl final : public ApproxDecl, public ValueDecl {
 
   llvm::StringRef getTensorName() const {return TensorName.getAsIdentifierInfo()->getName();}
   llvm::StringRef getFunctorName() const {
-    assert(TensorFunctor && "Attempt to get name of null Tensor Functor");
-    return cast<ApproxDeclareTensorFunctorDecl>(TensorFunctor)->getFunctorName();
+    assert(FunctorCall.getFunctorDecl() && "Attempt to get name of null Tensor Functor");
+    return cast<ApproxDeclareTensorFunctorDecl>(FunctorCall.getFunctorDecl())->getFunctorName();
   }
   llvm::StringRef getName() const { return getTensorName(); }
+  IdentifierInfo *getIdentifier() const { return TensorName.getAsIdentifierInfo(); }
 
-  Decl *getFunctor() const {return TensorFunctor;}
-  void setFunctor(Decl *Functor) {TensorFunctor = Functor;}
+  Decl *getFunctor() const {return FunctorCall.getFunctorDecl();}
+  void setFunctor(Decl *Functor) {FunctorCall.setFunctorDecl(Functor);}
 
-  llvm::ArrayRef<Expr*> getArraySlices() const {return ArraySlices;}
+  llvm::ArrayRef<Expr*> getArraySlices() const {return FunctorCall.getArgs();}
+
+  Direction getDirectionality() const {return FunctorCall.getDirectionality();}
+  void setDirectionality(Direction Dir) {FunctorCall.setDirectionality(Dir);}
 };
 
 

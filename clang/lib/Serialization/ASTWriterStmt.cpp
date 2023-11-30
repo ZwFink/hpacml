@@ -857,6 +857,19 @@ void ASTStmtWriter::VisitApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
   Code = serialization::EXPR_APPROX_INDEX_VAR_REF;
 }
 
+void ASTStmtWriter::VisitApproxCompoundExpr(ApproxCompoundExpr *E) {
+  VisitExpr(E);
+  Record.push_back(E->getNumDeclarations());
+  Record.push_back(E->getNumExpressions());
+
+  llvm::dbgs() << "WARNING: ApproxCompoundExpr serialization "
+               << "will not include the declarations, if any\n";
+
+  for (Expr *Arg : E->getExpressions())
+    Record.AddStmt(Arg);
+  Code = serialization::EXPR_APPROX_COMPOUND;
+}
+
 void ASTStmtWriter::VisitOMPArraySectionExpr(OMPArraySectionExpr *E) {
   VisitExpr(E);
   Record.AddStmt(E->getBase());

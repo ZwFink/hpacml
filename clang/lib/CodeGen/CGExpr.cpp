@@ -2967,6 +2967,13 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
     return MakeAddrLValue(CGM.GetAddrOfTemplateParamObject(TPO), T,
                           AlignmentSource::Decl);
 
+  if(const auto *ValDecl = dyn_cast<ValueDecl>(ND)) {
+    if(getLangOpts().Approx && ValDecl->hasAttr<ApproxTensorDeclAttr>()) {
+      QualType Type = getContext().getPointerType(getContext().getIntPtrType());
+      return MakeAddrLValue(GetAddressOfTensor(E), Type, AlignmentSource::Decl);
+    }
+  }
+
   llvm_unreachable("Unhandled DeclRefExpr");
 }
 
@@ -5892,4 +5899,22 @@ RValue CodeGenFunction::EmitPseudoObjectRValue(const PseudoObjectExpr *E,
 
 LValue CodeGenFunction::EmitPseudoObjectLValue(const PseudoObjectExpr *E) {
   return emitPseudoObjectExpr(*this, E, true, AggValueSlot::ignored()).LV;
+}
+
+llvm::SmallVector<LValue, 4> CodeGenFunction::EmitApproxCompoundExpr(const ApproxCompoundExpr &S) {
+  llvm::SmallVector<LValue, 4> LValues;
+  for(const auto *D : S.getDeclarations()) {
+    llvm::dbgs() << "The address of the decl is: " << D << "\n";
+    EmitDecl(*D);
+  }
+  for(const auto *E : S.getExpressions()) {
+    E->dump();
+    if(auto *DRE = dyn_cast<DeclRefExpr>(E)) {
+      LValues.push_back(EmitDeclRefLValue(DRE));
+    } else {
+      EmitAnyExpr(E);
+    }
+  }
+
+  return LValues;
 }
