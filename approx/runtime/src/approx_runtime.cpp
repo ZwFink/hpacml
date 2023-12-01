@@ -327,10 +327,10 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
     }
 
     if (have_tensors) {
-      internal_repr_metadata_t *metadata =
-          static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
-      RTEnv.Model.evaluate(static_cast<ApproxType>(metadata->underlying_type),
-                           output_vars[0].num_elem, metadata->data, opts);
+      // internal_repr_metadata_t *metadata =
+          // static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
+      // RTEnv.Model.evaluate(static_cast<ApproxType>(metadata->underlying_type),
+                          //  output_vars[0].num_elem, metadata->data, opts);
     } else {
       RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
                            input_vars[0].num_elem, ipts, opts);

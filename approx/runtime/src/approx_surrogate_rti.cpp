@@ -256,15 +256,8 @@ std::vector<torch::Tensor> manually_broadcast(std::vector<torch::Tensor> tensors
     return broadcasted_tensors;
 }
 
-extern "C" {
-
-void __approx_runtime_tensor_cleanup(void* data) {
-	dbgs() << "Cleanup function is called\n";
-	internal_repr_metadata_t *metadata = (internal_repr_metadata_t *)data;
-	delete metadata;
-}
-
-void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
+std::vector<Tensor::tensor_t> 
+wrap_memory_in_tensors(internal_repr_metadata_t &metadata, int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
 	void **argsRHS_vpp = (void **)_argsRHS;
 	array_info_t *argsRHS = (array_info_t *)argsRHS_vpp[0];
 
@@ -276,9 +269,6 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
 	std::vector<Tensor::tensor_t> RHSTensors;
 	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->types[0]);
 	dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
-	EventRecorder::GPUEvent TransferEvent = EventRecorder::CreateGPUEvent("To Tensor");
-	TransferEvent.recordStart();
-
 	auto AccessBounds = get_access_bounds((array_info_t**) argsRHS_vpp, nargsRHS);
 
 	TensorType::Device OriginalDevice{TensorType::CPU};
@@ -302,25 +292,71 @@ void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_s
         RHSTensors.push_back(ThisTens);
 	}
 
-    Tensor::tensor_t *LHSTensor = new Tensor::tensor_t();
+	metadata.set_device(OriginalDevice);
+	metadata.set_underlying_type((ApproxType) argsRHS->types[0]);
+
+	return RHSTensors;
+}
+
+extern "C" {
+
+void __approx_runtime_tensor_cleanup(void* data) {
+	dbgs() << "Cleanup function is called\n";
+	internal_repr_metadata_t *metadata = (internal_repr_metadata_t *)data;
+	delete metadata;
+}
+
+void *__approx_runtime_convert_internal_tensor_to_mem(int nargsLHS,
+                                                      void *_slicesLHS,
+                                                      void *_shapesLHS,
+                                                      int nargsRHS,
+                                                      void *_argsRHS) {
+  EventRecorder::GPUEvent TransferEvent =
+      EventRecorder::CreateGPUEvent("Wrap output Memory");
+  TransferEvent.recordStart();
+
+  internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
+  auto RHSTensors = wrap_memory_in_tensors(*metadata, nargsLHS, _slicesLHS,
+                                           _shapesLHS, nargsRHS, _argsRHS);
+
+  auto LibraryType = Tensor::getTensorLibraryType();
+  metadata->set_library_type(LibraryType);
+  metadata->set_direction(Direction::TENSOR_TO_MEM);
+
+  for (auto &Tens : RHSTensors) {
+    metadata->add_tensor(Tens);
+	dbgs() << "Wrapped memory is: " << Tens.sizes() << "\n";
+  }
+  TransferEvent.recordEnd();
+  EventRecorder::LogEvent(TransferEvent);
+
+  return metadata;
+}
+
+void *__approx_runtime_convert_internal_mem_to_tensor(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
+	EventRecorder::GPUEvent TransferEvent = EventRecorder::CreateGPUEvent("To Tensor");
+	TransferEvent.recordStart();
+
+	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
+    auto RHSTensors = wrap_memory_in_tensors(*metadata, nargsLHS, _slicesLHS, _shapesLHS, nargsRHS, _argsRHS);
+
+    Tensor::tensor_t LHSTensor;
     if (nargsRHS == 1) {
-        *LHSTensor = RHSTensors[0];
+        LHSTensor = RHSTensors[0];
     } else {
-        *LHSTensor = Tensor::cat(RHSTensors, -1);
+		RHSTensors = manually_broadcast(RHSTensors);
+		LHSTensor = torch::cat(RHSTensors, -1);
     }
 
-    dbgs() << "Final tensor is: " << LHSTensor->sizes() << "\n";;
+    dbgs() << "Final tensor is: " << LHSTensor.sizes() << "\n";;
+
+	auto LibraryType = Tensor::getTensorLibraryType();
+	metadata->set_library_type(LibraryType);
+	metadata->set_direction(Direction::MEM_TO_TENSOR);
+	metadata->add_tensor(LHSTensor);
 
 	TransferEvent.recordEnd();
 	EventRecorder::LogEvent(TransferEvent);
-
-	auto LibraryType = Tensor::getTensorLibraryType();
-	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
-	metadata->set_library_type(LibraryType);
-	metadata->set_data(LHSTensor);
-	metadata->set_device(OriginalDevice);
-	metadata->set_underlying_type((ApproxType) argsRHS->types[0]);
-
 	return metadata;
 }
 

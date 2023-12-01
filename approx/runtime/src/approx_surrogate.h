@@ -236,23 +236,23 @@ class TorchTensorImpl {
 
 using TensorType = AbstractTensor<TorchTensorImpl>;
 
+enum class Direction : int8_t {
+  TENSOR_TO_MEM = 0,
+  MEM_TO_TENSOR = 1,
+};
+
 typedef struct internal_tensor_repr_data {
   ApproxType underlying_type;
 	int type;
   TensorType::Device original_device{TensorType::CPU};
-	void *data;
+  Direction direction;
+	std::vector<TensorType::tensor_t> Tensors;
 
 	~internal_tensor_repr_data() {
-		TensorType::tensor_t *T = (TensorType::tensor_t *)data;
-		delete T;
 	}
 
 	void set_library_type(int t) {
 		type = t;
-	}
-
-	void set_data(void *d) {
-		data = d;
 	}
 
   void set_device(TensorType::Device d) {
@@ -261,6 +261,17 @@ typedef struct internal_tensor_repr_data {
 
   void set_underlying_type(ApproxType t) {
     underlying_type = t;
+  }
+
+  size_t get_num_tensors() const {
+    return Tensors.size();
+  }
+
+  void set_direction(Direction d) {
+    direction = d;
+  }
+  void add_tensor(TensorType::tensor_t &Tens) {
+    Tensors.push_back(Tens);
   }
 
 } internal_repr_metadata_t;

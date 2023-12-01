@@ -21,6 +21,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Debug.h"
 #include <unordered_map>
+#include <memory>
 
 using namespace llvm;
 using namespace clang;
@@ -365,7 +366,16 @@ CGApproxRuntime::CGApproxRuntime(CodeGenModule &CGM)
       /* internal_repr_metadata_t * with metadata about internal representation */ CGM.VoidPtrTy
     }, false);
 
-  SurrogateInfo.ConvertTensorToInternalReprFnTy = llvm::FunctionType::get(
+  SurrogateInfo.ConversionMemToTensorFnTy = llvm::FunctionType::get(
+    CGM.VoidPtrTy, 
+    { /*Number of LHS slices */ CGM.Int32Ty,
+      /* slice_info_t * for LHS */ CGM.VoidPtrTy,
+      /* tensor_shape_t for LHS  */ CGM.VoidPtrTy,
+      /*Number of RHS array_info_t  */ CGM.Int32Ty,
+      /* array_info_t **array info for the RHS */ CGM.VoidPtrTy
+    }, false);
+
+  SurrogateInfo.ConversionTensorToMemFnTy = llvm::FunctionType::get(
     CGM.VoidPtrTy, 
     { /*Number of LHS slices */ CGM.Int32Ty,
       /* slice_info_t * for LHS */ CGM.VoidPtrTy,
@@ -1595,14 +1605,24 @@ namespace {
 void CGApproxRuntime::emitApproxDeclareTensor(
     CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D) {
 
-      if(D->getDirectionality() == ApproxDeclareTensorDecl::Direction::TENSOR_TO_MEM) {
-        llvm::dbgs() << "Emitting approx declare tensor for output tensor " << D->getName()
-               << "\n";
-      }
-      else if(D->getDirectionality() == ApproxDeclareTensorDecl::Direction::MEM_TO_TENSOR) {
-        llvm::dbgs() << "Emitting approx declare tensor for input tensor " << D->getName() 
-              << "\n";
-      }
+  bool isToMem = D->getDirectionality() ==
+                 ApproxDeclareTensorDecl::Direction::TENSOR_TO_MEM;
+  std::unique_ptr<TensorMemConversionDispatcher> Dispatcher;
+  if (isToMem) {
+    Dispatcher = std::make_unique<TensorToMemDispatcher>();
+    llvm::dbgs() << "Emitting approx declare tensor for output tensor "
+                 << D->getName() << "\n";
+  } else {
+    Dispatcher = std::make_unique<MemToTensorDispatcher>();
+    llvm::dbgs() << "Emitting approx declare tensor for input tensor "
+                 << D->getName() << "\n";
+  }
+
+  emitApproxDeclareTensorImpl(CGF, D, *Dispatcher);
+}
+
+void CGApproxRuntime::emitApproxDeclareTensorImpl(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D, 
+TensorMemConversionDispatcher& Dispatcher) {
 
   auto *TensorFunctor =
       dyn_cast<ApproxDeclareTensorFunctorDecl>(D->getFunctor());
@@ -1664,8 +1684,9 @@ void CGApproxRuntime::emitApproxDeclareTensor(
 
   CGApproxRuntimeSubstituteAIVRInShapes(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress);
 
-  Address InternalRepr = CGApproxRuntimeEmitInternalReprConversion(*CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress, FunctorDeclRHSAddresses.size(),
-                                            FunctorCollectionAddr);
+  Address InternalRepr = CGApproxRuntimeEmitInternalReprConversion(
+      *CGF, LHS.size(), LHSSliceAddress, LHSShapeAddress,
+      FunctorDeclRHSAddresses.size(), FunctorCollectionAddr, Dispatcher);
   llvm::Value *InternalReprValue = CGF->Builder.CreatePointerCast(InternalRepr.getPointer(), CGF->VoidPtrTy);
 
   CGF->AddDeclaredTensorLocalVar((VarDecl*) D, InternalRepr);
@@ -1673,8 +1694,9 @@ void CGApproxRuntime::emitApproxDeclareTensor(
   llvm::FunctionCallee CleanFNCall = getTensorCleanupFn(CGM);
   llvm::SmallVector<llvm::Value *, 1> CallArgs;
   CGF->EHStack.pushCleanup<TensorCleanupTy>(NormalAndEHCleanup, CleanFNCall, llvm::makeArrayRef(InternalReprValue));
+}
 
-  }
+
 
 llvm::FunctionCallee CGApproxRuntime::getTensorCleanupFn(CodeGenModule &CGM) {
   Function *Fn = nullptr;
@@ -1708,18 +1730,10 @@ llvm::FunctionCallee CGApproxRuntime::getTensorCleanupFn(CodeGenModule &CGM) {
     GF.EmitRuntimeCall(FnCallee, {NumDimsArg, SlicesValue, ShapesValue});
   }
   Address CGApproxRuntime::CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int nargsLHS, Address LHSSlices, Address LHSShapes,
-      int nargsRHS, Address RHSAddress) {
-    Function *Fn = nullptr;
-    StringRef FnName("__approx_runtime_convert_to_internal_representation");
-    Fn = CGM.getModule().getFunction(FnName);
-    if(!Fn) {
-      Fn = Function::Create(SurrogateInfo.ConvertTensorToInternalReprFnTy,
-                        llvm::Function::ExternalLinkage, FnName,
-                        CGM.getModule());
-    }
+      int nargsRHS, Address RHSAddress, TensorMemConversionDispatcher &Dispatcher) {
 
+    llvm::FunctionCallee FnCallee = Dispatcher.getInternalReprConversionFn(CGM, *this);
 
-    llvm::FunctionCallee FnCallee({SurrogateInfo.ConvertTensorToInternalReprFnTy, Fn});
     llvm::Value *NumArgsLHSArg = llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), llvm::APInt(32, nargsLHS));
     llvm::Value *SlicesLHSArg = CGF.Builder.CreatePointerCast(LHSSlices.getPointer(), CGF.VoidPtrTy);
     llvm::Value *ShapesLHSArg = CGF.Builder.CreatePointerCast(LHSShapes.getPointer(), CGF.VoidPtrTy);
@@ -1729,6 +1743,7 @@ llvm::FunctionCallee CGApproxRuntime::getTensorCleanupFn(CodeGenModule &CGM) {
     auto *RetVal = CGF.EmitRuntimeCall(FnCallee, {NumArgsLHSArg, SlicesLHSArg, ShapesLHSArg, NumArgsRHSArg, RHSArg});
     return Address(RetVal, CGF.VoidPtrTy, CGF.getPointerAlign());
   }
+
 
   Address CGApproxRuntime::CGApproxRuntimeAllocInternalReprMetadata(CodeGenFunction& CGF, int numArgs) {
     ASTContext &C = CGM.getContext();
@@ -1749,4 +1764,42 @@ llvm::FunctionCallee CGApproxRuntime::getTensorCleanupFn(CodeGenModule &CGM) {
     CGF.EmitStoreOfScalar(NullPtr, Base);
 
     return InternalRepr;
+  }
+
+  llvm::FunctionCallee MemToTensorDispatcher::getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime) {
+    Function *Fn = nullptr;
+    llvm::FunctionType *FnTy = nullptr;
+    StringRef FnName;
+
+      FnName = "__approx_runtime_convert_internal_mem_to_tensor";
+      Fn = CGM.getModule().getFunction(FnName);
+      FnTy = Runtime.SurrogateInfo.ConversionMemToTensorFnTy;
+
+    Fn = CGM.getModule().getFunction(FnName);
+    if(!Fn) {
+      Fn = Function::Create(FnTy,
+                        llvm::Function::ExternalLinkage, FnName,
+                        CGM.getModule());
+    }
+
+    return llvm::FunctionCallee({FnTy, Fn});
+  }
+
+  llvm::FunctionCallee TensorToMemDispatcher::getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime) {
+    Function *Fn = nullptr;
+    llvm::FunctionType *FnTy = nullptr;
+    StringRef FnName;
+
+    FnName = "__approx_runtime_convert_internal_tensor_to_mem";
+    Fn = CGM.getModule().getFunction(FnName);
+    FnTy = Runtime.SurrogateInfo.ConversionTensorToMemFnTy;
+
+    Fn = CGM.getModule().getFunction(FnName);
+    if(!Fn) {
+      Fn = Function::Create(FnTy,
+                        llvm::Function::ExternalLinkage, FnName,
+                        CGM.getModule());
+    }
+
+    return llvm::FunctionCallee({FnTy, Fn});
   }
