@@ -2747,6 +2747,10 @@ public:
     return getSema().ActOnApproxIndexVarRefExpr(II, Loc);
   }
 
+  ExprResult RebuildApproxCompoundExpr(llvm::ArrayRef<Expr*> Exprs) {
+    return getSema().ActOnApproxCompoundExpr(Exprs);
+  }
+
   /// Build a new array section expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -11348,6 +11352,24 @@ ExprResult
 TreeTransform<Derived>::TransformApproxIndexVarRefExpr(ApproxIndexVarRefExpr *E) {
   return getDerived().RebuildApproxIndexVarRefExpr(E->getIdentifier(),
                                                    E->getBeginLoc());
+}
+
+template<typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformApproxCompoundExpr(ApproxCompoundExpr *E) {
+  SmallVector<Expr *, 8> SubExprs;
+  bool ErrorFound = false;
+  for (Expr *SubExpr : E->getExpressions()) {
+    ExprResult SubRes = getDerived().TransformExpr(SubExpr);
+    if (SubRes.isInvalid()) {
+      ErrorFound = true;
+      continue;
+    }
+    SubExprs.push_back(SubRes.get());
+  }
+  if (ErrorFound)
+    return ExprError();
+  return getDerived().RebuildApproxCompoundExpr(SubExprs);
 }
 
 template <typename Derived>

@@ -5793,6 +5793,9 @@ public:
   ExprResult ActOnApproxIndexVarRefExpr(IdentifierInfo *II,
                                         SourceLocation ILoc);
 
+  ExprResult ActOnApproxCompoundExpr(ArrayRef<Decl*> Decls, ArrayRef<Expr*> Exprs);
+  ExprResult ActOnApproxCompoundExpr(ArrayRef<Expr*> Exprs);
+
   ExprResult ActOnOMPArraySectionExpr(Expr *Base, SourceLocation LBLoc,
                                       Expr *LowerBound,
                                       SourceLocation ColonLocFirst,

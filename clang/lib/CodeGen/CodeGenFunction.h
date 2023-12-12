@@ -3596,6 +3596,7 @@ public:
   void EmitOMPInteropDirective(const OMPInteropDirective &S);
   void EmitOMPParallelMaskedDirective(const OMPParallelMaskedDirective &S);
   void EmitApproxDirective(const ApproxDirective &S);
+  llvm::SmallVector<LValue, 4> EmitApproxCompoundExpr(const ApproxCompoundExpr &S);
   Address GetAddressOfTensor(const Expr *E);
 
   /// Emit device code for the target directive.

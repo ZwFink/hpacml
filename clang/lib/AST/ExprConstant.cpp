@@ -15631,6 +15631,7 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::ApproxArraySliceExprClass:
   case Expr::ApproxSliceExprClass:
   case Expr::ApproxIndexVarRefExprClass:
+  case Expr::ApproxCompoundExprClass:
   case Expr::OMPArraySectionExprClass:
   case Expr::OMPArrayShapingExprClass:
   case Expr::OMPIteratorExprClass:

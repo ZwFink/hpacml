@@ -52,8 +52,27 @@ enum ApproxRTArgsIndex : uint {
 enum Directionality : int { Input = 1, Output = 2, InputOuput = 4 };
 
 const unsigned ARG_START = AccurateFn;
+class CGApproxRuntime;
+
+class TensorMemConversionDispatcher {
+  public:
+  virtual llvm::FunctionCallee getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime);
+  virtual ~TensorMemConversionDispatcher() = default;
+};
+class TensorToMemDispatcher : public TensorMemConversionDispatcher {
+  public:
+  llvm::FunctionCallee getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime) override;
+};
+
+class MemToTensorDispatcher : public TensorMemConversionDispatcher {
+  public:
+  llvm::FunctionCallee getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime) override;
+};
+
 
 class CGApproxRuntime {
+  friend class TensorToMemDispatcher;
+  friend class MemToTensorDispatcher;
 private:
   CodeGenModule &CGM;
   /// PerfoInfoTy is a struct containing infor about the perforation.
@@ -197,7 +216,12 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   // a function that converts a set of user arrays on the RHS
   // to a single tensor that we can then transpose/reshape
   // to get the correct shape as specified by the LHS
-  llvm::FunctionType *ConvertTensorToInternalReprFnTy;
+  llvm::FunctionType *ConversionMemToTensorFnTy;
+
+  // a function that wraps a set of user arrays on the RHS
+  // so we can write the output values produced by the NN
+  // back to memory
+  llvm::FunctionType *ConversionTensorToMemFnTy;
 
   // a function that takes (ndim, void *slices, void *shapes)
   // and changes shapes so that all AIVR variables are 
@@ -218,6 +242,8 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
         SymbolVarInfoMap &InfoMap,
         llvm::ArrayRef<Expr *> FunctorSlice,
         llvm::ArrayRef<Expr *> TensorSlice);
+
+  using TranslationDirection = ApproxDeclareTensorDecl::Direction;
 
   llvm::FunctionCallee getTensorCleanupFn(CodeGenModule &CGM);
   void initializeAndDeclareSymbolVars(ApproxDeclareTensorFunctorDecl *Decl, llvm::ArrayRef<Expr*> Vars);
@@ -240,11 +266,13 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   void CGApproxRuntimeEmitSliceConversion(CodeGenFunction &CGF, size_t NumVals, Address TensorCollection, Address FunctorCollection);
   void CGApproxRuntimeEmitHigherOrderShapeConversion(CodeGenFunction &CGF, size_t NumVals, Address TensorCollection, Address FunctorCollection);
   Address CGApproxRuntimeEmitInternalReprConversion(CodeGenFunction &CGF, int nargsLHS, Address LHSSlices, Address LHSShapes,
-      int nargsRHS, Address RHSAddress);
+      int nargsRHS, Address RHSAddress, TensorMemConversionDispatcher &Dispatcher);
+
   public:
 
   void emitApproxDeclareTensorFunctor(CodeGenFunction *CGF, const ApproxDeclareTensorFunctorDecl *D);
   void emitApproxDeclareTensor(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D);
+  void emitApproxDeclareTensorImpl(CodeGenFunction *CGF, const ApproxDeclareTensorDecl *D, TensorMemConversionDispatcher &Dispatcher);
 
 };
 

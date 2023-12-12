@@ -176,13 +176,12 @@ Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBo
 	}
 
 	auto ThisType = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) memory_descr->types[base]);
-	auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice);
+	auto options = Tensor::tensor_options_t().dtype(ThisType).device(OriginalDevice).requires_grad(false);
 
-	auto elem_size = Tensor::getElementSizeForType(TypeOfTensorData);
+	auto elem_size = Tensor::getElementSizeForType(ThisType);
 	intptr_t offset_base_ptr = (intptr_t) memory_descr->bases[base] + base_offset*elem_size;
 
 	auto blob = Tensor::from_blob((void*) offset_base_ptr, SHP, Strides, options);
-	blob = blob.to(Tensor::CUDA, /*nonblocking=*/ true);
 
 	return blob;
 }
@@ -211,7 +210,8 @@ std::vector<std::pair<size_t,size_t>> get_access_bounds(array_info_t **args, int
 	return bounds;
 }
 
-std::vector<torch::Tensor> manually_broadcast(std::vector<torch::Tensor> tensors) {
+template<typename TensorGen>
+std::vector<WrappedTensor> manually_broadcast(TensorGen Gen, std::vector<WrappedTensor> tensors) {
     // Compute the output shape by aligning the shapes on the right and filling in with ones
     size_t max_len = 0;
     for (const auto& tensor : tensors) {
@@ -229,7 +229,7 @@ std::vector<torch::Tensor> manually_broadcast(std::vector<torch::Tensor> tensors
     }
 
 
-    std::vector<torch::Tensor> broadcasted_tensors;
+    std::vector<WrappedTensor> broadcasted_tensors;
     for (auto& tensor : tensors) {
         // Compute the broadcasted strides for each tensor
         auto tensor_shape = tensor.sizes();
@@ -250,10 +250,50 @@ std::vector<torch::Tensor> manually_broadcast(std::vector<torch::Tensor> tensors
 		output_shape[max_len-1] = tensor_shape[tensor_shape.size()-1];
 
         // Create a view with the new shape and strides
-        broadcasted_tensors.push_back(torch::as_strided(tensor, output_shape, broadcasted_strides));
+        broadcasted_tensors.push_back(Gen(torch::as_strided(tensor.get_tensors()[0], output_shape, broadcasted_strides)));
     }
 
     return broadcasted_tensors;
+}
+
+template <typename TensorInstanceGen>
+std::vector<WrappedTensor> wrap_memory_in_tensors(
+    TensorInstanceGen Gen, internal_repr_metadata_t &metadata, int nargsLHS,
+    void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
+  void **argsRHS_vpp = (void **)_argsRHS;
+  array_info_t *argsRHS = (array_info_t *)argsRHS_vpp[0];
+
+  slice_info_t *slicesLHS = (slice_info_t *)_slicesLHS;
+  tensor_shape_t *shapesLHS = (tensor_shape_t *)_shapesLHS;
+
+  auto LHSShape = Tensor::makeArrayRef(shapesLHS->shapes, shapesLHS->ndim);
+
+  std::vector<WrappedTensor> RHSTensors;
+  auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType(
+      (ApproxType)argsRHS->types[0]);
+  dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
+  auto AccessBounds = get_access_bounds((array_info_t **)argsRHS_vpp, nargsRHS);
+
+  TensorType::Device OriginalDevice{TensorType::CPU};
+
+  for (int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
+  	auto ThisTens = Gen();
+    array_info_t *thisArg = (array_info_t *)argsRHS_vpp[RHSArg];
+    for (int indirection = 0; indirection < thisArg->n_indirections;
+         indirection++) {
+      auto ThisTensInst =
+          memory_to_tensor(thisArg, indirection, AccessBounds);
+      ThisTens.add_tensor(ThisTensInst);
+    }
+
+    ThisTens.to(Tensor::CUDA, /*nonblocking=*/true);
+    RHSTensors.push_back(ThisTens);
+  }
+
+  metadata.set_device(OriginalDevice);
+  metadata.set_underlying_type((ApproxType)argsRHS->types[0]);
+
+  return RHSTensors;
 }
 
 extern "C" {
@@ -264,63 +304,67 @@ void __approx_runtime_tensor_cleanup(void* data) {
 	delete metadata;
 }
 
-void *__approx_runtime_convert_to_internal_representation(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
-	void **argsRHS_vpp = (void **)_argsRHS;
-	array_info_t *argsRHS = (array_info_t *)argsRHS_vpp[0];
+void *__approx_runtime_convert_internal_tensor_to_mem(int nargsLHS,
+                                                      void *_slicesLHS,
+                                                      void *_shapesLHS,
+                                                      int nargsRHS,
+                                                      void *_argsRHS) {
+  EventRecorder::GPUEvent TransferEvent =
+      EventRecorder::CreateGPUEvent("Wrap output Memory");
+  TransferEvent.recordStart();
 
-	slice_info_t *slicesLHS = (slice_info_t *)_slicesLHS;
-	tensor_shape_t *shapesLHS = (tensor_shape_t *)_shapesLHS;
+  internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
+  TensorWrapperTensorToMem<Tensor::tensor_t> Gen;
+  auto RHSTensors = wrap_memory_in_tensors(Gen, *metadata, nargsLHS, _slicesLHS,
+                                           _shapesLHS, nargsRHS, _argsRHS);
 
-	auto LHSShape = Tensor::makeArrayRef(shapesLHS->shapes, shapesLHS->ndim);
+  for(auto &Tens : RHSTensors) {
+	  Tens.perform_indirection();
+  }
 
-	std::vector<Tensor::tensor_t> RHSTensors;
-	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) argsRHS->types[0]);
-	dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
+  auto LibraryType = Tensor::getTensorLibraryType();
+  metadata->set_library_type(LibraryType);
+  metadata->set_direction(Direction::TENSOR_TO_MEM);
+
+  for (auto &Tens : RHSTensors) {
+    metadata->add_tensor(Tens);
+	// dbgs() << "Wrapped memory is: " << Tens.sizes() << "\n";
+  }
+  TransferEvent.recordEnd();
+  EventRecorder::LogEvent(TransferEvent);
+
+  return metadata;
+}
+
+void *__approx_runtime_convert_internal_mem_to_tensor(int nargsLHS, void *_slicesLHS, void *_shapesLHS, int nargsRHS, void *_argsRHS) {
 	EventRecorder::GPUEvent TransferEvent = EventRecorder::CreateGPUEvent("To Tensor");
 	TransferEvent.recordStart();
 
-	auto AccessBounds = get_access_bounds((array_info_t**) argsRHS_vpp, nargsRHS);
-
-	TensorType::Device OriginalDevice{TensorType::CPU};
-
-	for(int RHSArg = 0; RHSArg < nargsRHS; RHSArg++) {
-		array_info_t *thisArg = (array_info_t *)argsRHS_vpp[RHSArg];
-       auto ThisTens = memory_to_tensor(
-           thisArg, thisArg->n_indirections-1, AccessBounds);
-		for(int indirection = thisArg->n_indirections - 2; indirection >= 0; indirection--) {
-			auto OldTens = ThisTens;
-			auto original_shape = ThisTens.sizes();
-			ThisTens = memory_to_tensor(
-				thisArg, indirection, AccessBounds);
-
-			// Flatten the tensor -- we are using 1-D based indices to access N-D data
-			ThisTens = ThisTens.flatten();
-			ThisTens = ThisTens.index({OldTens.flatten()});
-			ThisTens = ThisTens.reshape(original_shape);
-		}
-
-        RHSTensors.push_back(ThisTens);
+	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
+	TensorWrapperMemToTensor<Tensor::tensor_t> Gen;
+    auto RHSTensors = wrap_memory_in_tensors(Gen, *metadata, nargsLHS, _slicesLHS, _shapesLHS, nargsRHS, _argsRHS);
+	for(auto &Tens : RHSTensors) {
+		Tens.perform_indirection();
 	}
 
-    Tensor::tensor_t *LHSTensor = new Tensor::tensor_t();
+    WrappedTensor LHSTensor = Gen();
     if (nargsRHS == 1) {
-        *LHSTensor = RHSTensors[0];
+        LHSTensor.add_tensor(RHSTensors[0]);
     } else {
-        *LHSTensor = Tensor::cat(RHSTensors, -1);
+      RHSTensors = manually_broadcast(Gen, RHSTensors);
+      LHSTensor.add_tensor(
+          torch::cat(TensorWrapper<Tensor::tensor_t>::concat(RHSTensors), -1));
     }
 
-    dbgs() << "Final tensor is: " << LHSTensor->sizes() << "\n";;
+    // dbgs() << "Final tensor is: " << LHSTensor.sizes() << "\n";;
+
+	auto LibraryType = Tensor::getTensorLibraryType();
+	metadata->set_library_type(LibraryType);
+	metadata->set_direction(Direction::MEM_TO_TENSOR);
+	metadata->add_tensor(LHSTensor);
 
 	TransferEvent.recordEnd();
 	EventRecorder::LogEvent(TransferEvent);
-
-	auto LibraryType = Tensor::getTensorLibraryType();
-	internal_repr_metadata_t *metadata = new internal_repr_metadata_t();
-	metadata->set_library_type(LibraryType);
-	metadata->set_data(LHSTensor);
-	metadata->set_device(OriginalDevice);
-	metadata->set_underlying_type((ApproxType) argsRHS->types[0]);
-
 	return metadata;
 }
 

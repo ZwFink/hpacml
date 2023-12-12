@@ -3281,6 +3281,8 @@ StringRef BuiltinType::getName(const PrintingPolicy &Policy) const {
     return "<Approx slice type>";
   case ApproxIndexVarRef:
     return "<Approx index variable reference type>";
+  case ApproxCompound:
+    return "<Approx compound expression type>";
   case OMPArraySection:
     return "<OpenMP array section type>";
   case OMPArrayShaping:

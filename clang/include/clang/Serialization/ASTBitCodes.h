@@ -1084,6 +1084,7 @@ enum PredefinedTypeIDs {
   PREDEF_TYPE_APPROX_SLICE = 76,
   PREDEF_TYPE_APPROX_ARRAY_SECTION = 77,
   PREDEF_TYPE_APPROX_INDEX_VAR_REF = 78,
+  PREDEF_TYPE_APPROX_COMPOUND = 79,
 
 /// OpenCL image types with auto numeration
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix)                   \
@@ -2015,6 +2016,7 @@ enum StmtCode {
   EXPR_APPROX_ARRAY_SLICE,
   EXPR_APPROX_INDEX_VAR_REF,
   EXPR_APPROX_SLICE,
+  EXPR_APPROX_COMPOUND,
 
   // ARC
   EXPR_OBJC_BRIDGED_CAST, // ObjCBridgedCastExpr

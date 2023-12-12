@@ -266,6 +266,7 @@ void __snapshot_call__(void (*_user_fn_)(void *), void *args,
   packVarToVec(output_vars, num_outputs, dP.outputs);
 }
 
+enum class TensorsFound : char { NONE = 0, OUTPUT, INPUT, BOTH };
 
 void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
                         void *arg, bool cond, const char *region_name,
@@ -275,6 +276,8 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
   approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
   approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
   approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
+
+  TensorsFound have_tensors = TensorsFound::NONE;
 
   if (petru_type & PETRUBATE_IN){
     petrubate(accurateFN, input_vars, num_inputs, region_name);
@@ -302,33 +305,61 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
     }
   }
   else if ( (MLType) ml_type == ML_INFER ){
-    bool have_tensors = false;
 
     if(input_vars[0].is_tensor) {
       assert(num_inputs == 1 && "Only one tensor input is supported");
-      have_tensors = true;
+      have_tensors = TensorsFound::INPUT;
+    }
+    if(output_vars[0].is_tensor) {
+      if(have_tensors == TensorsFound::INPUT) {
+        have_tensors = TensorsFound::BOTH;
+      } else {
+        have_tensors = TensorsFound::OUTPUT;
+      }
     }
 
     std::vector<void *> ipts;
     std::vector<void *> opts;
-    ipts.reserve(num_inputs);
-    opts.reserve(num_outputs);
 
-    for(int i = 0; i < num_inputs; i++) {
-      ipts.push_back(input_vars[i].ptr);
-    }
-    for(int i = 0; i < num_outputs; i++) {
-      opts.push_back(output_vars[i].ptr);
+    if (have_tensors != TensorsFound::NONE) {
+      ipts.reserve(num_inputs);
+      opts.reserve(num_outputs);
+
+      for (int i = 0; i < num_inputs; i++) {
+        ipts.push_back(input_vars[i].ptr);
+      }
+      for (int i = 0; i < num_outputs; i++) {
+        opts.push_back(output_vars[i].ptr);
+      }
     }
 
-    if (have_tensors) {
-      internal_repr_metadata_t *metadata =
-          static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
-      RTEnv.Model.evaluate(static_cast<ApproxType>(metadata->underlying_type),
-                           output_vars[0].num_elem, metadata->data, opts);
-    } else {
-      RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
-                           input_vars[0].num_elem, ipts, opts);
+    internal_repr_metadata_t *ipt_metadata = nullptr;
+    internal_repr_metadata_t *opt_metadata = nullptr;
+
+    switch(have_tensors) {
+      case TensorsFound::NONE:
+        RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
+                             input_vars[0].num_elem, ipts, opts);
+        break;
+      case TensorsFound::INPUT:
+        std::cerr << "Input only not supported yet\n";
+        accurateFN(arg);
+        // ipt_metadata = static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
+        // RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
+                            //  input_vars[0].num_elem, ipt_metadata->Tensors[0], opts);
+        break;
+      case TensorsFound::OUTPUT:
+        std::cerr << "Output only not supported yet\n";
+        accurateFN(arg);
+        // RTEnv.Model.evaluate(static_cast<ApproxType>(output_vars[0].data_type),
+                            //  output_vars[0].num_elem, ipts, opts);
+        break;
+      case TensorsFound::BOTH:
+        ipt_metadata = static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
+        opt_metadata = static_cast<internal_repr_metadata_t *>(output_vars[0].ptr);
+        RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
+                             *ipt_metadata, *opt_metadata);
+        break;
     }
   }
   else {

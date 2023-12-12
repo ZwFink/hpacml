@@ -328,6 +328,8 @@ PLACEHOLDER_TYPE(ApproxSlice, ApproxSliceTy)
 
 PLACEHOLDER_TYPE(ApproxIndexVarRef, ApproxIndexVarRefTy)
 
+PLACEHOLDER_TYPE(ApproxCompound, ApproxCompoundTy)
+
 // A placeholder type for OpenMP array sections.
 PLACEHOLDER_TYPE(OMPArraySection, OMPArraySectionTy)
 

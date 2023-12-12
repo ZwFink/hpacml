@@ -1117,6 +1117,7 @@ public:
   CanQualType ApproxArraySliceTy;
   CanQualType ApproxSliceTy;
   CanQualType ApproxIndexVarRefTy;
+  CanQualType ApproxCompoundTy;
   CanQualType OMPArraySectionTy, OMPArrayShapingTy, OMPIteratorTy;
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   CanQualType Id##Ty;

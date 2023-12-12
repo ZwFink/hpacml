@@ -14,9 +14,319 @@
 #include "database/database.h"
 #include "approx_internal.h"
 #include "event.h"
+#include <type_traits>
 
 
 #include <cuda_runtime.h>
+
+enum class Direction : int8_t {
+  TENSOR_TO_MEM = 0,
+  MEM_TO_TENSOR = 1,
+};
+
+
+template <typename Tensor>
+class IndirectionPolicy {
+  // we'll use virtual functions here because our actual compute is likely quite heavy
+  // -- we're calling GPU kernels that operate on large tensors. So, we expect the 
+  // overhead of virtual functions to be negligible. We can expect that optimizations
+  // like using different cuda streams parallelize these operations on a GPU
+  // will be much more impactful.
+  public:
+  
+  /*
+  * Apply indirection to the tensors in C. Directly modify C.
+  * The size of C after this method is called depends on the policy used.
+  * Indirection assumes that the outermost tensor comes first, as the code
+  * is written. For instance, a[b[c]] will give the vector [a, b, c].
+  */
+  virtual void compute_result(std::vector<Tensor> &C) = 0;
+  virtual Tensor get_result() = 0;
+  virtual ~IndirectionPolicy() = default;
+  virtual Tensor write_to(Tensor &T) = 0;
+  virtual std::unique_ptr<IndirectionPolicy<Tensor>> clone() = 0;
+  
+  /*
+  * Copy the data from T into C. This method is called
+  * AFTER indirection has been applied with compute_result.
+  * Consequently, this is equivalent to a[b[c]] = T.
+  */
+  virtual void copy_(std::vector<Tensor> &C, Tensor &T) = 0;
+
+  /*
+  * Get the direction of our tensor translation.
+  * Are we translating tensors to memory, or tensors to memory?
+  * This method is used to communicate to client code.
+  * Nevertheless, the direction affects the decisions made when applying indirection.
+  */
+  virtual Direction get_direction() = 0;
+
+};
+
+template<typename Tensor>
+class MemToTensorIndirectionWrapper : public IndirectionPolicy<Tensor> {
+  public:
+  void compute_result(std::vector<Tensor> &C) override {
+    Tensor ThisTens = C.back();
+    C.pop_back();
+
+    auto size = C.size();
+
+    for(auto i = 0; i < size; i++) {
+      auto OldTens = ThisTens;
+      auto original_shape = ThisTens.sizes();
+      ThisTens = C.back();
+      ThisTens = ThisTens.flatten();
+      ThisTens = ThisTens.index({OldTens.flatten()});
+      ThisTens = ThisTens.reshape(original_shape);
+
+      C.pop_back();
+    }
+    C.push_back(ThisTens);
+  }
+
+  Tensor get_result() override {
+    return Tensor();
+  }
+
+  Tensor write_to(Tensor &T) override {
+    return T;
+  }
+
+  std::unique_ptr<IndirectionPolicy<Tensor>> clone() override {
+    return std::make_unique<MemToTensorIndirectionWrapper<Tensor>>();
+  }
+
+  void copy_(std::vector<Tensor> &Tens, Tensor &T) override {
+    Tens[0].copy_(T);
+  }
+
+  Direction get_direction() override {
+    return Direction::MEM_TO_TENSOR;
+  }
+};
+
+template<typename Tensor>
+class TensorToMemIndirectionWrapper : public IndirectionPolicy<Tensor> {
+  Tensor write_to(Tensor &T) override {
+    return T;
+  }
+
+  Tensor get_result() override {
+    return Tensor();
+  }
+
+  /**
+   * Apply indirection to the tensors in C. This method defers the last level
+   * of indirection to when we actually copy. This is because the 
+   * index method creates a copy of the original tensor. We need to make sure
+   * we're keeping track of the original memory so we can copy to it.
+   * If the user specified a[b[c]], we will compute b'= b[c] and carry that along
+   * so we can later apply a[b'].
+  */
+  void compute_result(std::vector<Tensor> &C) override {
+    // we already have the data in the form we need.
+    if(C.size() <= 2) return;
+
+    Tensor ThisTens = C.back();
+    C.pop_back();
+
+    auto size = C.size();
+
+    for(int i = size; i > 1; i--) {
+      auto OldTens = ThisTens;
+      auto original_shape = ThisTens.sizes();
+      ThisTens = C.back();
+      ThisTens = ThisTens.flatten();
+      ThisTens = ThisTens.index({OldTens.flatten()});
+      ThisTens = ThisTens.reshape(original_shape);
+
+      C.pop_back();
+    }
+    // now we may have two tensors: the final indirection tensor
+    // and the tensor wrappign the original output tensor
+    C.push_back(ThisTens);
+  }
+
+  std::unique_ptr<IndirectionPolicy<Tensor>> clone() override {
+    return std::make_unique<TensorToMemIndirectionWrapper<Tensor>>();
+  }
+
+  void copy_(std::vector<Tensor> &C, Tensor &T) override {
+    if (C.size() == 2) {
+      auto C0 = C[0].flatten();
+      auto C1 = C[1].flatten();
+      auto Tflat = T.flatten();
+      C0.index_put_({C1}, Tflat);
+    } else {
+      assert(C.size() == 1 && "Invalid number of tensors in TensorToMemIndirectionWrapper");
+      C[0].copy_(T);
+    }
+  }
+
+  Direction get_direction() override {
+    return Direction::TENSOR_TO_MEM;
+  }
+};
+
+template<typename Tensor>
+class TensorWrapper {
+  std::vector<Tensor> tensors;
+  using DeviceTy = decltype(Tensor().device());
+  // if we move the wrapped memory between devices, we can't just
+  // copy the tensor back to the original device. We need to keep track
+  // of the original tensor so we can copy to the memory it holds.
+  Tensor FirstTensorOriginal;
+  DeviceTy OriginalDevice = torch::kCPU;
+  std::unique_ptr<IndirectionPolicy<Tensor>> IP;
+
+  public:
+    TensorWrapper(std::unique_ptr<IndirectionPolicy<Tensor>> &&IP)
+        : IP(std::move(IP)) {}
+
+    TensorWrapper() = default;
+
+      TensorWrapper(const TensorWrapper& other) {
+    tensors = other.tensors;
+    FirstTensorOriginal = other.FirstTensorOriginal;
+    OriginalDevice = other.OriginalDevice;
+    if (other.IP) {
+      IP = other.IP->clone();
+    }
+  }
+
+  // Custom copy assignment operator (if cloning is possible)
+  TensorWrapper& operator=(const TensorWrapper& other) {
+    if (this != &other) {
+      tensors = other.tensors;
+      FirstTensorOriginal = other.FirstTensorOriginal;
+      OriginalDevice = other.OriginalDevice;
+      if (other.IP) {
+        IP = other.IP->clone();
+      } else {
+        IP = nullptr;
+      }
+    }
+    return *this;
+  }
+
+    IndirectionPolicy<Tensor> &get_indirection_policy() {
+      return *IP;
+  }
+
+  std::vector<Tensor> &get_tensors() {
+    return tensors;
+  }
+
+  void add_tensor(Tensor T) {
+    tensors.push_back(T);
+  }
+
+  void add_tensor(TensorWrapper<Tensor> &TW) {
+    // copy the tensors in TW to this
+    auto TW_tensors = TW.get_tensors();
+    tensors.insert(tensors.end(), TW_tensors.begin(), TW_tensors.end());
+  }
+
+  Tensor compute_result() {
+    IP->compute_result(tensors);
+    return tensors[0];
+  }
+
+  Tensor perform_indirection() {
+    return compute_result();
+  }
+
+  void copy_(Tensor &T) {
+    IP->copy_(tensors, T);
+    if(OriginalDevice != T.device()) {
+      std::cout << "Original device: " << OriginalDevice << "\n";
+      std::cout << "Current device: " << T.device() << "\n";
+      std::cout << "Copying the data\n";
+      FirstTensorOriginal.copy_(tensors[0]);
+    }
+  }
+
+  
+  auto sizes(size_t idx = 0) const {
+    return tensors[idx].sizes();
+  }
+
+  auto strides(size_t idx = 0) const {
+    return tensors[idx].strides();
+  }
+
+  auto dim(size_t idx = 0) const {
+    return tensors[idx].dim();
+  }
+
+  static std::vector<Tensor> concat(std::vector<TensorWrapper<Tensor>> &T) {
+    std::vector<Tensor> result;
+    for(auto &t : T) {
+      auto tensors = t.get_tensors();
+      result.insert(result.end(), tensors.begin(), tensors.end());
+    }
+    return result;
+  }
+
+  void to(DeviceTy d, bool non_blocking = false) {
+    FirstTensorOriginal = tensors[0];
+    OriginalDevice = FirstTensorOriginal.device();
+
+    // TODO: This is something I think should go to the indirection policy.
+    // that will let us avoid copying output without indirection to the GPU, as
+    // we /shouldn't/ need to do that. I expect that the cost of applying indirection
+    // will be much lower on the GPU, so we'll want to do it in that case. However,
+    // with this implementation we can NEVER copy single tensors between devices,
+    // which violates what we would expect from this method.
+    bool am_tensor_to_mem = IP->get_direction() == Direction::TENSOR_TO_MEM;
+    if(tensors.size() == 1 && am_tensor_to_mem)
+      return;
+    for(auto &t : tensors) {
+      t = t.to(d, non_blocking);
+    }
+  }
+};
+
+template<typename Tensor>
+struct TensorWrapperTensorToMem {
+  TensorWrapper<Tensor> operator()() const {
+    return TensorWrapper<Tensor>(std::make_unique<TensorToMemIndirectionWrapper<Tensor>>());
+  }
+
+  TensorWrapper<Tensor> operator()(Tensor &T) const {
+    TensorWrapper<Tensor> TW(std::make_unique<TensorToMemIndirectionWrapper<Tensor>>());
+    TW.add_tensor(T);
+    return TW;
+  }
+
+  TensorWrapper<Tensor> operator()(Tensor &&T) const {
+    TensorWrapper<Tensor> TW(std::make_unique<TensorToMemIndirectionWrapper<Tensor>>());
+    TW.add_tensor(T);
+    return TW;
+  }
+};
+
+template<typename Tensor>
+struct TensorWrapperMemToTensor {
+  TensorWrapper<Tensor> operator()() const {
+    return TensorWrapper<Tensor>(std::make_unique<MemToTensorIndirectionWrapper<Tensor>>());
+  }
+
+TensorWrapper<Tensor> operator()(Tensor &T) const {
+    TensorWrapper<Tensor> TW(std::make_unique<MemToTensorIndirectionWrapper<Tensor>>());
+    TW.add_tensor(T);
+    return TW;
+  }
+
+  TensorWrapper<Tensor> operator()(Tensor &&T) const {
+    TensorWrapper<Tensor> TW(std::make_unique<MemToTensorIndirectionWrapper<Tensor>>());
+    TW.add_tensor(T);
+    return TW;
+  }
+};
+
+
 inline void DtoDMemcpy(void *dest, void *src, size_t nBytes)
 {
   cudaMemcpy(dest, src, nBytes, cudaMemcpyDeviceToDevice);
@@ -235,24 +545,20 @@ class TorchTensorImpl {
 
 
 using TensorType = AbstractTensor<TorchTensorImpl>;
+using WrappedTensor = TensorWrapper<TensorType::tensor_t>;
 
 typedef struct internal_tensor_repr_data {
   ApproxType underlying_type;
 	int type;
   TensorType::Device original_device{TensorType::CPU};
-	void *data;
+  Direction direction;
+	std::vector<WrappedTensor> Tensors;
 
 	~internal_tensor_repr_data() {
-		TensorType::tensor_t *T = (TensorType::tensor_t *)data;
-		delete T;
 	}
 
 	void set_library_type(int t) {
 		type = t;
-	}
-
-	void set_data(void *d) {
-		data = d;
 	}
 
   void set_device(TensorType::Device d) {
@@ -261,6 +567,25 @@ typedef struct internal_tensor_repr_data {
 
   void set_underlying_type(ApproxType t) {
     underlying_type = t;
+  }
+
+  size_t get_num_tensors() const {
+    return Tensors.size();
+  }
+
+  void set_direction(Direction d) {
+    direction = d;
+  }
+  void add_tensor(WrappedTensor Tens) {
+    Tensors.push_back(Tens);
+  }
+
+  WrappedTensor &get_wrapped_tensor(size_t idx) {
+    return Tensors[idx];
+  }
+
+  TensorType::tensor_t &get_tensor(size_t idx, size_t tens_idx = 0) {
+    return Tensors[idx].get_tensors()[tens_idx];
   }
 
 } internal_repr_metadata_t;
@@ -374,7 +699,13 @@ struct EvalDispatcher {
       #include "clang/Basic/approxTypes.def"
       case INVALID:
         std::cout << "INVALID DATA TYPE passed in argument list\n";
-    }
+      }
+  }
+
+    void EvaluateTensorInputsOutputsForType(internal_repr_metadata_t &ipt_tensor,
+                                            internal_repr_metadata_t &outputs,
+                                            ApproxType Underlying, Model & M) {
+      M._eval_only(ipt_tensor, outputs);
   }
   public:
     inline void evaluate(long num_elements, size_t num_in, size_t num_out,
@@ -388,6 +719,12 @@ struct EvalDispatcher {
                               void **outputs, ApproxType Underlying, Model &M) {
     EvaluateOnlyDispatchForType(num_elements, 1, num_out, ipt, outputs,
                                 Underlying, M);
+    }
+
+    inline void evaluate(internal_repr_metadata_t &ipt_tensor,
+                         internal_repr_metadata_t &outputs,
+                         ApproxType Underlying, Model &M) {
+      EvaluateTensorInputsOutputsForType(ipt_tensor, outputs, Underlying, M);
     }
 };
 }
@@ -420,10 +757,11 @@ private:
   torch::jit::script::Module module;
   c10::TensorOptions tensorOptions;
 
+  template <typename DataType>
   inline void tensorToArray(at::Tensor tensor,
                             long numRows,
                             long numCols,
-                            TypeInValue** array)
+                            DataType** array)
   {
     // Transpose to get continuous memory and
     // perform single memcpy.
@@ -432,11 +770,11 @@ private:
     tensor = TensorType::transpose(tensor, {1, 0});
       for (long j = 0; j < numCols; j++) {
         auto tmp = tensor[j].contiguous();
-        TypeInValue* ptr = tmp.data_ptr<TypeInValue>();
-        // ExecutionPolicy::transferFromDevice(array[j], ptr,
-                                            // sizeof(TypeInValue) * numRows);
-        ExecutionPolicy::transferWithinDevice(array[j], ptr,
+        DataType* ptr = static_cast<DataType*>(tmp.data_ptr());
+        ExecutionPolicy::transferFromDevice(array[j], ptr,
                                             sizeof(TypeInValue) * numRows);
+        // ExecutionPolicy::transferWithinDevice(array[j], ptr,
+                                           // sizeof(DataType) * numRows);
       }
     DTOHEv.recordEnd();
     EventRecorder::LogEvent(DTOHEv);
@@ -507,18 +845,63 @@ private:
   inline void _eval_only(long num_elements,
                         long num_in,
                         size_t num_out,
-                        void *ipt_tens,
+                        internal_repr_metadata_t &input,
                         DataType** outputs)
   {
       torch::NoGradGuard no_grad;
-      at::Tensor input = *(at::Tensor *)ipt_tens;
       auto FPEvent = EventRecorder::CreateGPUEvent("Forward Pass");
       FPEvent.recordStart();
-      at::Tensor output = module.forward({input}).toTensor();
+      auto &ipt_tens = input.get_tensor(0);
+      at::Tensor output = module.forward({ipt_tens}).toTensor();
       FPEvent.recordEnd();
       EventRecorder::LogEvent(FPEvent);
       // tensorToArray(output, num_elements, num_out, outputs);
 
+  }
+
+  void copy_outputs(std::vector<WrappedTensor> &Opts, TensorType::tensor_t &output) {
+    if(Opts.size() == 1) {
+      auto &opt = Opts[0];
+      if(opt.sizes() == output.sizes()) {
+        opt.copy_(output);
+      } 
+      return;
+    }
+
+    int col_start = 0;
+    int col_end = 1;
+    for(int i = 0; i < Opts.size(); i++) {
+      // get the rightmost item in the sahpe
+      auto &opt = Opts[i];
+      auto opt_shape = opt.sizes();
+      auto opt_dim = opt_shape.size();
+      auto opt_rightmost = opt_shape[opt_dim - 1];
+      col_end = col_start + opt_rightmost;
+
+      // get output[col_start:col_end] columns
+      auto output_cols = output.narrow(1, col_start, col_end - col_start);
+      opt.copy_(output_cols);
+      col_start = col_end;
+    }
+  }
+
+
+  inline void _eval_only(
+   internal_repr_metadata_t &inputs, internal_repr_metadata_t &outputs) {
+      auto FPEvent = EventRecorder::CreateGPUEvent("Forward Pass");
+      auto FromTens = EventRecorder::CreateGPUEvent("From Tensor");
+      auto &ipt_tens = inputs.get_tensor(0);
+
+      FPEvent.recordStart();
+      at::Tensor output = module.forward({ipt_tens}).toTensor();
+      FPEvent.recordEnd();
+
+
+      FromTens.recordStart();
+      copy_outputs(outputs.Tensors, output);
+      FromTens.recordEnd();
+      EventRecorder::LogEvent(FPEvent);
+      EventRecorder::LogEvent(FromTens);
   }
 
 #else
@@ -587,6 +970,13 @@ public:
     eval_with_tensor_input(Underlying, num_elements, outputs.size(), ipt_tensor, reinterpret_cast<void**>(outputs.data()));
   }
 
+  inline void evaluate(ApproxType Underlying,
+                       internal_repr_metadata_t &ipt_tensor,
+                       internal_repr_metadata_t &outputs)
+  {
+    eval_with_tensor_input_output(Underlying, ipt_tensor, outputs);
+  }
+
   inline void eval_with_tensor_input(ApproxType Underlying, long num_elements,
                        size_t num_out, void *ipt_tensor,
                         void **outputs
@@ -594,6 +984,15 @@ public:
   {
     EvalDispatcher<std::remove_reference_t<decltype(*this)>> functor;
     functor.evaluate_only(num_elements, num_out, ipt_tensor, outputs, Underlying, *this);
+  }
+
+  inline void eval_with_tensor_input_output(ApproxType Underlying,
+                       internal_repr_metadata_t &ipt_tensor,
+                       internal_repr_metadata_t &outputs
+                       )
+  {
+    EvalDispatcher<std::remove_reference_t<decltype(*this)>> functor;
+    functor.evaluate(ipt_tensor, outputs, Underlying, *this);
   }
 };
 

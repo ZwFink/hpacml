@@ -2289,7 +2289,8 @@ ApproxVarListLocTy& Locs) {
   FunctorDecl = LookupFunctor.getFoundDecl();
   FunctorDecl->setIsUsed();
 
-  auto *Decl = ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, FunctorDecl, Arrays);
+  auto *Decl = ApproxDeclareTensorDecl::Create(Context, CurContext, SR, DeclName, Context.DependentTy, FunctorDecl, Arrays,
+  ApproxDeclareTensorDecl::Direction::MEM_TO_TENSOR);
   IdResolver.AddDecl(Decl);
   S->AddDecl(Decl);
   Decl->addAttr(ApproxTensorDeclAttr::CreateImplicit(Context));
@@ -2427,6 +2428,14 @@ ExprResult Sema::ActOnApproxIndexVarRefExpr(IdentifierInfo *II, SourceLocation L
   return new (Context)  ApproxIndexVarRefExpr(II, Context.getIntTypeForBitwidth(64, false), VK_LValue, OK_Ordinary, Loc);
 }
 
+ExprResult Sema::ActOnApproxCompoundExpr(ArrayRef<Decl *> Decls, ArrayRef<Expr *> Exprs) {
+  return ApproxCompoundExpr::Create(Context, Decls, Exprs, Context.DependentTy);
+}
+ExprResult Sema::ActOnApproxCompoundExpr(ArrayRef<Expr *> Exprs) {
+  ArrayRef<Decl *> Decls;
+  return ApproxCompoundExpr::Create(Context, Decls, Exprs, Context.DependentTy);
+}
+
 ApproxClause *Sema::ActOnApproxNNClause(ClauseKind Kind,
                                         ApproxVarListLocTy &Locs) {
   SourceLocation StartLoc = Locs.StartLoc;
@@ -2468,6 +2477,10 @@ ApproxClause *Sema::ActOnApproxIfClause(ClauseKind Kind,
 ApproxClause *Sema::ActOnApproxVarList(ClauseKind Kind,
                                        ArrayRef<Expr *> VarList,
                                        ApproxVarListLocTy &Locs) {
+  // One idea: Add an optional decl to the approx clause.
+  // Disadvantage of this idea: Messy, ad-hoc.
+  // Other idea: Create a compound statement that is a tensor decl and 
+  // decl ref. However, lots of work. But, everything here remains unchanged.
   SourceLocation StartLoc = Locs.StartLoc;
   SourceLocation LParenLoc = Locs.LParenLoc;
   SourceLocation EndLoc = Locs.EndLoc;

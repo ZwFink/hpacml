@@ -6900,6 +6900,7 @@ static bool isPlaceholderToRemoveAsArg(QualType type) {
   case BuiltinType::ApproxArraySlice:
   case BuiltinType::ApproxSlice:
   case BuiltinType::ApproxIndexVarRef:
+  case BuiltinType::ApproxCompound:
   case BuiltinType::OMPArraySection:
   case BuiltinType::OMPArrayShaping:
   case BuiltinType::OMPIterator:
@@ -21724,6 +21725,10 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
 
   case BuiltinType::ApproxIndexVarRef:
     Diag(E->getBeginLoc(), diag::err_approx_index_var_ref_use);
+    return ExprError();
+
+  case BuiltinType::ApproxCompound:
+    Diag(E->getBeginLoc(), diag::err_approx_compound_expr_use);
     return ExprError();
 
  // Expressions of unknown type.

@@ -149,6 +149,7 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::ApproxArraySliceExprClass:
   case Expr::ApproxSliceExprClass:
   case Expr::ApproxIndexVarRefExprClass:
+  case Expr::ApproxCompoundExprClass:
   case Expr::OMPArraySectionExprClass:
   case Expr::OMPArrayShapingExprClass:
   case Expr::OMPIteratorExprClass:

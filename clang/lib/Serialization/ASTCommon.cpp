@@ -273,6 +273,9 @@ serialization::TypeIdxFromBuiltin(const BuiltinType *BT) {
   case BuiltinType::ApproxSlice:
     ID = PREDEF_TYPE_APPROX_SLICE;
     break;
+  case BuiltinType::ApproxCompound:
+    ID = PREDEF_TYPE_APPROX_COMPOUND;
+    break;
   case BuiltinType::OMPArraySection:
     ID = PREDEF_TYPE_OMP_ARRAY_SECTION;
     break;

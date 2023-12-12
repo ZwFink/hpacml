@@ -1430,6 +1430,10 @@ void StmtProfiler::VisitApproxIndexVarRefExpr(const ApproxIndexVarRefExpr *S) {
   VisitExpr(S);
 }
 
+void StmtProfiler::VisitApproxCompoundExpr(const ApproxCompoundExpr *S) {
+  VisitExpr(S);
+}
+
 void StmtProfiler::VisitOMPArraySectionExpr(const OMPArraySectionExpr *S) {
   VisitExpr(S);
 }

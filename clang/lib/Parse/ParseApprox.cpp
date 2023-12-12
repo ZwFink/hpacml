@@ -577,6 +577,35 @@ ApproxDeclareTensorDecl *Parser::ParseApproxTensorDecl(DeclKind DK, SourceLocati
   return Actions.ActOnApproxTensorDecl(DK, S, TFName, TensorName, IptArrayExprs, Locs);
 }
 
+ApproxDeclareTensorDecl *Parser::ParseApproxTensorDeclAnonymous(DeclKind DK, SourceLocation Loc) {
+  unsigned ScopeFlags = getCurScope()->getFlags() | Scope::ApproxTensorDeclScope;
+  ParseScope ApproxScope(this, ScopeFlags);
+  BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_approx_end);
+  if(T.expectAndConsume(diag::err_expected_lparen_after, "out"))
+    return nullptr;
+
+  SourceLocation TFNameLoc = Tok.getLocation();
+  auto TFName = Tok.getIdentifierInfo();
+
+  ConsumeAnyToken();
+
+  BalancedDelimiterTracker T2(*this, tok::l_paren);
+  T2.consumeOpen();
+
+  llvm::SmallVector<Expr *, 8> IptArrayExprs;
+  auto TFCall = ParseExpressionList(IptArrayExprs);
+  T2.consumeClose();
+
+  ApproxVarListLocTy Locs(Loc, T2.getOpenLocation(), T2.getCloseLocation());
+  // get a dummy identifier for the tensor name
+  IdentifierInfo *TensorName = PP.getIdentifierInfo("anonymous_tensor");
+  Scope *S = getNonApproxScope(getCurScope());
+
+  T.consumeClose();
+
+  return Actions.ActOnApproxTensorDecl(DK, S, TFName, TensorName, IptArrayExprs, Locs);
+}
+
 ApproxClause *Parser::ParseApproxNNClause(ClauseKind CK) {
   SourceLocation Loc = Tok.getLocation();
   SourceLocation ELoc = ConsumeAnyToken();
@@ -621,6 +650,8 @@ ApproxClause *Parser::ParseApproxInClause(ClauseKind CK) {
   SourceLocation LOpen = ConsumeAnyToken();
   SourceLocation RLoc;
   SmallVector<Expr *, 8> Vars;
+  unsigned ScopeFlags = Scope::ApproxArraySectionScope | getCurScope()->getFlags();
+  ParseScope ApproxScope(this, ScopeFlags);
   if (!ParseApproxVarList(Vars, RLoc)) {
     return nullptr;
   }
@@ -633,9 +664,36 @@ ApproxClause *Parser::ParseApproxOutClause(ClauseKind CK) {
   SourceLocation LOpen = ConsumeAnyToken();
   SourceLocation RLoc;
   SmallVector<Expr *, 8> Vars;
-  if (!ParseApproxVarList(Vars, RLoc)) {
-    return nullptr;
+
+  if(true) {
+    auto *TensorDecl = ParseApproxTensorDeclAnonymous(approx::DeclKind::DK_T,
+                                                      Tok.getLocation());
+    CXXScopeSpec ScopeSpec;
+    SourceLocation TemplateKWLoc;
+    UnqualifiedId Name;
+    Name.setIdentifier(TensorDecl->getIdentifier(), TensorDecl->getLocation());
+    ExprResult TensorRef = Actions.ActOnIdExpression(
+        getCurScope(), ScopeSpec, TemplateKWLoc, Name, false, false);
+
+    llvm::SmallVector<Decl *, 8> Decls;
+    llvm::SmallVector<Expr *, 8> Exprs;
+
+    Decls.push_back(cast<Decl>(TensorDecl));
+    Exprs.push_back(TensorRef.get());
+
+    ExprResult Body = Actions.ActOnApproxCompoundExpr(Decls, Exprs);
+
+    Vars.push_back(Body.get());
+  } else {
+    unsigned ScopeFlags =
+        Scope::ApproxArraySectionScope | getCurScope()->getFlags();
+    ParseScope ApproxScope(this, ScopeFlags);
+
+    if (!ParseApproxVarList(Vars, RLoc)) {
+      return nullptr;
+    }
   }
+
   ApproxVarListLocTy Locs(Loc, LOpen, RLoc);
   return Actions.ActOnApproxVarList(CK, Vars, Locs);
 }
@@ -729,8 +787,6 @@ StmtResult Parser::ParseApproxDirective(ParsedStmtContext StmtCtx) {
   DeclKind DK;
   while (Tok.isNot(tok::annot_pragma_approx_end)) {
     if (isApproxClause(Tok, CK)) {
-      unsigned ScopeFlags = Scope::ApproxArraySectionScope | getCurScope()->getFlags();
-      ParseScope ApproxScope(this, ScopeFlags);
       ApproxClause *Clause = PARSER_CALL(ParseApproxClause[CK])(CK);
       if (!Clause) {
         SkipUntil(tok::annot_pragma_approx_end);

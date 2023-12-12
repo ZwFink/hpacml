@@ -7219,6 +7219,9 @@ QualType ASTReader::GetType(TypeID ID) {
     case PREDEF_TYPE_APPROX_INDEX_VAR_REF:
       T = Context.ApproxIndexVarRefTy;
       break;
+    case PREDEF_TYPE_APPROX_COMPOUND:
+      T = Context.ApproxCompoundTy;
+      break;
     case PREDEF_TYPE_OMP_ARRAY_SECTION:
       T = Context.OMPArraySectionTy;
       break;

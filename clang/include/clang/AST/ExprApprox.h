@@ -361,6 +361,93 @@ class ApproxIndexVarRefExpr : public Expr {
     }
   };
 
+class ApproxCompoundExpr final : public Expr, 
+private llvm::TrailingObjects<ApproxCompoundExpr, Decl*, Expr*> {
+  friend TrailingObjects;
+  unsigned num_decls = 0;
+  unsigned num_exprs = 0;
+  public:
+  ApproxCompoundExpr(llvm::ArrayRef<Decl *> Decls, 
+                     llvm::ArrayRef<Expr *> Exprs, QualType Type,
+                     ExprValueKind VK, ExprObjectKind OK)
+      : Expr(ApproxCompoundExprClass, Type, VK, OK) {
+    num_decls = Decls.size();
+    num_exprs = Exprs.size();
+    setDeclarations(Decls);
+    setExpressions(Exprs);
+    setDependence(computeDependence(this));
+  }
+
+  public:
+  static ApproxCompoundExpr *Create(const ASTContext &C, llvm::ArrayRef<Decl *> Decls,
+                             llvm::ArrayRef<Expr *> Exprs, QualType Type) {
+    auto DeclAlloc = totalSizeToAlloc<Decl *, Expr*>(Decls.size(), Exprs.size());
+    void *Mem = C.Allocate(DeclAlloc,
+                           alignof(ApproxCompoundExpr));
+    return new (Mem) ApproxCompoundExpr(Decls, Exprs, Type, VK_LValue,
+                                          OK_Ordinary);
+                             }
+
+
+  explicit ApproxCompoundExpr(EmptyShell Empty)
+      : Expr(ApproxCompoundExprClass, Empty) {}
+
+  ArrayRef<Expr *> getExpressions() const {
+    return llvm::ArrayRef(getTrailingObjects<Expr *>(), num_exprs);
+  }
+
+  ArrayRef<Decl *> getDeclarations() const {
+    return llvm::ArrayRef(getTrailingObjects<Decl *>(), num_decls);
+  }
+
+  unsigned numTrailingObjects(OverloadToken<Decl *>) const { return num_decls;}
+  unsigned numTrailingObjects(OverloadToken<Expr *>) const { return num_exprs;}
+
+  SourceLocation getBeginLoc() const LLVM_READONLY {
+    if(num_decls > 0)
+      return getDeclarations()[0]->getBeginLoc();
+    else
+      return getExpressions()[0]->getBeginLoc();
+  }
+
+  SourceLocation getEndLoc() const LLVM_READONLY {
+    return getExpressions()[num_exprs - 1]->getEndLoc();
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ApproxCompoundExprClass;
+  }
+
+  child_range children() {
+    Stmt **Begin = reinterpret_cast<Stmt **>(getTrailingObjects<Decl *>());
+    return child_range(Begin, Begin + num_decls + num_exprs);
+  }
+
+  const_child_range children() const {
+    Stmt *const *Begin = reinterpret_cast<Stmt *const *>(getTrailingObjects<Decl *>());
+    return const_child_range(Begin, Begin + num_decls + num_exprs);
+  }
+
+  void setExpressions(llvm::ArrayRef<Expr *> Exprs) {
+    assert(Exprs.size() == num_exprs && "Wrong number of expressions");
+    llvm::copy(Exprs, getTrailingObjects<Expr *>());
+  }
+
+  void setDeclarations(llvm::ArrayRef<Decl *> Decls) {
+    assert(Decls.size() == num_decls && "Wrong number of declarations");
+    llvm::copy(Decls, getTrailingObjects<Decl *>());
+  }
+
+  void setNumExpressions(unsigned N) { num_exprs = N; }
+  void setNumDeclarations(unsigned N) { num_decls = N; }
+
+  unsigned getNumExpressions() const { return num_exprs; }
+  unsigned getNumDeclarations() const { return num_decls; }
+
+  SourceLocation getExprLoc() const {
+    return getEndLoc();
+  }
+};
 
 class ApproxArraySectionExpr : public Expr {
   enum { BASE, LOWER_BOUND, LENGTH, END_EXPR };
