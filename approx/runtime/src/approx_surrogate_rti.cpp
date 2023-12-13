@@ -10,6 +10,7 @@
 #include "approx_surrogate.h"
 #include "event.h"
 #include <torch/serialize.h>
+#include <algorithm>
 
 using Tensor = AbstractTensor<TorchTensorImpl>;
 using AccessBounds = std::vector<std::pair<size_t,size_t>>;
@@ -136,38 +137,55 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 	std::vector<int64_t> smallest_accesses(num_dims, std::numeric_limits<int64_t>::max());
 	std::vector<int64_t> largest_accesses(num_dims, std::numeric_limits<int64_t>::min());
 
-    if (num_dims - 1 >= arg.ndim_presubstitution-1) {
-            strides[num_dims - 1] = 1;
-    } else {
-            strides[num_dims - 1] = arg.slices[num_dims - 1].step;
-    }
+ 
+    strides[num_dims - 1] = arg.slices[num_dims - 1].step;
 
-    for(int i = num_dims - 2; i >= 0; i--) {
-		int64_t cur_stride = strides[i+1];
-		if(i +1 < arg.ndim_presubstitution) {
-			cur_stride *= (bounds[i+1].second - bounds[i+1].first);
-		} else {
-			cur_stride *= arg.shape()[i+1];
+	bool is_row_major = !(arg.slices[num_dims - 1].step >= arg.slices[num_dims - 1].stop - arg.slices[num_dims - 1].start);
+	bool is_column_major = !is_row_major;
+
+	if(is_row_major) {
+      for(int i = num_dims - 2; i >= 0; i--) {
+	  	int64_t cur_stride = strides[i+1];
+	  	if(i +1 < arg.ndim_presubstitution) {
+	  		cur_stride *= (bounds[i+1].second - bounds[i+1].first);
+	  	} else {
+	  		cur_stride *= arg.shape()[i+1];
+	  	}
+
+	  	strides[i] = cur_stride;
+	  }
+	} else if(is_column_major) {
+		strides[0] = arg.slices[0].step;
+		for(int i = 1; i < num_dims; i++) {
+			int64_t cur_stride = strides[i-1];
+			if(i < arg.ndim_presubstitution) {
+				cur_stride *= (bounds[i].second - bounds[i].first);
+			} else {
+				cur_stride *= arg.shape()[i];
+			}
+
+			strides[i+1] = cur_stride;
 		}
-
-		if(i < arg.ndim_presubstitution) {
-			cur_stride *= arg.slices[i].step;
-		}
-
-		strides[i] = cur_stride;
-	}
+	} 
 
 	return strides;
 }
 
-Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBounds &access_bounds) {
+Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBounds &access_bounds, int target_ndim) {
 	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) memory_descr->types[0]);
 	auto OriginalDevice = Tensor::getDeviceForPointer((void*)memory_descr->bases[base]);
 	
 	auto SHP = Tensor::makeArrayRef(memory_descr->shapes->shapes, memory_descr->shapes->ndim);
 	auto RHSShape = Tensor::makeArrayRef(memory_descr->shapes_aivrsubstituted->shapes, memory_descr->shapes_aivrsubstituted->ndim);
-	auto Strides = get_strides(*memory_descr, access_bounds);
 
+    // FIXME: What do you do when we access a[b[0:N:N]]? Should a
+	// be accessed also with this stride? We'll decide no for now, but
+	// we can later consider how the user can specify this.
+	if(base == 0 && memory_descr->n_indirections > 1) {
+		memory_descr->slices[0].step = 1;
+	}
+
+	auto Strides = get_strides(*memory_descr, access_bounds);
 	size_t base_offset = 0;
 	for(int dim = 0; dim < memory_descr->ndim_presubstitution; dim++) {
 		auto &slice = memory_descr->slices[dim];
@@ -182,6 +200,9 @@ Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBo
 	intptr_t offset_base_ptr = (intptr_t) memory_descr->bases[base] + base_offset*elem_size;
 
 	auto blob = Tensor::from_blob((void*) offset_base_ptr, SHP, Strides, options);
+	while(blob.dim() < target_ndim) {
+		blob.unsqueeze_(-1);
+	}
 
 	return blob;
 }
@@ -282,7 +303,7 @@ std::vector<WrappedTensor> wrap_memory_in_tensors(
     for (int indirection = 0; indirection < thisArg->n_indirections;
          indirection++) {
       auto ThisTensInst =
-          memory_to_tensor(thisArg, indirection, AccessBounds);
+          memory_to_tensor(thisArg, indirection, AccessBounds, LHSShape.size());
       ThisTens.add_tensor(ThisTensInst);
     }
 
@@ -356,7 +377,7 @@ void *__approx_runtime_convert_internal_mem_to_tensor(int nargsLHS, void *_slice
           torch::cat(TensorWrapper<Tensor::tensor_t>::concat(RHSTensors), -1));
     }
 
-    // dbgs() << "Final tensor is: " << LHSTensor.sizes() << "\n";;
+    dbgs() << "Final tensor is: " << LHSTensor.sizes() << "\n";
 
 	auto LibraryType = Tensor::getTensorLibraryType();
 	metadata->set_library_type(LibraryType);
@@ -421,13 +442,18 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 				// find 3 by dividing N*3/N
 				int64_t inner = shape_copy[i] / ipt_memory_info.shape()[i];
 				tensor_info.shape()[AIVRInsertPoint] = ipt_memory_info.shape()[i];
-				tensor_info.shape()[slice_insert_pt] = inner;
 
 				tensor_info.aivrshape()[AIVRInsertPoint] = t_slice.aivrerepr;
-				tensor_info.aivrshape()[slice_insert_pt] = inner;
 
+				if(inner != 1) {
+					tensor_info.shape()[slice_insert_pt] = inner;
+					tensor_info.aivrshape()[slice_insert_pt] = inner;
+					tensor_info.slices[slice_insert_pt].step = tensor_info.slices[i].step;
+					tensor_info.slices[slice_insert_pt].stop = inner;
+					tensor_info.slices[AIVRInsertPoint].step = 1;
+					++slice_insert_pt;
+				}
 				++AIVRInsertPoint;
-				++slice_insert_pt;
 			} else {
 				tensor_info.shape()[slice_insert_pt] = shape_copy[i];
 				tensor_info.aivrshape()[slice_insert_pt] = shape_copy[i];
@@ -482,11 +508,10 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 		  f_slice.start += base;
 		  f_slice.stop += base;
 
-    	  if(f_slice.step != 1) {
-			std::cerr << "Found step " << f_slice.step << "\n";
-    	  	std::cerr << "Step is not 1, this is not supported yet\n";
-    	  }
-    	  f_slice.step = t_slice.step;
+    	//   if(f_slice.step != 1) {
+			// std::cerr << "Found step " << f_slice.step << "\n";
+    	  	// std::cerr << "Step is not 1, this is not supported yet\n";
+    	//   }
 
     	  finfo.shape()[i] *= tinfo.shape()[i];
 	    }

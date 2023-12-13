@@ -1247,8 +1247,8 @@ llvm::ArrayRef<Expr*> Slices) {
 }
 
 void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::Value *Start, llvm::Value *Stop, llvm::Value *Step, Address Dest) {
-  auto DestBB = CGF.createBasicBlock("slice.size.dest");
-  auto IncBB = CGF.createBasicBlock("slice.size.inc");
+  // auto DestBB = CGF.createBasicBlock("slice.size.dest");
+  // auto IncBB = CGF.createBasicBlock("slice.size.inc");
   QualType Int64Ty = CGF.getContext().getIntTypeForBitwidth(64, true);
   ASTContext &C = CGM.getContext();
   llvm::Value *StartValue = Start, *StopValue = Stop, *StepValue = Step;
@@ -1259,19 +1259,21 @@ void CGApproxRuntime::CGApproxRuntimeEmitSliceSize(CodeGenFunction& CGF, llvm::V
   llvm::Value *StartMinusStopDivStep = CGF.Builder.CreateSDiv(StopMinusStart, StepValue);
 
   Address SizeAddr = CGF.CreateMemTemp(Int64Ty, "slice.size");
-  CGF.EmitStoreOfScalar(StartMinusStopDivStep, SizeAddr, false, Int64Ty);
+  CGF.EmitStoreOfScalar(StopMinusStart, SizeAddr, false, Int64Ty);
+
+  // CGF.EmitStoreOfScalar(StartMinusStopDivStep, SizeAddr, false, Int64Ty);
 
   // if(StartMinusStopDivStep % Step == 0); ++Size;
-  llvm::Value *StartMinusStopDivStepModStep = CGF.Builder.CreateSRem(StartMinusStopDivStep, StepValue);
-  llvm::Value *IsModZero = CGF.Builder.CreateICmpEQ(StartMinusStopDivStepModStep, llvm::ConstantInt::get(CGF.Builder.getInt64Ty(), 0));
-  CGF.Builder.CreateCondBr(IsModZero, DestBB, IncBB);
-  CGF.EmitBlock(IncBB);
-  llvm::Value *StartMinusStopDivStepPlusOne = CGF.Builder.CreateAdd(StartMinusStopDivStep, llvm::ConstantInt::get(CGF.Builder.getInt64Ty(), 1));
-  CGF.EmitStoreOfScalar(StartMinusStopDivStepPlusOne, SizeAddr, false, Int64Ty);
-  CGF.Builder.CreateBr(DestBB);
+  // llvm::Value *StartMinusStopDivStepModStep = CGF.Builder.CreateSRem(StartMinusStopDivStep, StepValue);
+  // llvm::Value *IsModZero = CGF.Builder.CreateICmpEQ(StartMinusStopDivStepModStep, llvm::ConstantInt::get(CGF.Builder.getInt64Ty(), 0));
+  // CGF.Builder.CreateCondBr(IsModZero, DestBB, IncBB);
+  // CGF.EmitBlock(IncBB);
+  // llvm::Value *StartMinusStopDivStepPlusOne = CGF.Builder.CreateAdd(StartMinusStopDivStep, llvm::ConstantInt::get(CGF.Builder.getInt64Ty(), 1));
+  // CGF.EmitStoreOfScalar(StartMinusStopDivStepPlusOne, SizeAddr, false, Int64Ty);
+  // CGF.Builder.CreateBr(DestBB);
 
 
-  CGF.EmitBlock(DestBB);
+  // CGF.EmitBlock(DestBB);
   Size = CGF.Builder.CreateLoad(SizeAddr);
 
   CGF.EmitStoreOfScalar(Size, Dest, false, Int64Ty);
