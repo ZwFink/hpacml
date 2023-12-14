@@ -70,7 +70,7 @@ public:
   int count;
   BaseDB *db;
   SurrogateModel<GPUExecutionPolicy, CatTensorTranslator<double>, double> Model{
-      "/scratch/mzu/zanef2/surrogates/SurrogateBenchmarks/models/hotspot3d/model.pt", false};
+      "/scratch/mzu/zanef2/surrogates/SurrogateBenchmarks/models/lulesh/model.pt", false};
 
 
   ApproxRuntimeConfiguration() {
@@ -268,43 +268,165 @@ void __snapshot_call__(void (*_user_fn_)(void *), void *args,
 
 enum class TensorsFound : char { NONE = 0, OUTPUT, INPUT, BOTH };
 
-void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
-                        void *arg, bool cond, const char *region_name,
-                        void *perfoArgs, int memo_type, int petru_type,
-                        int ml_type, void *inputs,
-                        int num_inputs, void *outputs, int num_outputs) {
-  approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
+class IOWriter {
+  std::string fname;
+  std::ofstream open_file;
+  size_t num_items = 0;
+  bool registered_inputs = false;
+  bool disk_up_to_date = false;
+  torch::Tensor ipt_buf = torch::empty({0});
+  torch::Tensor opt_buf = torch::empty({0});
+  size_t ipt_row_size = 0;
+  size_t opt_row_size = 0;
+  size_t total_size = 0;
+  bool expect_input = true;
+
+  torch::Tensor register_values(torch::Tensor inputs) {
+	// make a deep copy of inputs
+	// move to the cpu
+	auto inputs_copy = inputs.to(torch::kCPU);
+  disk_up_to_date = false;
+	return inputs_copy;
+}
+
+public:
+  IOWriter(std::string name) : fname(name) {open_file.open(fname, std::ios::out | std::ios::binary);}
+  virtual ~IOWriter() {flush(); open_file.close();}
+
+void register_inputs(torch::Tensor Ipts) {
+	auto ipt = register_values(Ipts);
+	if(ipt_buf.numel() == 0)
+		ipt_buf = ipt;
+	else
+		ipt_buf = torch::cat({ipt_buf, ipt}, 0);
+ 	registered_inputs  = true;
+}
+
+void register_vals(torch::Tensor Vals) {
+	if(expect_input) {
+		register_inputs(Vals);
+		expect_input = false;
+	} else {
+		register_outputs(Vals);
+		expect_input = true;
+	}
+}
+
+void register_outputs(torch::Tensor Opts) {
+  auto opt = register_values(Opts);
+  if(opt_buf.numel() == 0)
+	opt_buf = opt;
+  else
+	opt_buf = torch::cat({opt_buf, opt}, 0);
+  registered_inputs = false;
+}
+
+void flush() {
+	torch::Tensor catted = torch::cat({ipt_buf, opt_buf}, 1);
+	torch::Tensor catted_contiguous = catted.contiguous();
+	auto *catted_ptr = catted_contiguous.data_ptr<double>();
+	std::ofstream open_file(fname, std::ios::out | std::ios::binary);
+	auto numel = catted.numel();
+	open_file.write((char*)&numel, sizeof(size_t));
+	open_file.write((char*)&ipt_buf.sizes()[1], sizeof(size_t));
+	open_file.write((char*)&opt_buf.sizes()[1], sizeof(size_t));
+	open_file.write((char*)catted_ptr, catted.numel()*sizeof(double));
+}
+};
+
+IOWriter TensorWriter{"/scratch/mzu/zanef2/element_lulesh_newdata.pt"};
+
+
+bool is_ml(MLType type) {
+  return type < MLType::ML_END;
+}
+
+struct ml_argdesc_t {
+  void (*accurateFN)(void *);
+  void *accurateFN_arg;
+  const char *region_name;
+  TensorsFound have_tensors;
+  approx_var_info_t *input_vars;
+  approx_var_info_t *output_vars;
+  std::vector<void *> ipts;
+  std::vector<void *> opts;
+};
+
+void ml_infer(ml_argdesc_t &arg) {
+  internal_repr_metadata_t *ipt_metadata = nullptr;
+  internal_repr_metadata_t *opt_metadata = nullptr;
+
+  switch(arg.have_tensors) {
+    case TensorsFound::NONE:
+      RTEnv.Model.evaluate(static_cast<ApproxType>(arg.input_vars[0].data_type),
+                           arg.input_vars[0].num_elem, arg.ipts, arg.opts);
+      break;
+    case TensorsFound::INPUT:
+      std::cerr << "Input only not supported yet\n";
+      arg.accurateFN(arg.accurateFN_arg);
+      // ipt_metadata = static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
+      // RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
+                          //  input_vars[0].num_elem, ipt_metadata->Tensors[0], opts);
+      break;
+    case TensorsFound::OUTPUT:
+      std::cerr << "Output only not supported yet\n";
+      arg.accurateFN(arg.accurateFN_arg);
+      // RTEnv.Model.evaluate(static_cast<ApproxType>(output_vars[0].data_type),
+                          //  output_vars[0].num_elem, ipts, opts);
+      break;
+    case TensorsFound::BOTH:
+      ipt_metadata = static_cast<internal_repr_metadata_t *>(arg.input_vars[0].ptr);
+      opt_metadata = static_cast<internal_repr_metadata_t *>(arg.output_vars[0].ptr);
+      RTEnv.Model.evaluate(static_cast<ApproxType>(arg.input_vars[0].data_type),
+                           *ipt_metadata, *opt_metadata);
+      break;
+  }
+}
+
+void ml_offline_train(ml_argdesc_t &arg) {
+  internal_repr_metadata_t *ipt_metadata = nullptr;
+  internal_repr_metadata_t *opt_metadata = nullptr;
+
+  switch(arg.have_tensors) {
+    case TensorsFound::NONE:
+      RTEnv.Model.evaluate(static_cast<ApproxType>(arg.input_vars[0].data_type),
+                           arg.input_vars[0].num_elem, arg.ipts, arg.opts);
+      break;
+    case TensorsFound::INPUT:
+      std::cerr << "Input only not supported yet\n";
+      arg.accurateFN(arg.accurateFN_arg);
+      // ipt_metadata = static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
+      // RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
+                          //  input_vars[0].num_elem, ipt_metadata->Tensors[0], opts);
+      break;
+    case TensorsFound::OUTPUT:
+      std::cerr << "Output only not supported yet\n";
+      arg.accurateFN(arg.accurateFN_arg);
+      // RTEnv.Model.evaluate(static_cast<ApproxType>(output_vars[0].data_type),
+                          //  output_vars[0].num_elem, ipts, opts);
+      break;
+    case TensorsFound::BOTH:
+      ipt_metadata = static_cast<internal_repr_metadata_t *>(arg.input_vars[0].ptr);
+      opt_metadata = static_cast<internal_repr_metadata_t *>(arg.output_vars[0].ptr);
+
+      torch::Tensor ipt = ipt_metadata->get_tensor(0);
+      TensorWriter.register_inputs(ipt);
+
+      arg.accurateFN(arg.accurateFN_arg);
+
+      auto opt_tens = opt_metadata->update_from_memory();
+      TensorWriter.register_outputs(opt_tens);
+      break;
+  }
+}
+
+void ml_invoke(MLType type, void (*accurateFN)(void *), void *arg,
+               const char *region_name, void *inputs, int num_inputs,
+               void *outputs, int num_outputs) {
   approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
   approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
 
   TensorsFound have_tensors = TensorsFound::NONE;
-
-  if (petru_type & PETRUBATE_IN){
-    petrubate(accurateFN, input_vars, num_inputs, region_name);
-  }
-
-  if ( perfoFN ){
-      perforate(accurateFN, perfoFN, arg, input_vars, num_inputs, output_vars, num_outputs, RTEnv.getExecuteBoth());
-  } else if (memo_type == MEMO_IN) {
-    memoize_in(accurateFN, arg, input_vars, num_inputs, output_vars,
-               num_outputs, RTEnv.getExecuteBoth(), RTEnv.tableSize, RTEnv.threshold );
-  } else if (memo_type == MEMO_OUT) {
-    memoize_out(accurateFN, arg, output_vars, num_outputs);
-  } 
-  else if ( (MLType) ml_type == ML_ONLINETRAIN){
-    // Not implemented
-    accurateFN(arg);
-  }
-  else if ( (MLType) ml_type == ML_OFFLINETRAIN ){
-    if (num_outputs == 0) {
-      __snapshot_call__(accurateFN, arg, region_name, inputs, num_inputs,
-                        nullptr, 0);
-    } else {
-      __snapshot_call__(accurateFN, arg, region_name, inputs, num_inputs,
-                        outputs, num_outputs);
-    }
-  }
-  else if ( (MLType) ml_type == ML_INFER ){
 
     if(input_vars[0].is_tensor) {
       assert(num_inputs == 1 && "Only one tensor input is supported");
@@ -333,41 +455,52 @@ void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
       }
     }
 
-    internal_repr_metadata_t *ipt_metadata = nullptr;
-    internal_repr_metadata_t *opt_metadata = nullptr;
+    ml_argdesc_t ml_arg = {accurateFN, arg, region_name, have_tensors,
+                           input_vars, output_vars, ipts, opts};
 
-    switch(have_tensors) {
-      case TensorsFound::NONE:
-        RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
-                             input_vars[0].num_elem, ipts, opts);
-        break;
-      case TensorsFound::INPUT:
-        std::cerr << "Input only not supported yet\n";
-        accurateFN(arg);
-        // ipt_metadata = static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
-        // RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
-                            //  input_vars[0].num_elem, ipt_metadata->Tensors[0], opts);
-        break;
-      case TensorsFound::OUTPUT:
-        std::cerr << "Output only not supported yet\n";
-        accurateFN(arg);
-        // RTEnv.Model.evaluate(static_cast<ApproxType>(output_vars[0].data_type),
-                            //  output_vars[0].num_elem, ipts, opts);
-        break;
-      case TensorsFound::BOTH:
-        ipt_metadata = static_cast<internal_repr_metadata_t *>(input_vars[0].ptr);
-        opt_metadata = static_cast<internal_repr_metadata_t *>(output_vars[0].ptr);
-        RTEnv.Model.evaluate(static_cast<ApproxType>(input_vars[0].data_type),
-                             *ipt_metadata, *opt_metadata);
-        break;
-    }
-  }
-  else {
+  if(type == ML_INFER) {
+    ml_infer(ml_arg);
+  } else if(type == ML_ONLINETRAIN) {
+    std::cerr << "Online training not supported yet\n";
+    accurateFN(arg);
+  } else if(type == ML_OFFLINETRAIN) {
+    ml_offline_train(ml_arg);
+  } else {
+    std::cerr << "Unknown ML type\n";
     accurateFN(arg);
   }
+}
 
-  if (petru_type & PETRUBATE_OUT){
+void __approx_exec_call(void (*accurateFN)(void *), void (*perfoFN)(void *),
+                        void *arg, bool cond, const char *region_name,
+                        void *perfoArgs, int memo_type, int petru_type,
+                        int ml_type, void *inputs,
+                        int num_inputs, void *outputs, int num_outputs) {
+  approx_perfo_info_t *perfo = (approx_perfo_info_t *)perfoArgs;
+  approx_var_info_t *input_vars = (approx_var_info_t *)inputs;
+  approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
+
+  TensorsFound have_tensors = TensorsFound::NONE;
+
+  if (petru_type & PETRUBATE_IN){
+    petrubate(accurateFN, input_vars, num_inputs, region_name);
+  }
+
+  if ( perfoFN ){
+      perforate(accurateFN, perfoFN, arg, input_vars, num_inputs, output_vars, num_outputs, RTEnv.getExecuteBoth());
+  } else if (memo_type == MEMO_IN) {
+    memoize_in(accurateFN, arg, input_vars, num_inputs, output_vars,
+               num_outputs, RTEnv.getExecuteBoth(), RTEnv.tableSize, RTEnv.threshold );
+  } else if (memo_type == MEMO_OUT) {
+    memoize_out(accurateFN, arg, output_vars, num_outputs);
+  } 
+  else if (is_ml((MLType) ml_type)){
+    ml_invoke((MLType) ml_type, accurateFN, arg, region_name, inputs, num_inputs, outputs, num_outputs);
+  } else if(petru_type & PETRUBATE_OUT){
     petrubate(accurateFN, output_vars, num_outputs, region_name);
+  } else {
+    std::cerr << "Unknown execution type\n";
+    accurateFN(arg);
   }
 }
 
