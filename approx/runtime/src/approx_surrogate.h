@@ -45,6 +45,7 @@ class IndirectionPolicy {
   virtual ~IndirectionPolicy() = default;
   virtual Tensor write_to(Tensor &T) = 0;
   virtual std::unique_ptr<IndirectionPolicy<Tensor>> clone() = 0;
+  virtual Tensor memory_update(std::vector<Tensor> &C,  Direction ToFrom) = 0;
   
   /*
   * Copy the data from T into C. This method is called
@@ -104,10 +105,31 @@ class MemToTensorIndirectionWrapper : public IndirectionPolicy<Tensor> {
   Direction get_direction() override {
     return Direction::MEM_TO_TENSOR;
   }
+
+  Tensor memory_update(std::vector<Tensor>& C, Direction ToFrom) override {
+    // nothing to do here
+    std::cerr << "Update not implemented for MemToTensorIndirectionWrapper\n";
+    return Tensor();
+  }
 };
 
 template<typename Tensor>
 class TensorToMemIndirectionWrapper : public IndirectionPolicy<Tensor> {
+
+  private:
+  Tensor update_from(std::vector<Tensor>& C) {
+    auto C0_base = C[0].data_ptr();
+    auto new_tens = copy_to_new(C);
+    auto new_tens_base = new_tens.data_ptr();
+    if(C0_base == new_tens_base) {
+      return new_tens.clone();
+    }
+    return new_tens;
+  }
+  void update_to(std::vector<Tensor>& C) {
+
+  }
+  public:
   Tensor write_to(Tensor &T) override {
     return T;
   }
@@ -164,8 +186,31 @@ class TensorToMemIndirectionWrapper : public IndirectionPolicy<Tensor> {
     }
   }
 
+  Tensor copy_to_new(std::vector<Tensor> &C) {
+    if(C.size() == 2) {
+      auto C0 = C[0];
+      auto original_shape = C0.sizes();
+      C0 = C[0].flatten();
+      auto C1 = C[1].flatten();
+      auto indexed =  C0.index({C1});
+      return indexed.reshape(original_shape);
+    } else {
+      assert(C.size() == 1 && "Invalid number of tensors in TensorToMemIndirectionWrapper");
+      return C[0];
+    }
+  }
+
   Direction get_direction() override {
     return Direction::TENSOR_TO_MEM;
+  }
+
+  Tensor memory_update(std::vector<Tensor> &C,  Direction ToFrom) override {
+    if(ToFrom == Direction::TENSOR_TO_MEM) {
+      update_to(C);
+      return Tensor();
+    } else {
+      return update_from(C);
+    }
   }
 };
 
@@ -285,6 +330,17 @@ class TensorWrapper {
     for(auto &t : tensors) {
       t = t.to(d, non_blocking);
     }
+  }
+
+  TensorWrapper<Tensor> update_from_memory() {
+    auto T = IP->memory_update(tensors, Direction::MEM_TO_TENSOR);
+    auto Wrapper = TensorWrapper<Tensor>(std::make_unique<TensorToMemIndirectionWrapper<Tensor>>());
+    Wrapper.add_tensor(T);
+    return Wrapper;
+  }
+
+  Tensor get_tensor(size_t idx = 0) {
+    return tensors[idx];
   }
 };
 
@@ -588,6 +644,42 @@ typedef struct internal_tensor_repr_data {
     return Tensors[idx].get_tensors()[tens_idx];
   }
 
+  // TODO: This should be the implementationf or update_to_memory for 
+  // output tensors
+  void update_to_memory(TensorType::tensor_t &T) {
+    if (Tensors.size() == 1) {
+      auto &opt = Tensors[0];
+      if (opt.sizes() == T.sizes()) {
+        opt.copy_(T);
+      }
+      return;
+    }
+
+    int col_start = 0;
+    int col_end = 1;
+    for (int i = 0; i < Tensors.size(); i++) {
+      // get the rightmost item in the sahpe
+      auto &opt = Tensors[i];
+      auto opt_shape = opt.sizes();
+      auto opt_dim = opt_shape.size();
+      auto opt_rightmost = opt_shape[opt_dim - 1];
+      col_end = col_start + opt_rightmost;
+
+      // get T[col_start:col_end] columns
+      auto T_cols = T.narrow(1, col_start, col_end - col_start);
+      opt.copy_(T_cols);
+      col_start = col_end;
+    }
+  }
+
+  TensorType::tensor_t update_from_memory() {
+    std::vector<TensorType::tensor_t> tensors;
+    for (auto &t : Tensors) {
+      tensors.push_back(t.update_from_memory().get_tensors()[0]);
+    }
+    return TensorType::cat(tensors, -1);
+  }
+
 } internal_repr_metadata_t;
 template <typename TypeInValue> class TensorTranslator {
   public:
@@ -859,33 +951,6 @@ private:
 
   }
 
-  void copy_outputs(std::vector<WrappedTensor> &Opts, TensorType::tensor_t &output) {
-    if(Opts.size() == 1) {
-      auto &opt = Opts[0];
-      if(opt.sizes() == output.sizes()) {
-        opt.copy_(output);
-      } 
-      return;
-    }
-
-    int col_start = 0;
-    int col_end = 1;
-    for(int i = 0; i < Opts.size(); i++) {
-      // get the rightmost item in the sahpe
-      auto &opt = Opts[i];
-      auto opt_shape = opt.sizes();
-      auto opt_dim = opt_shape.size();
-      auto opt_rightmost = opt_shape[opt_dim - 1];
-      col_end = col_start + opt_rightmost;
-
-      // get output[col_start:col_end] columns
-      auto output_cols = output.narrow(1, col_start, col_end - col_start);
-      opt.copy_(output_cols);
-      col_start = col_end;
-    }
-  }
-
-
   inline void _eval_only(
    internal_repr_metadata_t &inputs, internal_repr_metadata_t &outputs) {
       auto FPEvent = EventRecorder::CreateGPUEvent("Forward Pass");
@@ -898,7 +963,7 @@ private:
 
 
       FromTens.recordStart();
-      copy_outputs(outputs.Tensors, output);
+      outputs.update_to_memory(output);
       FromTens.recordEnd();
       EventRecorder::LogEvent(FPEvent);
       EventRecorder::LogEvent(FromTens);
