@@ -85,6 +85,21 @@ int8_t convertToApproxType(const BuiltinType *T) {
   return approxType;
 }
 
+
+size_t CountAIVRExpandedShapes(CodeGenFunction *CGF, llvm::ArrayRef<Expr*> Slices) {
+  size_t numExpanded = 0;
+  for(auto *E : Slices) {
+    assert(isa<ApproxSliceExpr>(E) && "Expected a slice expression");
+
+    ApproxSliceExpr *Slice = dyn_cast<ApproxSliceExpr>(E);
+    ApproxSliceExpr::AIVREChildKind Kind = Slice->getAIVREChildKind();
+    if(Kind == ApproxSliceExpr::AIVREChildKind::BINARY_EXPR ||
+    Kind == ApproxSliceExpr::AIVREChildKind::STANDALONE) {
+      numExpanded++;
+    }
+  }
+  return numExpanded;
+}
 static std::tuple<llvm::Value *, llvm::Value *, llvm::Value *, llvm::Value *>
 getPointerAndSize(CodeGenFunction &CGF, const Expr *E) {
   // Address of first Element.
@@ -1074,7 +1089,8 @@ Expr *AAIE) {
     CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGM.Int32Ty, NumDims, false),
                           FieldAddr);
 
-    Address SlicesStruct = CGApproxRuntimeEmitSlices(CGF, ArraySlices);
+    auto ExtraDims = CountAIVRExpandedShapes(&CGF, ArraySlices);
+    Address SlicesStruct = CGApproxRuntimeEmitSlices(CGF, ArraySlices, ExtraDims);
     FieldAddr = CGF.EmitLValueForField(
         ArrayInfoStart, *std::next(ArrayInfoRecord->field_begin(), 4));
     CGF.EmitStoreOfScalar(
@@ -1144,14 +1160,16 @@ void CGApproxRuntime::CGApproxRuntimeEmitSymbolicVarInits(CodeGenFunction &CGF) 
 
 // }
 
+
 Address CGApproxRuntime::CGApproxRuntimeEmitSlices(CodeGenFunction &CGF,
-                                                llvm::ArrayRef<Expr*> Slices) {
+                                                llvm::ArrayRef<Expr*> Slices,
+                                                size_t ExtraDims) {
   static int numSliceArraysCreated = 0;
   ASTContext &C = CGM.getContext();
   auto numSlices = Slices.size();
   QualType SliceInfoArrayTy;
 
-  SliceInfoArrayTy = C.getConstantArrayType(SurrogateInfo.SliceInfoTy, llvm::APInt(64, numSlices),
+  SliceInfoArrayTy = C.getConstantArrayType(SurrogateInfo.SliceInfoTy, llvm::APInt(64, numSlices+ExtraDims),
                                           nullptr, ArrayType::Normal, 0);
   Twine ArrayName = Twine("slice.info_") + Twine(numSliceArraysCreated);
   Address SliceInfoArray = CGF.CreateMemTemp(SliceInfoArrayTy, ArrayName);
@@ -1191,6 +1209,7 @@ Address CGApproxRuntime::CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int 
   return TensorShape;
 }
 
+
 Address CGApproxRuntime::CGApproxRuntimeEmitShapeWithAIVRExpansion(CodeGenFunction &CGF,
                                                       llvm::ArrayRef<Expr*> Slices) {
   auto numSlices = Slices.size();
@@ -1199,20 +1218,10 @@ Address CGApproxRuntime::CGApproxRuntimeEmitShapeWithAIVRExpansion(CodeGenFuncti
   // [i] to [i,1] and slices that look like [i*3:i*3+3] to [i,3]
   // we'll allocate the extra space we need. Note: we'll need an extra dimension
   // for /each/ slice with an AIVR, e.g., we need 2 extra slots for [i,j]
-  auto allocNumSlices = numSlices;
-  for(auto *E : Slices) {
-    assert(isa<ApproxSliceExpr>(E) && "Expected a slice expression");
+  auto allocNumSlices = numSlices + CountAIVRExpandedShapes(&CGF, Slices);
 
-    ApproxSliceExpr *Slice = dyn_cast<ApproxSliceExpr>(E);
-    ApproxSliceExpr::AIVREChildKind Kind = Slice->getAIVREChildKind();
-    if(Kind == ApproxSliceExpr::AIVREChildKind::BINARY_EXPR ||
-    Kind == ApproxSliceExpr::AIVREChildKind::STANDALONE) {
-      allocNumSlices++;
-    }
-  }
   Address AllocatedShapeStruct = CGApproxRuntimeAllocateShape(CGF, allocNumSlices);
   return CGApproxRuntimeEmitShape(CGF, AllocatedShapeStruct, Slices);
-
 }
 
 Address CGApproxRuntime::CGApproxRuntimeEmitShape(CodeGenFunction &CGF,

@@ -249,7 +249,7 @@ using SymbolVarInfoMap = std::unordered_map<std::string, SymbolVarInfo>;
   void initializeAndDeclareSymbolVars(ApproxDeclareTensorFunctorDecl *Decl, llvm::ArrayRef<Expr*> Vars);
   Address EmitDeclarationOfSymbolVar(CodeGenFunction &CGF, ApproxIndexVarRefExpr *Symbol);
   Address CGApproxRuntimeEmitApproxArrayInfo(CodeGenFunction &CGF, Expr *AAIE);
-  Address CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
+  Address CGApproxRuntimeEmitSlices(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices, size_t ExtraDims=0);
   Address CGApproxRuntimeAllocateShape(CodeGenFunction &CGF, int ndim);
   Address CGApproxRuntimeEmitShapeWithAIVRExpansion(CodeGenFunction &CGF, llvm::ArrayRef<Expr*> Slices);
   Address CGApproxRuntimeEmitShape(CodeGenFunction& CGF, Address Dest, llvm::ArrayRef<Expr*> Slices);

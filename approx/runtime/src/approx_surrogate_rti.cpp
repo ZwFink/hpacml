@@ -140,7 +140,15 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
  
     strides[num_dims - 1] = arg.slices[num_dims - 1].step;
 
-	bool is_row_major = !(arg.slices[num_dims - 1].step >= arg.slices[num_dims - 1].stop - arg.slices[num_dims - 1].start);
+	auto dim_size = arg.slices[num_dims - 1].stop - arg.slices[num_dims - 1].start;
+
+	// if the last dimension has size 1, then we are accessing row major because
+	// C/C++ default to row major
+	bool row_major_case_1 = (dim_size == 1);
+	// Otherwise, we have to check that our step is at least the size of our dimension
+	bool row_major_case_2 = !(arg.slices[num_dims - 1].step >= arg.slices[num_dims - 1].stop - arg.slices[num_dims - 1].start);
+
+	bool is_row_major = row_major_case_1 || row_major_case_2;
 	bool is_column_major = !is_row_major;
 
 	if(is_row_major) {
@@ -159,12 +167,12 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 		for(int i = 1; i < num_dims; i++) {
 			int64_t cur_stride = strides[i-1];
 			if(i < arg.ndim_presubstitution) {
-				cur_stride *= (bounds[i].second - bounds[i].first);
+				cur_stride *= arg.slices[i].step; //(bounds[i].second - bounds[i].first);
 			} else {
-				cur_stride *= arg.shape()[i];
+				cur_stride = arg.slices[i].step;
 			}
 
-			strides[i+1] = cur_stride;
+			strides[i] = cur_stride;
 		}
 	} 
 
@@ -177,12 +185,20 @@ Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBo
 	
 	auto SHP = Tensor::makeArrayRef(memory_descr->shapes->shapes, memory_descr->shapes->ndim);
 	auto RHSShape = Tensor::makeArrayRef(memory_descr->shapes_aivrsubstituted->shapes, memory_descr->shapes_aivrsubstituted->ndim);
+	std::vector<int> OriginalSteps;
 
     // FIXME: What do you do when we access a[b[0:N:N]]? Should a
 	// be accessed also with this stride? We'll decide no for now, but
 	// we can later consider how the user can specify this.
+	for(int i = 0; i < memory_descr->ndim; i++) {
+		auto &slice = memory_descr->slices[i];
+	}
 	if(base == 0 && memory_descr->n_indirections > 1) {
-		memory_descr->slices[0].step = 1;
+		OriginalSteps.reserve(memory_descr->ndim);
+		for(int i = 0; i < memory_descr->ndim; i++) {
+			OriginalSteps.push_back(memory_descr->slices[i].step);
+			memory_descr->slices[i].step = 1;
+		}
 	}
 
 	auto Strides = get_strides(*memory_descr, access_bounds);
@@ -204,6 +220,11 @@ Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBo
 		blob.unsqueeze_(-1);
 	}
 
+	if(base == 0 && memory_descr->n_indirections > 1) {
+		for(int i = 0; i < memory_descr->ndim; i++) {
+			memory_descr->slices[i].step = OriginalSteps[i];
+		}
+	}
 	return blob;
 }
 
@@ -448,9 +469,13 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 				if(inner != 1) {
 					tensor_info.shape()[slice_insert_pt] = inner;
 					tensor_info.aivrshape()[slice_insert_pt] = inner;
+					tensor_info.slices[slice_insert_pt].start = t_slice.start;
 					tensor_info.slices[slice_insert_pt].step = tensor_info.slices[i].step;
 					tensor_info.slices[slice_insert_pt].stop = inner;
+
 					tensor_info.slices[AIVRInsertPoint].step = 1;
+					tensor_info.slices[AIVRInsertPoint].start = t_slice.start;
+					tensor_info.slices[AIVRInsertPoint].stop = t_slice.stop;
 					++slice_insert_pt;
 				}
 				++AIVRInsertPoint;
@@ -507,6 +532,7 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 
 		  f_slice.start += base;
 		  f_slice.stop += base;
+		//   f_slice.step = t_slice.step;
 
     	//   if(f_slice.step != 1) {
 			// std::cerr << "Found step " << f_slice.step << "\n";
