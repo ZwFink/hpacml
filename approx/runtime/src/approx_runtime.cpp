@@ -56,6 +56,111 @@ enum ExecuteMode: uint8_t{
   EXECUTE
 };
 
+class IOWriter {
+    std::string fname;
+    std::ofstream open_file;
+    size_t num_items = 0;
+    bool registered_inputs = false;
+    bool disk_up_to_date = false;
+    torch::Tensor ipt_buf = torch::empty({0}).to(torch::kFloat64);
+    torch::Tensor opt_buf = torch::empty({0}).to(torch::kFloat64);
+    size_t total_size = 0;
+    bool expect_input = true;
+
+    torch::Tensor register_values(torch::Tensor inputs) {
+        auto inputs_copy = inputs.to(torch::kCPU);
+        disk_up_to_date = false;
+        return inputs_copy;
+    }
+
+  void open_file_and_prepare(std::string name) {
+    open_file.open(name, std::ios::out | std::ios::binary | std::ios::trunc);
+    num_items = 0;
+    total_size = 0;
+    writeHeaderPlaceholder();
+  }
+
+public:
+    IOWriter(std::string name) : fname(name) {
+        open_file_and_prepare(name);
+    }
+
+    void set_file(std::string name) {
+        flush();
+        open_file.close();
+        open_file_and_prepare(name);
+    }
+
+    virtual ~IOWriter() {
+        flush();
+        open_file.close();
+    }
+
+    void writeHeaderPlaceholder() {
+        size_t placeholder = 0;
+        open_file.seekp(0, std::ios::beg);
+        open_file.write((char*)&placeholder, sizeof(size_t)); // total number of elements
+        open_file.write((char*)&placeholder, sizeof(size_t)); // number of input values
+        open_file.write((char*)&placeholder, sizeof(size_t)); // number of output values
+    }
+
+    void updateHeader(size_t totalElements, size_t iptSize, size_t optSize) {
+        open_file.seekp(0, std::ios::beg);
+        open_file.write((char*)&totalElements, sizeof(size_t));
+        open_file.write((char*)&iptSize, sizeof(size_t));
+        open_file.write((char*)&optSize, sizeof(size_t));
+    }
+
+    void register_inputs(torch::Tensor Ipts) {
+        auto ipt = register_values(Ipts);
+        ipt_buf = torch::cat({ipt_buf, ipt}, 0);
+        registered_inputs = true;
+    }
+
+    void register_outputs(torch::Tensor Opts) {
+        auto opt = register_values(Opts);
+        opt_buf = torch::cat({opt_buf, opt}, 0);
+        registered_inputs = false;
+        auto total_size_bytes = ipt_buf.element_size() * ipt_buf.numel() +
+                                opt_buf.element_size() * opt_buf.numel();
+        if (total_size_bytes > 1e9) {
+            // flush();
+        }
+    }
+
+    void flush() {
+        if (!disk_up_to_date) {
+            open_file.seekp(0, std::ios::end);
+
+            auto ipt_flat = ipt_buf.flatten();
+            auto ipt_flat_int = ipt_flat.to(torch::kInt);
+            auto opt_flat = opt_buf.flatten();
+            auto opt_flat_int = opt_flat.to(torch::kInt);
+            std::cout << "Ipt shape " << ipt_flat.sizes() << "\n";
+            std::cout << "Opt shape " << opt_flat.sizes() << "\n";
+            torch::Tensor catted = torch::cat({ipt_flat_int, opt_flat_int}, -1);
+            torch::Tensor catted_contiguous = catted.contiguous();
+            auto *catted_ptr = catted_contiguous.data_ptr<int>();
+            auto numel = catted.numel();
+
+            total_size += numel;
+            updateHeader(total_size, ipt_buf.sizes()[1], opt_buf.sizes()[1]);
+
+            open_file.seekp(0, std::ios::end);
+            open_file.write((char*)catted_ptr, numel * sizeof(int));
+            disk_up_to_date = true;
+        }
+
+        // Reset buffers after flushing
+        ipt_buf = torch::empty({0}).to(torch::kInt);
+        opt_buf = torch::empty({0}).to(torch::kInt);
+    }
+};
+
+IOWriter TensorWriter{"/scratch/mzu/zanef2/dummy_empty_5.pt"};
+
+
+
 class ApproxRuntimeConfiguration{
   ExecuteMode Mode;
 public:
@@ -70,8 +175,7 @@ public:
   int count;
   BaseDB *db;
   SurrogateModel<GPUExecutionPolicy, CatTensorTranslator<double>, double> Model{
-      "/scratch/mzu/zanef2/surrogates/SurrogateBenchmarks/models/lulesh/model.pt", false};
-
+      "/scratch/mzu/zanef2/surrogates/SurrogateBenchmarks/models/particlefilter/model.pt", false};
 
   ApproxRuntimeConfiguration() {
       ExecuteBoth = false;
@@ -82,12 +186,13 @@ public:
       ExecuteBoth = true;
     }
 
-    env_p = std::getenv("HPAC_DB_FILE");
-    if (env_p) {
-      db = new HDF5DB(env_p);
-    } else {
-      db = new HDF5DB("test.h5");
-    }
+    // env_p = std::getenv("HPAC_DB_FILE");
+    // if (env_p) {
+      // db = new HDF5DB(env_p);
+      // TensorWriter.set_file(std::string(env_p) + ".pt");
+    // } else {
+      // db = new HDF5DB("test.h5");
+    // }
 
     env_p = std::getenv("SURROGATE_MODEL");
     if (env_p) {
@@ -267,74 +372,6 @@ void __snapshot_call__(void (*_user_fn_)(void *), void *args,
 }
 
 enum class TensorsFound : char { NONE = 0, OUTPUT, INPUT, BOTH };
-
-class IOWriter {
-  std::string fname;
-  std::ofstream open_file;
-  size_t num_items = 0;
-  bool registered_inputs = false;
-  bool disk_up_to_date = false;
-  torch::Tensor ipt_buf = torch::empty({0});
-  torch::Tensor opt_buf = torch::empty({0});
-  size_t ipt_row_size = 0;
-  size_t opt_row_size = 0;
-  size_t total_size = 0;
-  bool expect_input = true;
-
-  torch::Tensor register_values(torch::Tensor inputs) {
-	// make a deep copy of inputs
-	// move to the cpu
-	auto inputs_copy = inputs.to(torch::kCPU);
-  disk_up_to_date = false;
-	return inputs_copy;
-}
-
-public:
-  IOWriter(std::string name) : fname(name) {open_file.open(fname, std::ios::out | std::ios::binary);}
-  virtual ~IOWriter() {flush(); open_file.close();}
-
-void register_inputs(torch::Tensor Ipts) {
-	auto ipt = register_values(Ipts);
-	if(ipt_buf.numel() == 0)
-		ipt_buf = ipt;
-	else
-		ipt_buf = torch::cat({ipt_buf, ipt}, 0);
- 	registered_inputs  = true;
-}
-
-void register_vals(torch::Tensor Vals) {
-	if(expect_input) {
-		register_inputs(Vals);
-		expect_input = false;
-	} else {
-		register_outputs(Vals);
-		expect_input = true;
-	}
-}
-
-void register_outputs(torch::Tensor Opts) {
-  auto opt = register_values(Opts);
-  if(opt_buf.numel() == 0)
-	opt_buf = opt;
-  else
-	opt_buf = torch::cat({opt_buf, opt}, 0);
-  registered_inputs = false;
-}
-
-void flush() {
-	torch::Tensor catted = torch::cat({ipt_buf, opt_buf}, 1);
-	torch::Tensor catted_contiguous = catted.contiguous();
-	auto *catted_ptr = catted_contiguous.data_ptr<double>();
-	std::ofstream open_file(fname, std::ios::out | std::ios::binary);
-	auto numel = catted.numel();
-	open_file.write((char*)&numel, sizeof(size_t));
-	open_file.write((char*)&ipt_buf.sizes()[1], sizeof(size_t));
-	open_file.write((char*)&opt_buf.sizes()[1], sizeof(size_t));
-	open_file.write((char*)catted_ptr, catted.numel()*sizeof(double));
-}
-};
-
-IOWriter TensorWriter{"/scratch/mzu/zanef2/element_lulesh_newdata.pt"};
 
 
 bool is_ml(MLType type) {

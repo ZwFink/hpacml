@@ -538,7 +538,6 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 			// std::cerr << "Found step " << f_slice.step << "\n";
     	  	// std::cerr << "Step is not 1, this is not supported yet\n";
     	//   }
-
     	  finfo.shape()[i] *= tinfo.shape()[i];
 	    }
 	}

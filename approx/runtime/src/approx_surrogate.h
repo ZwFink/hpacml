@@ -956,11 +956,12 @@ private:
       auto FPEvent = EventRecorder::CreateGPUEvent("Forward Pass");
       auto FromTens = EventRecorder::CreateGPUEvent("From Tensor");
       auto &ipt_tens = inputs.get_tensor(0);
+      ipt_tens = ipt_tens.squeeze(-1);
+      ipt_tens = ipt_tens.unsqueeze(1);
 
       FPEvent.recordStart();
       at::Tensor output = module.forward({ipt_tens}).toTensor();
       FPEvent.recordEnd();
-
 
       FromTens.recordStart();
       outputs.update_to_memory(output);
