@@ -18,7 +18,7 @@
 #include <limits>
 #include <cmath>
 #include <cstring>
-#include <omp.h>
+#include "optional_omp.h"
 
 #include "approx_compute_mape.h"
 #include "approx_data_util.h"

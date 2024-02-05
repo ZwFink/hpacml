@@ -19,7 +19,7 @@
 #include <chrono>
 #include <unordered_map>
 #include <random>
-#include <omp.h>
+#include "optional_omp.h"
 
 #include "approx.h"
 #include "approx_data_util.h"

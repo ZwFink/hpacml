@@ -29,17 +29,31 @@ include_directories(
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 
 enable_language(CUDA)
-set(CMAKE_CUDA_STANDARD 14)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #We might need to use CXX as linker.
 set(LIBAPPROX_LINKER_LANGUAGE C)
-add_library(approx ${LIBAPPROX_LIBRARY_KIND} ${LIBAPPROX_SOURCE_FILES})
 find_package(Torch REQUIRED)
 set(CMAKE_CUDA_FLAGS "")
 set(CMAKE_CUDA_ARCHITECTURES ON)
 # link with openmp
-find_package(OpenMP REQUIRED)
-target_link_libraries(approx PRIVATE OpenMP::OpenMP_CXX)
 
+find_package(OpenMP)
+if(OpenMP_FOUND)
+   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+   set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+   message("LINKER FLAGS ARE ${OpenMP_EXE_LINKER_FLAGS}")
+   target_compile_definitions(approx PRIVATE USE_OPENMP)
+   target_link_libraries(approx PRIVATE OpenMP::OpenMP_CXX)
+else()
+    message(WARNING "OpenMP not found")
+    list(APPEND LIBAPPROX_SOURCE_FILES "util/optional_omp.cpp")
+endif()
+
+add_library(approx ${LIBAPPROX_LIBRARY_KIND} ${LIBAPPROX_SOURCE_FILES})
 # set to RelWithDebInfo
 set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
@@ -57,6 +71,7 @@ set_target_properties(approx PROPERTIES
 
 include_directories(${HDF5_INCLUDE_DIRS})
 include_directories(${TORCH_INCLUDE_DIRS})
+include_directories("util")
 
 target_link_libraries(approx PRIVATE ${CUDA_LIBRARIES} cuda)
 target_link_libraries(approx PRIVATE ${CMAKE_DL_LIBS})

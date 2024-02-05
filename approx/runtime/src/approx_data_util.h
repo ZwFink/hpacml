@@ -19,8 +19,8 @@
 #include <stdint.h>
 #include <cstring>
 #include <random>
-#include <omp.h>
 
+#include "optional_omp.h"
 #include "approx_internal.h"
 
 template<typename T>
