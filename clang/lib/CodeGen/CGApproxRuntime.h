@@ -56,17 +56,19 @@ class CGApproxRuntime;
 
 class TensorMemConversionDispatcher {
   public:
-  virtual llvm::FunctionCallee getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime);
-  virtual ~TensorMemConversionDispatcher() = default;
+  virtual llvm::FunctionCallee getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime) = 0;
+  virtual ~TensorMemConversionDispatcher() {}
 };
 class TensorToMemDispatcher : public TensorMemConversionDispatcher {
   public:
   llvm::FunctionCallee getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime) override;
+  ~TensorToMemDispatcher() {}
 };
 
 class MemToTensorDispatcher : public TensorMemConversionDispatcher {
   public:
   llvm::FunctionCallee getInternalReprConversionFn(CodeGenModule &CGM, CGApproxRuntime &Runtime) override;
+  ~MemToTensorDispatcher() {}
 };
 
 
