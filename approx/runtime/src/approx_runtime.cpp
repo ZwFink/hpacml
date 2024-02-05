@@ -65,6 +65,8 @@ class IOWriter {
     torch::Tensor ipt_buf = torch::empty({0}).to(torch::kFloat64);
     torch::Tensor opt_buf = torch::empty({0}).to(torch::kFloat64);
     size_t total_size = 0;
+    size_t total_ipts = 0;
+    size_t total_opts = 0;
     bool expect_input = true;
 
     torch::Tensor register_values(torch::Tensor inputs) {
@@ -77,6 +79,8 @@ class IOWriter {
     open_file.open(name, std::ios::out | std::ios::binary | std::ios::trunc);
     num_items = 0;
     total_size = 0;
+    total_ipts = 0;
+    total_opts = 0;
     writeHeaderPlaceholder();
   }
 
@@ -112,48 +116,61 @@ public:
     }
 
     void register_inputs(torch::Tensor Ipts) {
-        auto ipt = register_values(Ipts);
+      auto ipt = register_values(Ipts);
+      ipt = ipt.unsqueeze(0);
+      if (ipt_buf.numel()) {
         ipt_buf = torch::cat({ipt_buf, ipt}, 0);
-        registered_inputs = true;
+      } else {
+        ipt_buf = ipt;
+      }
+      registered_inputs = true;
     }
 
     void register_outputs(torch::Tensor Opts) {
-        auto opt = register_values(Opts);
+      auto opt = register_values(Opts);
+      opt = opt.unsqueeze(0);
+      if (opt_buf.numel()) {
         opt_buf = torch::cat({opt_buf, opt}, 0);
-        registered_inputs = false;
-        auto total_size_bytes = ipt_buf.element_size() * ipt_buf.numel() +
-                                opt_buf.element_size() * opt_buf.numel();
-        if (total_size_bytes > 1e9) {
-            // flush();
-        }
+      } else {
+        opt_buf = opt;
+      }
+      registered_inputs = false;
+      auto total_size_bytes = ipt_buf.element_size() * ipt_buf.numel() +
+                              opt_buf.element_size() * opt_buf.numel();
+      if (total_size_bytes > 1e9) {
+        flush();
+      }
     }
 
     void flush() {
         if (!disk_up_to_date) {
             open_file.seekp(0, std::ios::end);
 
-            auto ipt_flat = ipt_buf.flatten();
-            auto ipt_flat_int = ipt_flat.to(torch::kInt);
-            auto opt_flat = opt_buf.flatten();
-            auto opt_flat_int = opt_flat.to(torch::kInt);
-            std::cout << "Ipt shape " << ipt_flat.sizes() << "\n";
-            std::cout << "Opt shape " << opt_flat.sizes() << "\n";
-            torch::Tensor catted = torch::cat({ipt_flat_int, opt_flat_int}, -1);
+            // auto ipt_flat = ipt_buf.flatten();
+            // auto opt_flat = opt_buf.flatten();
+            ipt_buf = ipt_buf.unsqueeze(1);
+            opt_buf = opt_buf.unsqueeze(1);
+            std::cout << "Ipt shape " << ipt_buf.sizes() << "\n";
+            std::cout << "Opt shape " << opt_buf.sizes() << "\n";
+            torch::Tensor catted = torch::cat({ipt_buf, opt_buf}, 1);
+            std::cout << "Catte shape " << catted.sizes() << "\n";
             torch::Tensor catted_contiguous = catted.contiguous();
-            auto *catted_ptr = catted_contiguous.data_ptr<int>();
+            auto *catted_ptr = catted_contiguous.data_ptr<double>();
             auto numel = catted.numel();
 
             total_size += numel;
-            updateHeader(total_size, ipt_buf.sizes()[1], opt_buf.sizes()[1]);
+            total_ipts += ipt_buf.sizes()[0];
+            total_opts += opt_buf.sizes()[0];
+            updateHeader(total_size, total_ipts, total_opts);
 
             open_file.seekp(0, std::ios::end);
-            open_file.write((char*)catted_ptr, numel * sizeof(int));
+            open_file.write((char*)catted_ptr, numel * sizeof(double));
             disk_up_to_date = true;
         }
 
         // Reset buffers after flushing
-        ipt_buf = torch::empty({0}).to(torch::kInt);
-        opt_buf = torch::empty({0}).to(torch::kInt);
+        ipt_buf = torch::empty({0}).to(torch::kFloat64);
+        opt_buf = torch::empty({0}).to(torch::kFloat64);
     }
 };
 
@@ -446,6 +463,7 @@ void ml_offline_train(ml_argdesc_t &arg) {
       ipt_metadata = static_cast<internal_repr_metadata_t *>(arg.input_vars[0].ptr);
       opt_metadata = static_cast<internal_repr_metadata_t *>(arg.output_vars[0].ptr);
 
+      // TODO: Does this not do indirection??
       torch::Tensor ipt = ipt_metadata->get_tensor(0);
       TensorWriter.register_inputs(ipt);
 
