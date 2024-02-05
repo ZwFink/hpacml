@@ -15,7 +15,7 @@
 #include <iostream>
 #include <stdint.h>
 #include <random>
-#include <omp.h>
+#include "optional_omp.h"
 
 #include "approx_data_util.h"
 #include "approx_internal.h"

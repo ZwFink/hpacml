@@ -17,8 +17,8 @@
 #include <cstring>
 #include <unordered_map>
 #include <cmath>
-#include <omp.h>
 #include <random>
+#include "optional_omp.h"
 
 #include "approx_data_util.h"
 #include "approx_internal.h"
