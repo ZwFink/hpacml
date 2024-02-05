@@ -409,7 +409,7 @@ void ml_offline_train(ml_argdesc_t &arg) {
       ipt_metadata = static_cast<internal_repr_metadata_t *>(arg.input_vars[0].ptr);
       opt_metadata = static_cast<internal_repr_metadata_t *>(arg.output_vars[0].ptr);
 
-      torch::Tensor ipt = ipt_metadata->get_tensor(0);
+      torch::Tensor ipt = ipt_metadata->get_wrapped_tensor(0).perform_indirection();
       TensorWriter.register_inputs(ipt);
 
       arg.accurateFN(arg.accurateFN_arg);
