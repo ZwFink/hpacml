@@ -11,6 +11,7 @@
 #include "event.h"
 #include <torch/serialize.h>
 #include <algorithm>
+#include "approx_tensor.h"
 
 using Tensor = AbstractTensor<TorchTensorImpl>;
 using AccessBounds = std::vector<std::pair<size_t,size_t>>;

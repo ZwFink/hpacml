@@ -246,14 +246,16 @@ HDF5RegionView::~HDF5RegionView() {
   H5Gclose(group);
 }
 
+HDF5TensorRegionView::~HDF5TensorRegionView() {
+  H5Gclose(regionGroup);
+}
+
 HDF5DB::HDF5DB(const char *fileName) {
   file = openHDF5File(fileName);
   HDF5_ERROR(file);
 }
 
 void *HDF5DB::InstantiateRegion(uintptr_t addr, const char *name,
-                                approx_var_info_t *inputs, int numInputs,
-                                approx_var_info_t *outputs, int numOutputs,
                                 size_t ChunkRows) {
   for (auto it = regions.begin(); it != regions.end(); ++it) {
     if ((*it)->getAddr() == addr && (*it)->getName() == name ) {
@@ -262,8 +264,7 @@ void *HDF5DB::InstantiateRegion(uintptr_t addr, const char *name,
     }
   }
   uintptr_t index = reinterpret_cast<uintptr_t>(regions.size());
-  regions.push_back(new HDF5RegionView(addr, name, file, inputs, numInputs,
-                                       outputs, numOutputs, ChunkRows));
+  regions.push_back(new HDF5TensorRegionView(addr, name, file));
   return reinterpret_cast<void *>(index);
 }
 
@@ -275,7 +276,7 @@ void HDF5DB::DataToDB(void *region, double *data, size_t numRows, int numCols) {
               << "\n";
     exit(-1);
   }
-  regions[index]->writeFeatureVecToFile(data, numRows, numCols);
+  // regions[index]->writeFeatureVecToFile(data, numRows, numCols);
 }
 
 HDF5DB::~HDF5DB() {
@@ -306,3 +307,10 @@ void HDF5DB::RegisterMemory(const char *gName, const char *name, void *ptr,
   status = H5Gclose(rId);
   HDF5_ERROR(status);
 }
+
+  HDF5TensorRegionView::HDF5TensorRegionView(uintptr_t Addr, const char *regionName, hid_t file) {
+    this->addr = Addr;
+    this->regionName = regionName;
+    this->file = file;
+    regionGroup = createOrOpenGroup(regionName, file);
+  }

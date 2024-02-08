@@ -28,6 +28,7 @@
 #include "thread_storage.h"
 #include "database/database.h"
 #include "approx_surrogate.h"
+#include "approx_tensor.h"
 
 
 using namespace std;
@@ -206,46 +207,46 @@ create_snapshot_packet(HPACPacket &dP, void (*user_fn)(void *),
                        const char *region_name, approx_var_info_t *inputs,
                        int num_inputs, approx_var_info_t *outputs,
                        int num_outputs) {
-  thread_local int threadId = -1;
-  thread_local HPACRegion *curr;
-  if(region_name == nullptr) {
-    region_name = "unknown";
-  }
-  if (threadId == -1) {
-    if (omp_in_parallel())
-      threadId = omp_get_thread_num();
-    else
-      threadId = 0;
-  }
+  // thread_local int threadId = -1;
+  // thread_local HPACRegion *curr;
+  // if(region_name == nullptr) {
+  //   region_name = "unknown";
+  // }
+  // if (threadId == -1) {
+  //   if (omp_in_parallel())
+  //     threadId = omp_get_thread_num();
+  //   else
+  //     threadId = 0;
+  // }
 
-  if (curr && (curr->accurate != (unsigned long)user_fn ||
-               curr->getName() != region_name))
-    curr = HPACRegions.findMemo(threadId, (unsigned long)user_fn, region_name);
+  // if (curr && (curr->accurate != (unsigned long)user_fn ||
+  //              curr->getName() != region_name))
+  //   curr = HPACRegions.findMemo(threadId, (unsigned long)user_fn, region_name);
 
-  if (!curr) {
-    int IElem = computeNumElements(inputs, num_inputs);
-    int OElem = computeNumElements(outputs, num_outputs);
-    if (RTEnv.db != nullptr) {
-      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
-                            region_name);
-      void *dbRId =
-          RTEnv.db->InstantiateRegion((uintptr_t)user_fn, region_name, inputs,
-                                      num_inputs, outputs, num_outputs, curr->getNumRows());
-      curr->setDB(RTEnv.db);
-      curr->setDBRegionId(dbRId);
-      HPACRegions.addNew(threadId, curr);
-    } else {
-      curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
-                            region_name);
-      HPACRegions.addNew(threadId, curr);
-    }
-  }
+  // if (!curr) {
+  //   int IElem = computeNumElements(inputs, num_inputs);
+  //   int OElem = computeNumElements(outputs, num_outputs);
+  //   if (RTEnv.db != nullptr) {
+  //     curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
+  //                           region_name);
+  //     void *dbRId =
+  //         RTEnv.db->InstantiateRegion((uintptr_t)user_fn, region_name, inputs,
+  //                                     num_inputs, outputs, num_outputs, curr->getNumRows());
+  //     curr->setDB(RTEnv.db);
+  //     curr->setDBRegionId(dbRId);
+  //     HPACRegions.addNew(threadId, curr);
+  //   } else {
+  //     curr = new HPACRegion((uintptr_t)user_fn, IElem, OElem, NUM_CHUNKS,
+  //                           region_name);
+  //     HPACRegions.addNew(threadId, curr);
+  //   }
+  // }
 
-  double *dPtr = reinterpret_cast<double *>(curr->allocate());
-  dP.inputs = dPtr;
-  dP.outputs = dPtr + curr->IElem;
-  dP.feature = curr;
-  return;
+  // double *dPtr = reinterpret_cast<double *>(curr->allocate());
+  // dP.inputs = dPtr;
+  // dP.outputs = dPtr + curr->IElem;
+  // dP.feature = curr;
+  // return;
 }
 
 // This is the main driver of the HPAC approach.
@@ -267,75 +268,6 @@ void __snapshot_call__(void (*_user_fn_)(void *), void *args,
 }
 
 enum class TensorsFound : char { NONE = 0, OUTPUT, INPUT, BOTH };
-
-class IOWriter {
-  std::string fname;
-  std::ofstream open_file;
-  size_t num_items = 0;
-  bool registered_inputs = false;
-  bool disk_up_to_date = false;
-  torch::Tensor ipt_buf = torch::empty({0});
-  torch::Tensor opt_buf = torch::empty({0});
-  size_t ipt_row_size = 0;
-  size_t opt_row_size = 0;
-  size_t total_size = 0;
-  bool expect_input = true;
-
-  torch::Tensor register_values(torch::Tensor inputs) {
-	// make a deep copy of inputs
-	// move to the cpu
-	auto inputs_copy = inputs.to(torch::kCPU);
-  disk_up_to_date = false;
-	return inputs_copy;
-}
-
-public:
-  IOWriter(std::string name) : fname(name) {open_file.open(fname, std::ios::out | std::ios::binary);}
-  virtual ~IOWriter() {flush(); open_file.close();}
-
-void register_inputs(torch::Tensor Ipts) {
-	auto ipt = register_values(Ipts);
-	if(ipt_buf.numel() == 0)
-		ipt_buf = ipt;
-	else
-		ipt_buf = torch::cat({ipt_buf, ipt}, 0);
- 	registered_inputs  = true;
-}
-
-void register_vals(torch::Tensor Vals) {
-	if(expect_input) {
-		register_inputs(Vals);
-		expect_input = false;
-	} else {
-		register_outputs(Vals);
-		expect_input = true;
-	}
-}
-
-void register_outputs(torch::Tensor Opts) {
-  auto opt = register_values(Opts);
-  if(opt_buf.numel() == 0)
-	opt_buf = opt;
-  else
-	opt_buf = torch::cat({opt_buf, opt}, 0);
-  registered_inputs = false;
-}
-
-void flush() {
-	torch::Tensor catted = torch::cat({ipt_buf, opt_buf}, 1);
-	torch::Tensor catted_contiguous = catted.contiguous();
-	auto *catted_ptr = catted_contiguous.data_ptr<double>();
-	std::ofstream open_file(fname, std::ios::out | std::ios::binary);
-	auto numel = catted.numel();
-	open_file.write((char*)&numel, sizeof(size_t));
-	open_file.write((char*)&ipt_buf.sizes()[1], sizeof(size_t));
-	open_file.write((char*)&opt_buf.sizes()[1], sizeof(size_t));
-	open_file.write((char*)catted_ptr, catted.numel()*sizeof(double));
-}
-};
-
-IOWriter TensorWriter{"/scratch/mzu/zanef2/element_lulesh_newdata.pt"};
-
 
 bool is_ml(MLType type) {
   return type < MLType::ML_END;
@@ -409,13 +341,17 @@ void ml_offline_train(ml_argdesc_t &arg) {
       ipt_metadata = static_cast<internal_repr_metadata_t *>(arg.input_vars[0].ptr);
       opt_metadata = static_cast<internal_repr_metadata_t *>(arg.output_vars[0].ptr);
 
-      torch::Tensor ipt = ipt_metadata->get_wrapped_tensor(0).perform_indirection();
-      TensorWriter.register_inputs(ipt);
+      auto ipt = ipt_metadata->get_wrapped_tensor(0).perform_indirection();
+      ipt = TensorImpl::to(ipt, TensorImpl::CPU);
+      auto regionAddr = RTEnv.db->InstantiateRegion((uintptr_t) arg.accurateFN, arg.region_name, 25);
+      HDF5DB *db = static_cast<HDF5DB *>(RTEnv.db);
+      db->TensorToDB(regionAddr, ipt, ipt_metadata->underlying_type);
 
       arg.accurateFN(arg.accurateFN_arg);
 
       auto opt_tens = opt_metadata->update_from_memory();
-      TensorWriter.register_outputs(opt_tens);
+      opt_tens = TensorImpl::to(opt_tens, TensorImpl::CPU);
+      db->TensorToDB(regionAddr, opt_tens, opt_metadata->underlying_type);
       break;
   }
 }
@@ -427,6 +363,10 @@ void ml_invoke(MLType type, void (*accurateFN)(void *), void *arg,
   approx_var_info_t *output_vars = (approx_var_info_t *)outputs;
 
   TensorsFound have_tensors = TensorsFound::NONE;
+
+  if(region_name == nullptr){
+    region_name = "unknown";
+  }
 
     if(input_vars[0].is_tensor) {
       assert(num_inputs == 1 && "Only one tensor input is supported");
