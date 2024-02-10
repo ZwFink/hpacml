@@ -342,16 +342,37 @@ void ml_offline_train(ml_argdesc_t &arg) {
       opt_metadata = static_cast<internal_repr_metadata_t *>(arg.output_vars[0].ptr);
 
       auto ipt = ipt_metadata->get_wrapped_tensor(0).perform_indirection();
+      EventRecorder::GPUEvent idtohost = EventRecorder::CreateGPUEvent("Input to CPU");
+      EventRecorder::GPUEvent ihtodisk = EventRecorder::CreateGPUEvent("Input to Disk");
+      EventRecorder::GPUEvent odtohost = EventRecorder::CreateGPUEvent("Output to CPU");
+      EventRecorder::GPUEvent ohtodisk = EventRecorder::CreateGPUEvent("Output to Disk");
+      idtohost.recordStart();
       ipt = TensorImpl::to(ipt, TensorImpl::CPU);
+      idtohost.recordEnd();
+
       auto regionAddr = RTEnv.db->InstantiateRegion((uintptr_t) arg.accurateFN, arg.region_name, 25);
       HDF5DB *db = static_cast<HDF5DB *>(RTEnv.db);
+
+      ihtodisk.recordStart();
       db->TensorToDB(regionAddr, ipt, ipt_metadata->underlying_type);
+      ihtodisk.recordEnd();
 
       arg.accurateFN(arg.accurateFN_arg);
 
       auto opt_tens = opt_metadata->update_from_memory();
+
+      odtohost.recordStart();
       opt_tens = TensorImpl::to(opt_tens, TensorImpl::CPU);
+      odtohost.recordEnd();
+
+      ohtodisk.recordStart();
       db->TensorToDB(regionAddr, opt_tens, opt_metadata->underlying_type);
+      ohtodisk.recordEnd();
+
+      EventRecorder::LogEvent(idtohost);
+      EventRecorder::LogEvent(ihtodisk);
+      EventRecorder::LogEvent(odtohost);
+      EventRecorder::LogEvent(ohtodisk);
       break;
   }
 }
