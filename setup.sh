@@ -3,7 +3,6 @@
 prefix=$1
 threads=$2
 current_dir=$(pwd)
-
 NOCOLOR='\033[0m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -22,6 +21,7 @@ LIGHTCYAN='\033[1;36m'
 WHITE='\033[1;37m'
 
 clang_bin=$prefix/bin/clang
+#clang_bin=/dev/null
 approx_runtime_lib=/dev/null
 
 
@@ -34,11 +34,11 @@ if [ ! -f $clang_bin ]; then
     -DLLVM_CCACHE_BUILD='Off'\
     -DCMAKE_EXPORT_COMPILE_COMMANDS='On'\
     -DCMAKE_BUILD_TYPE='RelWithDebInfo' \
-    -DLLVM_FORCE_ENABLE_STATS='On' \
     -DLLVM_ENABLE_PROJECTS='clang' \
-    -DCMAKE_C_COMPILER='clang' \
-    -DCMAKE_CXX_COMPILER='clang++' \
-    -DLLVM_ENABLE_RUNTIMES='openmp' \
+    -DLLVM_FORCE_ENABLE_STATS='On' \
+    -DCMAKE_C_COMPILER='gcc' \
+    -DCMAKE_CXX_COMPILER='g++' \
+    -DLLVM_ENABLE_TERMINFO='Off' \
     -DLLVM_OPTIMIZED_TABLEGEN='On' \
     -DCLANG_BUILD_EXAMPLES='On' \
     -DBUILD_SHARED_LIBS='On' \
@@ -56,8 +56,8 @@ if [ ! -f $clang_bin ]; then
 fi
 
 torch_d=`spack location -i py-torch`
-#hdf5_d=`spack location -i hdf5`
-hdf5_d=/sw/spack/delta-2022-03/apps/hdf5/1.13.1-gcc-11.2.0-jb4yx45
+hdf5_d=`spack location -i hdf5`
+#hdf5_d=/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/hdf5-1.14.3-7b3feas
 echo HDF5 directory: $hdf5_d
 
 torch_d=$(echo $torch_d/lib/python3.*/site-packages/torch/share/cmake/Torch)
@@ -86,8 +86,8 @@ if [ ! -f $approx_runtime_lib ]; then
       -DLLVM_EXTERNAL_CLANG_SOURCE_DIR=${current_dir}/clang/ \
       -DPACKAGE_VERSION=17 \
       -DCMAKE_EXPORT_COMPILE_COMMANDS='On'\
-      -DCMAKE_C_COMPILER='clang' \
-      -DCMAKE_CXX_COMPILER='clang++' \
+      -DCMAKE_C_COMPILER=`which clang` \
+      -DCMAKE_CXX_COMPILER=`which clang++` \
     -DCMAKE_BUILD_TYPE='RelWithDebInfo' \
     -DCAFFE2_USE_CUDNN='On' \
       -DTorch_DIR=$torch_d \
