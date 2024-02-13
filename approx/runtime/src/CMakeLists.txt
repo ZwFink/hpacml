@@ -17,6 +17,7 @@ set(LIBAPPROX_SOURCE_FILES
     approx_surrogate_rti.cpp
     memory_pool/memory_pool.cpp
     database/database.cpp
+    util/warmup_kernel.cu
 )
 
 include_directories(
@@ -37,7 +38,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(LIBAPPROX_LINKER_LANGUAGE C)
 find_package(Torch REQUIRED)
 set(CMAKE_CUDA_FLAGS "")
-set(CMAKE_CUDA_ARCHITECTURES ON)
+set(CMAKE_CUDA_ARCHITECTURES 80)
 # link with openmp
 
 find_package(OpenMP)
@@ -45,9 +46,6 @@ if(OpenMP_FOUND)
    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-   message("LINKER FLAGS ARE ${OpenMP_EXE_LINKER_FLAGS}")
-   target_compile_definitions(approx PRIVATE USE_OPENMP)
-   target_link_libraries(approx PRIVATE OpenMP::OpenMP_CXX)
 else()
     message(WARNING "OpenMP not found")
     list(APPEND LIBAPPROX_SOURCE_FILES "util/optional_omp.cpp")
@@ -73,6 +71,11 @@ include_directories(${HDF5_INCLUDE_DIRS})
 include_directories(${TORCH_INCLUDE_DIRS})
 include_directories("util")
 
+
+if(OpenMP_FOUND)
+  target_compile_definitions(approx PRIVATE USE_OPENMP)
+  target_link_libraries(approx PRIVATE OpenMP::OpenMP_CXX)
+endif()
 target_link_libraries(approx PRIVATE ${CUDA_LIBRARIES} cuda)
 target_link_libraries(approx PRIVATE ${CMAKE_DL_LIBS})
 target_link_libraries(approx PRIVATE ${HDF5_LIBRARIES})
