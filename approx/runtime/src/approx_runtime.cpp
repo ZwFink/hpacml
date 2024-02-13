@@ -356,10 +356,15 @@ void ml_offline_train(ml_argdesc_t &arg) {
       ihtodisk.recordStart();
       db->TensorToDB(regionAddr, ipt, ipt_metadata->underlying_type);
       ihtodisk.recordEnd();
+      
+      // this breaks our abstract tensor assumption,
+      // but temporary while we measure.
+      auto ipt_total_bytes = ipt.numel() * ipt.itemsize();
 
       arg.accurateFN(arg.accurateFN_arg);
 
       auto opt_tens = opt_metadata->update_from_memory();
+      auto opt_total_bytes = opt_tens.numel() * opt_tens.itemsize();
 
       odtohost.recordStart();
       opt_tens = TensorImpl::to(opt_tens, TensorImpl::CPU);
@@ -371,8 +376,10 @@ void ml_offline_train(ml_argdesc_t &arg) {
 
       EventRecorder::LogEvent(idtohost);
       EventRecorder::LogEvent(ihtodisk);
+      std::cout << "EVENT Input bytes: " << ipt_total_bytes << std::endl;
       EventRecorder::LogEvent(odtohost);
       EventRecorder::LogEvent(ohtodisk);
+      std::cout << "EVENT Output bytes: " << opt_total_bytes << std::endl;
       break;
   }
 }
