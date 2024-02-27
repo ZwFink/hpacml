@@ -457,6 +457,14 @@ template<typename T>
     return TensorImpl::template getTensorType<T>();
   }
 
+  static size_t numel(tensor_t &t) {
+    return TensorImpl::numel(t);
+  }
+
+  static size_t size_bytes(tensor_t &t, ApproxType DType) {
+    return numel(t) * getElementSizeForType(getTensorDataTypeTypeFromApproxType(DType));
+  }
+
   static TensorDataTypeType getTensorDataTypeTypeFromApproxType(ApproxType Type) {
     switch(Type) {
       #define APPROX_TYPE(Enum, CType, nameOfType) \
@@ -521,6 +529,10 @@ class TorchTensorImpl {
 
   static void* data_ptr(tensor_t &t) {
     return t.data_ptr();
+  }
+
+  static size_t numel(tensor_t &t) {
+    return t.numel();
   }
 
   static torch::Tensor empty(Shape shape, tensor_options_t opts)

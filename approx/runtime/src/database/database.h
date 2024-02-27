@@ -176,6 +176,13 @@ class HDF5TensorRegionView {
     for (int i = 0; i < ndim; i++) {
       chunk_dims[i + 1] = tensor.size(i);
     }
+    // max chunk size is 4GB
+    // we may need to reduce the chunk size.
+    // For now, assume it suffices to change chunk_dims[1]
+    // Yes, I know we can do 'size_bytes >> 32'
+    size_t size_bytes = TensorImpl::size_bytes(tensor, DType);
+    size_t reduction_factor = 1 + (size_bytes / (1ULL << 32));
+    chunk_dims[1] /= reduction_factor;
     H5Pset_chunk(pList, ndim + 1, chunk_dims);
     hid_t dSetTmp = H5Dcreate(this->regionGroup, name.c_str(), hdftype, memSpace,
                               H5P_DEFAULT, pList, H5P_DEFAULT);
