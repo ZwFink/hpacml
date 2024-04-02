@@ -101,6 +101,7 @@ hid_t createOrOpenGroup(const char *RName, hid_t Root) {
 
 hid_t openHDF5File(const char *fileName) {
   hid_t file;
+  std::cout << fileName << std::endl;
   if (fileExists(fileName)) {
     file = H5Fopen(fileName, H5F_ACC_RDWR, H5P_DEFAULT);
     HDF5_ERROR(file);
@@ -255,8 +256,7 @@ HDF5DB::HDF5DB(const char *fileName) {
   HDF5_ERROR(file);
 }
 
-void *HDF5DB::InstantiateRegion(uintptr_t addr, const char *name,
-                                size_t ChunkRows) {
+void *HDF5DB::InstantiateRegion(uintptr_t addr, const char *name) {
   for (auto it = regions.begin(); it != regions.end(); ++it) {
     if ((*it)->getAddr() == addr && (*it)->getName() == name ) {
       long index = it - regions.begin();

@@ -402,6 +402,8 @@ class AbstractTensor : private TensorImpl {
   using ArrayRef = typename TensorImpl::template ArrayRef<T>;
   using TensorDataTypeType = typename TensorImpl::TensorDataTypeType;
   using TensorDeviceInstanceType = typename TensorImpl::TensorDeviceInstanceType;
+  using Slices = typename TensorImpl::Slices;
+  using InferenceGuard = typename TensorImpl::InferenceGuard;
   static constexpr auto CUDA = TensorImpl::CUDA;
   static constexpr auto CPU = TensorImpl::CPU;
   static constexpr auto float64 = TensorImpl::float64;
@@ -410,6 +412,10 @@ class AbstractTensor : private TensorImpl {
   static tensor_t cat(Tensors& T, int dim)
   {
     return TensorImpl::cat(T, dim);
+  }
+
+  static int64_t dim(tensor_t &t) {
+    return TensorImpl::dim(t);
   }
 
   static tensor_t empty(Shape shape, tensor_options_t opts)
@@ -421,7 +427,7 @@ class AbstractTensor : private TensorImpl {
     return TensorImpl::to(tens, d, non_blocking);
   }
 
-  static tensor_t transpose(tensor_t t, Shape newShape)
+  static tensor_t transpose(tensor_t &t, Shape newShape)
   {
     return TensorImpl::transpose(t, newShape);
   }
@@ -431,6 +437,23 @@ class AbstractTensor : private TensorImpl {
   }
   static tensor_t from_blob(void *mem, Shape shape, Shape strides, tensor_options_t opts) {
     return TensorImpl::from_blob(mem, shape, strides, opts);
+  }
+
+  static Shape shapeFromVector(std::vector<int64_t>& vec) {
+    return TensorImpl::shapeFromVector(vec);
+  }
+
+  static tensor_t index(const tensor_t& t, Slices& slices) {
+    return TensorImpl::index(t, slices);
+  }
+
+  // TODO: #include <utility> for std::pair
+  static Slices initSlices(const std::vector<std::pair<int64_t, int64_t>>& bounds) {
+    return TensorImpl::initSlices(bounds);
+  }
+
+  static void modSlices(Slices& slices, const std::pair<int64_t, int64_t>& bound, int index) {
+    return TensorImpl::modSlices(slices, bound, index);
   }
 
 template<typename T>
@@ -457,6 +480,18 @@ template<typename T>
     return TensorImpl::template getTensorType<T>();
   }
 
+  static TensorDataTypeType getTensorDataType(tensor_t &t) {
+    return TensorImpl::getTensorDataType(t);
+  }
+
+  static size_t numel(tensor_t &t) {
+    return TensorImpl::numel(t);
+  }
+
+  static size_t size_bytes(tensor_t &t, ApproxType DType) {
+    return numel(t) * getElementSizeForType(getTensorDataTypeTypeFromApproxType(DType));
+  }
+
   static TensorDataTypeType getTensorDataTypeTypeFromApproxType(ApproxType Type) {
     switch(Type) {
       #define APPROX_TYPE(Enum, CType, nameOfType) \
@@ -465,6 +500,8 @@ template<typename T>
       #include "clang/Basic/approxTypes.def"
       case INVALID:
         std::cout << "INVALID DATA TYPE passed in argument list\n";
+      default:
+        std::cerr << "Unknown DType value: " << static_cast<int>(Type) << std::endl;
     }
   }
 
@@ -501,8 +538,10 @@ class TorchTensorImpl {
   using TensorDeviceInstanceType = decltype(torch::kCUDA);
   using TensorDataTypeType = decltype(torch::kDouble);
   using Shape = torch::IntArrayRef;
+  using Slices = std::vector<torch::indexing::TensorIndex>;
   static constexpr auto float64 = torch::kDouble;
   static constexpr auto float32 = torch::kFloat;
+  using InferenceGuard = at::InferenceMode;
 
   static int getTensorLibraryType() {
     return (int) TensorLibraryType::TORCH;
@@ -514,6 +553,10 @@ class TorchTensorImpl {
     return torch::cat(T, dim);
   }
 
+  static int64_t dim(tensor_t &t) {
+    return t.dim();
+  }
+
   template<typename T>
   static T* data_ptr(tensor_t &t) {
     return t.data_ptr<T>();
@@ -523,12 +566,16 @@ class TorchTensorImpl {
     return t.data_ptr();
   }
 
+  static size_t numel(tensor_t &t) {
+    return t.numel();
+  }
+
   static torch::Tensor empty(Shape shape, tensor_options_t opts)
   {
     return torch::empty(shape, opts);
   }
 
-  static torch::Tensor transpose(torch::Tensor t, Shape newShape)
+  static torch::Tensor transpose(torch::Tensor &t, Shape newShape)
   {
     return t.permute(newShape);
   }
@@ -542,6 +589,32 @@ class TorchTensorImpl {
   }
   static torch::Tensor from_blob(void *mem, Shape shape, Shape strides, tensor_options_t opts) {
     return torch::from_blob(mem, shape, strides, opts);
+  }
+
+  static Shape shapeFromVector(std::vector<int64_t>& vec) {
+    Shape shape(vec);
+    return shape;
+  }
+
+  static torch::Tensor index(const tensor_t &t, Slices &slices) {
+    return t.index(slices);
+  }
+
+  static Slices initSlices(const std::vector<std::pair<int64_t, int64_t>> &bounds) {
+    Slices slices;
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        slices.push_back(torch::indexing::Slice(bounds[i].first, bounds[i].second, 1)); // Slice from 0 to vec[i] for the ith dimension
+    }
+    slices.push_back(torch::indexing::Ellipsis);
+    return slices; 
+  }
+
+  static void modSlices(Slices &slices, const std::pair<int64_t, int64_t> &bound, int index) {
+    if (index >= slices.size()-1)
+      std::cerr << "invalid index for modSlices, must be less than " << slices.size() << "\n";
+    
+    slices[index] = torch::indexing::Slice(bound.first, bound.second, 1);
+    return;
   }
 
   template<typename T>
@@ -567,6 +640,11 @@ class TorchTensorImpl {
     } else {
       assert(False && "Invalid type passed to getTensorType");
     }
+  }
+
+  static TensorDataTypeType getTensorDataType(tensor_t &t) {
+    auto scalarType = t.scalar_type();
+    return scalarType;
   }
 
   static size_t getElementSizeForType(TensorDataTypeType T) {

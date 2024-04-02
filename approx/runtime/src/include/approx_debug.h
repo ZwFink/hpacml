@@ -47,4 +47,11 @@ namespace EventRecorder {
 
 }
 
+namespace approx {
+    namespace util {
+        // call the warm up kernel
+        void warmup(); 
+    };
+};
+
 #endif
