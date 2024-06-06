@@ -97,7 +97,5 @@ if [ ! -f $approx_runtime_lib ]; then
     ninja -j $threads install
     popd
     echo "export HPAC_LIBRARY_LOCATION=$prefix/lib" >> hpac_env.sh
-    # echo "export HPAC_LIBRARY_LOCATION=$PWD" >> hpac_env.sh
-    echo "export CONDA_LOCATION=/scratch/mzu/zanef2" >> hpac_env.sh
 fi
 exit
