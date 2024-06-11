@@ -387,13 +387,9 @@ void printVector(vector<T> vec) {
   std::cout << "\b\b]" << std::endl; // Hack to remove the last comma and space
 }
 
-size_t get_chunk_shape(TensorImpl::Shape shape, ApproxType DType, std::vector<int64_t>& chunk_vector, bool input) {
+size_t get_chunk_shape(TensorImpl::Shape shape, ApproxType DType, std::vector<int64_t>& chunk_vector, size_t chunkSize) {
   size_t element_size = TensorImpl::getElementSizeForType(TensorImpl::getTensorDataTypeTypeFromApproxType(DType));
-  int64_t max_elements;
-  if (input)
-    max_elements = RTEnv.iptChunkSize / element_size;
-  else
-    max_elements = RTEnv.optChunkSize / element_size;
+  int64_t max_elements = chunkSize / element_size;
   size_t num_chunks = 1;
   int64_t curr_elements = 1;
   bool single = false;
@@ -480,12 +476,62 @@ void hostToDisk(std::mutex& buffer_mutex, std::condition_variable& buffer_cond_v
   }
 }
 
-void ml_offline_train2(ml_argdesc_t &arg) {
-  EventRecorder::GPUEvent total = EventRecorder::CreateGPUEvent("TOTAL TIME");
-  total.recordStart();
-  arg.accurateFN(arg.accurateFN_arg);
-  total.recordEnd();
-  EventRecorder::LogEvent(total);
+void pipelined_device_to_disk_sync(ml_argdesc_t &arg, internal_repr_metadata_t &ipt_metadata, bool isInput) {
+    EventRecorder::GPUEvent comp = EventRecorder::CreateGPUEvent("");
+    auto ipt = ipt_metadata.get_wrapped_tensor(0).perform_indirection();
+    ApproxType iptType = ipt_metadata.underlying_type;
+    std::vector<int64_t> ipt_chunk_vector(TensorImpl::dim(ipt), 0); 
+    TensorImpl::Shape ipt_total_shape = ipt.sizes();
+    size_t chunkSize = RTEnv.iptChunkSize;
+    if(!isInput) {
+      chunkSize = RTEnv.optChunkSize;
+    }
+    size_t ipt_num_chunks = get_chunk_shape(ipt_total_shape, iptType, ipt_chunk_vector, chunkSize); 
+    TensorImpl::Shape ipt_chunk_shape = TensorImpl::shapeFromVector(ipt_chunk_vector);
+
+    auto region_addr = RTEnv.db->InstantiateRegion((uintptr_t) arg.accurateFN, arg.region_name);
+    HDF5DB *db = static_cast<HDF5DB *>(RTEnv.db);
+
+    comp.recordStart();
+    arg.accurateFN(arg.accurateFN_arg);
+    comp.recordEnd();
+    db->RuntimeToDB(region_addr, comp.elapsedTime());
+
+    TensorImpl::tensor_options_t tensor_options_pin = TensorImpl::tensor_options_t().dtype(TensorImpl::getTensorDataType(ipt)).device(TensorImpl::CPU).pinned_memory(true);
+    TensorImpl::tensor_options_t tensor_options_no_pin = TensorImpl::tensor_options_t().dtype(TensorImpl::getTensorDataType(ipt)).device(TensorImpl::CPU);
+    auto shared_buffer = TensorImpl::empty(ipt_chunk_shape, tensor_options_no_pin);
+    std::vector<int64_t> ipt_shared_index_vector(ipt_chunk_vector.size(), 0);
+
+    std::vector<std::pair<int64_t, int64_t>> ipt_bounds;
+    for (const auto& value : ipt_chunk_vector) {
+      ipt_bounds.emplace_back(0, value);
+    }
+    TensorImpl::Slices ipt_slices = TensorImpl::initSlices(ipt_bounds);
+
+    std::mutex buffer_mutex_ipt;
+    std::condition_variable buffer_cond_var_ipt;
+    std::atomic<bool> data_ready_ipt(false);
+
+    // idtodisk.recordStart();
+    std::thread deviceThreadIpt(deviceToHost, std::ref(buffer_mutex_ipt), std::ref(buffer_cond_var_ipt), 
+    std::ref(data_ready_ipt), std::ref(shared_buffer), std::ref(tensor_options_pin), std::ref(ipt), 
+    std::ref(ipt_total_shape), std::ref(ipt_chunk_vector), std::ref(ipt_chunk_shape), 
+    std::ref(ipt_shared_index_vector), ipt_num_chunks, std::ref(ipt_slices)
+    );
+
+    std::thread diskThreadIpt(hostToDisk, std::ref(buffer_mutex_ipt), 
+    std::ref(buffer_cond_var_ipt), std::ref(data_ready_ipt), 
+    db, region_addr, &ipt_metadata, std::ref(shared_buffer), 
+    std::ref(tensor_options_no_pin), std::ref(ipt_total_shape), 
+    std::ref(ipt_chunk_vector), std::ref(ipt_chunk_shape), 
+    std::ref(ipt_shared_index_vector), ipt_num_chunks, isInput
+    );  
+    deviceThreadIpt.join();
+    diskThreadIpt.join();
+    // idtodisk.recordEnd();
+    // EventRecorder::LogEvent(idtodisk);
+
+
 }
 
 void ml_offline_train(ml_argdesc_t &arg) {
@@ -514,84 +560,12 @@ void ml_offline_train(ml_argdesc_t &arg) {
       EventRecorder::GPUEvent total = EventRecorder::CreateGPUEvent("TOTAL TIME");
       // EventRecorder::GPUEvent idtodisk = EventRecorder::CreateGPUEvent("Input Device to Disk");
       // EventRecorder::GPUEvent odtodisk = EventRecorder::CreateGPUEvent("Output Device to Disk");
-      EventRecorder::GPUEvent comp = EventRecorder::CreateGPUEvent("");
       total.recordStart();
       TensorImpl::InferenceGuard guard;
-
-      ipt_metadata = static_cast<internal_repr_metadata_t *>(arg.input_vars[0].ptr); 
-      auto ipt = ipt_metadata->get_wrapped_tensor(0).perform_indirection();
-      ApproxType iptType = ipt_metadata->underlying_type;
-      std::vector<int64_t> ipt_chunk_vector(TensorImpl::dim(ipt), 0); 
-      TensorImpl::Shape ipt_total_shape = ipt.sizes();
-      size_t ipt_num_chunks = get_chunk_shape(ipt_total_shape, iptType, ipt_chunk_vector, true); 
-      TensorImpl::Shape ipt_chunk_shape = TensorImpl::shapeFromVector(ipt_chunk_vector);
-
-      auto region_addr = RTEnv.db->InstantiateRegion((uintptr_t) arg.accurateFN, arg.region_name);
-      HDF5DB *db = static_cast<HDF5DB *>(RTEnv.db);
-
-      comp.recordStart();
-      arg.accurateFN(arg.accurateFN_arg);
-      comp.recordEnd();
-      db->RuntimeToDB(region_addr, comp.elapsedTime());
-
-      TensorImpl::tensor_options_t tensor_options_pin = TensorImpl::tensor_options_t().dtype(TensorImpl::getTensorDataType(ipt)).device(TensorImpl::CPU).pinned_memory(true);
-      TensorImpl::tensor_options_t tensor_options_no_pin = TensorImpl::tensor_options_t().dtype(TensorImpl::getTensorDataType(ipt)).device(TensorImpl::CPU);
-      auto shared_buffer = TensorImpl::empty(ipt_chunk_shape, tensor_options_no_pin);
-      std::vector<int64_t> ipt_shared_index_vector(ipt_chunk_vector.size(), 0);
-
-      std::vector<std::pair<int64_t, int64_t>> ipt_bounds;
-      for (const auto& value : ipt_chunk_vector) {
-        ipt_bounds.emplace_back(0, value);
-      }
-      TensorImpl::Slices ipt_slices = TensorImpl::initSlices(ipt_bounds);
-
-      std::mutex buffer_mutex_ipt;
-      std::condition_variable buffer_cond_var_ipt;
-      std::atomic<bool> data_ready_ipt(false);
-
-      // idtodisk.recordStart();
-      std::thread deviceThreadIpt(deviceToHost, std::ref(buffer_mutex_ipt), std::ref(buffer_cond_var_ipt), std::ref(data_ready_ipt), std::ref(shared_buffer), std::ref(tensor_options_pin), std::ref(ipt), std::ref(ipt_total_shape), std::ref(ipt_chunk_vector), std::ref(ipt_chunk_shape), std::ref(ipt_shared_index_vector), ipt_num_chunks, std::ref(ipt_slices));
-      std::thread diskThreadIpt(hostToDisk, std::ref(buffer_mutex_ipt), std::ref(buffer_cond_var_ipt), std::ref(data_ready_ipt), db, region_addr, ipt_metadata, std::ref(shared_buffer), std::ref(tensor_options_no_pin), std::ref(ipt_total_shape), std::ref(ipt_chunk_vector), std::ref(ipt_chunk_shape), std::ref(ipt_shared_index_vector), ipt_num_chunks, true);  
-      deviceThreadIpt.join();
-      diskThreadIpt.join();
-      // idtodisk.recordEnd();
-      // EventRecorder::LogEvent(idtodisk);
-
-      opt_metadata = static_cast<internal_repr_metadata_t *>(arg.input_vars[0].ptr); // CHANGE BACK TO IN
-      auto opt = opt_metadata->get_wrapped_tensor(0).perform_indirection();
-      ApproxType optType = opt_metadata->underlying_type;
-      std::vector<int64_t> opt_chunk_vector(TensorImpl::dim(opt), 0); 
-      TensorImpl::Shape opt_total_shape = opt.sizes();
-      size_t opt_num_chunks = get_chunk_shape(opt_total_shape, optType, opt_chunk_vector, false); // CHANGE BACK TO FALSE
-      TensorImpl::Shape opt_chunk_shape = TensorImpl::shapeFromVector(opt_chunk_vector);
-
-      tensor_options_pin = TensorImpl::tensor_options_t().dtype(TensorImpl::getTensorDataType(opt)).device(TensorImpl::CPU).pinned_memory(true);
-      tensor_options_no_pin = TensorImpl::tensor_options_t().dtype(TensorImpl::getTensorDataType(opt)).device(TensorImpl::CPU);
-      shared_buffer = TensorImpl::empty(opt_chunk_shape, tensor_options_no_pin);
-      std::vector<int64_t> opt_shared_index_vector(opt_chunk_vector.size(), 0);
-
-      std::vector<std::pair<int64_t, int64_t>> opt_bounds;
-      for (const auto& value : opt_chunk_vector) {
-        opt_bounds.emplace_back(0, value);
-      }
-      TensorImpl::Slices opt_slices = TensorImpl::initSlices(opt_bounds);
-
-      std::mutex buffer_mutex_opt;
-      std::condition_variable buffer_cond_var_opt;
-      std::atomic<bool> data_ready_opt(false);
-
-      // odtodisk.recordStart();
-      std::thread deviceThreadOpt(deviceToHost, std::ref(buffer_mutex_opt), std::ref(buffer_cond_var_opt), std::ref(data_ready_opt), std::ref(shared_buffer), std::ref(tensor_options_pin), std::ref(opt), std::ref(opt_total_shape), std::ref(opt_chunk_vector), std::ref(opt_chunk_shape), std::ref(opt_shared_index_vector), opt_num_chunks, std::ref(opt_slices));
-      std::thread diskThreadOpt(hostToDisk, std::ref(buffer_mutex_opt), std::ref(buffer_cond_var_opt), std::ref(data_ready_opt), db, region_addr, opt_metadata, std::ref(shared_buffer), std::ref(tensor_options_no_pin), std::ref(opt_total_shape), std::ref(opt_chunk_vector), std::ref(opt_chunk_shape), std::ref(opt_shared_index_vector), opt_num_chunks, false); //std::ref(second_buffer), 
-      deviceThreadOpt.join();
-      diskThreadOpt.join();
-      // odtodisk.recordEnd();
-      // EventRecorder::LogEvent(odtodisk);
-
-      // auto ipt_total_bytes = TensorImpl::size_bytes(ipt, iptType);
-      // std::cout << "EVENT Input bytes: " << ipt_total_bytes << std::endl;
-      // auto opt_total_bytes = TensorImpl::size_bytes(opt, optType);
-      // std::cout << "EVENT Output bytes: " << opt_total_bytes << std::endl;
+      ipt_metadata = static_cast<internal_repr_metadata_t *>(arg.input_vars[0].ptr);
+      opt_metadata = static_cast<internal_repr_metadata_t *>(arg.output_vars[0].ptr);
+      pipelined_device_to_disk_sync(arg, *ipt_metadata, /*isinput=*/ true);
+      pipelined_device_to_disk_sync(arg, *opt_metadata, /*isinput=*/ false);
 
       total.recordEnd();
       EventRecorder::LogEvent(total);
