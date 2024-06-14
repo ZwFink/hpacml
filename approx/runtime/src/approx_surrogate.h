@@ -109,6 +109,10 @@ typedef struct internal_tensor_repr_data {
       auto &opt = Tensors[0];
       if (opt.sizes() == T.sizes()) {
         opt.copy_(T);
+      } else {
+        std::cout << "ERROR: Not copying output tensor to memory due to shape mismatch.\n"
+                  << "Expected shape: " << opt.sizes() 
+                  << " but got shape: " << T.sizes() << "\n";
       }
       return;
     }
