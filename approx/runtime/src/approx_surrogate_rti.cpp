@@ -134,6 +134,8 @@ std::vector<int64_t>
 get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 	auto num_dims = arg.ndim;
 	std::vector<int64_t> strides(num_dims, std::allocator<int64_t>());
+	std::vector<bool> windowed(num_dims, false);
+	std::vector<int64_t> windowed_stride_norm(num_dims, 1);
 
 	std::vector<int64_t> smallest_accesses(num_dims, std::numeric_limits<int64_t>::max());
 	std::vector<int64_t> largest_accesses(num_dims, std::numeric_limits<int64_t>::min());
@@ -152,15 +154,27 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 	bool is_row_major = row_major_case_1 || row_major_case_2;
 	bool is_column_major = !is_row_major;
 
+	for(auto dim = 0; dim < arg.ndim; dim++) {
+		auto shp = arg.shape()[dim];
+		std::cout << shp << " ";
+	}
+	std::cout << "\n";
+
 	if(is_row_major) {
       for(int i = num_dims - 2; i >= 0; i--) {
 	  	int64_t cur_stride = strides[i+1];
 	  	if(i +1 < arg.ndim_presubstitution) {
 	  		cur_stride *= (bounds[i+1].second - bounds[i+1].first);
 	  	} else {
+			auto slice_start = arg.slices[i].start;
+			auto slice_stop = arg.slices[i].stop;
+			auto slice_step = arg.slices[i].step;
+
+			if(slice_start + slice_step < slice_stop) {
+				windowed[i] = true;
+			}
 	  		cur_stride *= arg.shape()[i+1];
 	  	}
-
 	  	strides[i] = cur_stride;
 	  }
 	} else if(is_column_major) {
@@ -171,12 +185,27 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 				cur_stride *= arg.slices[i].step; //(bounds[i].second - bounds[i].first);
 			} else {
 				cur_stride = arg.slices[i].step;
+				// for now, assume that we don't skip a column major element,
+				if(arg.slices[i].start + 1 < arg.slices[i].stop) {
+					windowed[i] = true;
+					windowed_stride_norm[i] = arg.slices[i].step;
+				}
 			}
 
 			strides[i] = cur_stride;
 		}
 	} 
 
+	for(int w = 0; w < num_dims; w++) {
+		if(windowed[w]) {
+			strides[w] = 1 * windowed_stride_norm[w];
+		}
+	}
+
+	for(auto &stride : strides) {
+		std::cout << stride << " ";
+	}
+	std::cout << "\n";
 	return strides;
 }
 
