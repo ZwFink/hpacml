@@ -56,7 +56,7 @@ add_library(approx ${LIBAPPROX_LIBRARY_KIND} ${LIBAPPROX_SOURCE_FILES})
 set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 find_package(nlohmann_json 3.2.0 REQUIRED)
-# find_package(HDF5 NAMES hdf5 COMPONENTS C shared REQUIRED NO_DEFAULT_PATH PATHS ${HDF5_Dir} ${HDF5_Dir}/share/cmake)
+find_package(HDF5 NAMES hdf5 COMPONENTS C shared REQUIRED NO_DEFAULT_PATH PATHS ${HDF5_Dir})
 
 set_target_properties(approx PROPERTIES
     PREFIX "" SUFFIX "" OUTPUT_NAME "${LIBAPPROX_LIB_FILE}"
@@ -78,9 +78,10 @@ if(OpenMP_FOUND)
 endif()
 target_link_libraries(approx PRIVATE ${CUDA_LIBRARIES} cuda)
 target_link_libraries(approx PRIVATE ${CMAKE_DL_LIBS})
-target_link_libraries(approx PRIVATE ${HDF5_LIBRARIES})
+target_link_libraries(approx PRIVATE ${HDF5_C_SHARED_LIBRARY})
 target_link_libraries(approx PRIVATE ${TORCH_LIBRARIES})
 message(STATUS "Torch libraries dir: ${TORCH_LIBRARIES}")
+message(STATUS "HDF5 libraries dir: ${HDF5_C_SHARED_LIBRARY}")
 
 target_link_libraries(approx PRIVATE nlohmann_json::nlohmann_json)
 
