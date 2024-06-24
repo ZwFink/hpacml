@@ -40,7 +40,6 @@ if [ ! -f $clang_bin ]; then
     -DCMAKE_CXX_COMPILER='g++' \
     -DLLVM_ENABLE_TERMINFO='Off' \
     -DLLVM_OPTIMIZED_TABLEGEN='On' \
-    -DCLANG_BUILD_EXAMPLES='On' \
     -DBUILD_SHARED_LIBS='On' \
     -DLLVM_ENABLE_ASSERTIONS='On' \
     ../llvm
@@ -55,7 +54,8 @@ if [ ! -f $clang_bin ]; then
     echo "export CPP=clang++" >> hpac_env.sh
 fi
 
-torch_d=`spack location -i py-torch`
+#torch_d=`spack location -i py-torch`
+torch_d=/opt/conda/lib/python3.10/site-packages/torch/share/cmake/Torch/
 hdf5_d=`spack location -i hdf5`
 #hdf5_d=/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/hdf5-1.14.3-7b3feas
 echo HDF5 directory: $hdf5_d
