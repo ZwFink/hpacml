@@ -60,7 +60,7 @@ hdf5_d=`spack location -i hdf5`
 #hdf5_d=/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/hdf5-1.14.3-7b3feas
 echo HDF5 directory: $hdf5_d
 
-torch_d=$(echo $torch_d/lib/python3.*/site-packages/torch/share/cmake/Torch)
+#torch_d=$(echo $torch_d/lib/python3.*/site-packages/torch/share/cmake/Torch)
 echo Torch directory: $torch_d
 
 gpuarchsm=$(python3 approx/approx_utilities/detect_arch.py $prefix)
