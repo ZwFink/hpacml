@@ -109,6 +109,16 @@ typedef struct internal_tensor_repr_data {
       auto &opt = Tensors[0];
       if (opt.sizes() == T.sizes()) {
         opt.copy_(T);
+      } else {
+        T = T.squeeze(0);
+        if(opt.sizes() == T.sizes()) {
+          opt.copy_(T);
+          return;
+        }
+        std::cout << "Error: The output tensor does not match the expected shape\n"
+                  << "Expected: " << opt.sizes() << " Got: " << T.sizes() << "\n"
+                  << "Skipping update\n"
+                  << "Please check the model architecture\n";
       }
       return;
     }
