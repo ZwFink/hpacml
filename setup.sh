@@ -59,8 +59,6 @@ torch_path=$(dirname "$full_path")
 torch_d=$(echo "$torch_path"/share/cmake/Torch)
 echo Torch directory: $torch_d
 
-# Print the captured output
-echo "torch_d: $torch_d"
 hdf5_d=`spack location -i hdf5`
 echo HDF5 directory: $hdf5_d
 
