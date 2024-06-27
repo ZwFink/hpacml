@@ -54,14 +54,15 @@ if [ ! -f $clang_bin ]; then
     echo "export CPP=clang++" >> hpac_env.sh
 fi
 
-#torch_d=`spack location -i py-torch`
-torch_d=/opt/conda/lib/python3.10/site-packages/torch/share/cmake/Torch/
-hdf5_d=`spack location -i hdf5`
-#hdf5_d=/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/hdf5-1.14.3-7b3feas
-echo HDF5 directory: $hdf5_d
-
-#torch_d=$(echo $torch_d/lib/python3.*/site-packages/torch/share/cmake/Torch)
+full_path=$(python3 -c "import torch; print(torch.__file__)")
+torch_path=$(dirname "$full_path")
+torch_d=$(echo "$torch_path"/share/cmake/Torch)
 echo Torch directory: $torch_d
+
+# Print the captured output
+echo "torch_d: $torch_d"
+hdf5_d=`spack location -i hdf5`
+echo HDF5 directory: $hdf5_d
 
 gpuarchsm=$(python3 approx/approx_utilities/detect_arch.py $prefix)
 gpuarch=$(echo $gpuarchsm | cut -d ';' -f 1)
