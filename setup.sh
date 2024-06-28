@@ -33,7 +33,7 @@ if [ ! -f $clang_bin ]; then
     -DCMAKE_INSTALL_PREFIX=$prefix \
     -DLLVM_CCACHE_BUILD='Off'\
     -DCMAKE_EXPORT_COMPILE_COMMANDS='On'\
-    -DCMAKE_BUILD_TYPE='RelWithDebInfo' \
+    -DCMAKE_BUILD_TYPE='Release' \
     -DLLVM_ENABLE_PROJECTS='clang' \
     -DLLVM_FORCE_ENABLE_STATS='On' \
     -DCMAKE_C_COMPILER='gcc' \
@@ -87,7 +87,7 @@ if [ ! -f $approx_runtime_lib ]; then
       -DCMAKE_EXPORT_COMPILE_COMMANDS='On'\
       -DCMAKE_C_COMPILER=`which clang` \
       -DCMAKE_CXX_COMPILER=`which clang++` \
-    -DCMAKE_BUILD_TYPE='RelWithDebInfo' \
+    -DCMAKE_BUILD_TYPE='Release' \
     -DCAFFE2_USE_CUDNN='On' \
       -DTorch_DIR=$torch_d \
       -DHDF5_Dir=$hdf5_d \
