@@ -14,7 +14,6 @@
 #include "approx_tensor.h"
 
 using Tensor = AbstractTensor<TorchTensorImpl>;
-using AccessBounds = std::vector<std::pair<size_t,size_t>>;
 
 #ifdef DEBUG
 #define dbgs() std::cout
@@ -45,8 +44,9 @@ typedef struct slice_info_t {
 	int64_t start;
 	int64_t stop;
 	int64_t step;
-	int aivrechildkind;
 	int64_t aivrerepr;
+	int aivrechildkind;
+	int is_windowed;
 } slice_info_t;
 
 // a tensor's shape is a list of integers,
@@ -130,16 +130,24 @@ typedef struct array_info {
 
 }
 
+template<typename T>
+class AccessBounds {
+	public:
+	T lo;
+	T hi;
+
+	AccessBounds() {AccessBounds(0, 0); }
+	AccessBounds(T lo, T hi) : lo(lo), hi(hi) {}
+	T get_shape() {
+		return hi - lo;
+	}
+
+};
+
 std::vector<int64_t>
-get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
+get_strides(array_info_t &arg, std::vector<AccessBounds<size_t>> &bounds) {
 	auto num_dims = arg.ndim;
 	std::vector<int64_t> strides(num_dims, std::allocator<int64_t>());
-	std::vector<bool> windowed(num_dims, false);
-	std::vector<int64_t> windowed_stride_norm(num_dims, 1);
-
-	std::vector<int64_t> smallest_accesses(num_dims, std::numeric_limits<int64_t>::max());
-	std::vector<int64_t> largest_accesses(num_dims, std::numeric_limits<int64_t>::min());
-
  
     strides[num_dims - 1] = arg.slices[num_dims - 1].step;
 
@@ -154,27 +162,18 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 	bool is_row_major = row_major_case_1 || row_major_case_2;
 	bool is_column_major = !is_row_major;
 
-	for(auto dim = 0; dim < arg.ndim; dim++) {
-		auto shp = arg.shape()[dim];
-		std::cout << shp << " ";
-	}
-	std::cout << "\n";
-
 	if(is_row_major) {
       for(int i = num_dims - 2; i >= 0; i--) {
 	  	int64_t cur_stride = strides[i+1];
 	  	if(i +1 < arg.ndim_presubstitution) {
-	  		cur_stride *= (bounds[i+1].second - bounds[i+1].first);
+	  		cur_stride *= (bounds[i+1].hi - bounds[i+1].lo);
 	  	} else {
-			auto slice_start = arg.slices[i].start;
-			auto slice_stop = arg.slices[i].stop;
-			auto slice_step = arg.slices[i].step;
-
-			if(slice_start + slice_step < slice_stop) {
-				windowed[i] = true;
-			}
 	  		cur_stride *= arg.shape()[i+1];
 	  	}
+		// if(is_windowed_slice(arg.shape()[i], arg.slices[i])) {
+			// cur_stride = 1;
+		// }
+
 	  	strides[i] = cur_stride;
 	  }
 	} else if(is_column_major) {
@@ -185,31 +184,21 @@ get_strides(array_info_t &arg, std::vector<std::pair<size_t,size_t>> &bounds) {
 				cur_stride *= arg.slices[i].step; //(bounds[i].second - bounds[i].first);
 			} else {
 				cur_stride = arg.slices[i].step;
-				// for now, assume that we don't skip a column major element,
-				if(arg.slices[i].start + 1 < arg.slices[i].stop) {
-					windowed[i] = true;
-					windowed_stride_norm[i] = arg.slices[i].step;
-				}
 			}
 
 			strides[i] = cur_stride;
 		}
 	} 
 
-	for(int w = 0; w < num_dims; w++) {
-		if(windowed[w]) {
-			strides[w] = 1 * windowed_stride_norm[w];
-		}
-	}
-
-	for(auto &stride : strides) {
+	for(auto stride : strides) {
 		std::cout << stride << " ";
 	}
 	std::cout << "\n";
+
 	return strides;
 }
 
-Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBounds &access_bounds, int target_ndim) {
+Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, std::vector<AccessBounds<size_t>> &access_bounds, int target_ndim) {
 	auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType((ApproxType) memory_descr->types[0]);
 	auto OriginalDevice = Tensor::getDeviceForPointer((void*)memory_descr->bases[base]);
 	
@@ -255,19 +244,20 @@ Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, AccessBo
 			memory_descr->slices[i].step = OriginalSteps[i];
 		}
 	}
+	// std::cout << blob << "\n";
 	return blob;
 }
 
-std::vector<std::pair<size_t,size_t>> get_access_bounds(array_info_t **args, int nargs) {
-	std::vector<std::pair<size_t,size_t>> bounds;
+std::vector<AccessBounds<size_t>> get_access_bounds(array_info_t **args, int nargs) {
+	std::vector<AccessBounds<size_t>> bounds;
 	array_info_t &_arg = *args[0];
 	bounds.reserve(_arg.ndim_presubstitution);
 
 	for(int i = 0; i < _arg.ndim_presubstitution; i++) {
-		bounds.emplace_back(std::make_pair(0,0));
+		bounds.emplace_back(AccessBounds<size_t>());
 		auto& bound = bounds[i];
-		bound.first = std::numeric_limits<size_t>::max();
-		bound.second = std::numeric_limits<size_t>::min();
+		bound.lo = std::numeric_limits<size_t>::max();
+		bound.hi = std::numeric_limits<size_t>::min();
 	}
 
 	for(int arg = 0; arg < nargs; arg++) {
@@ -275,8 +265,8 @@ std::vector<std::pair<size_t,size_t>> get_access_bounds(array_info_t **args, int
 		for(int dim = 0; dim < arr_arg.ndim_presubstitution; dim++) {
 			auto &slice = arr_arg.slices[dim];
 			auto &bound = bounds[dim];
-			bound.first = std::min(bound.first, static_cast<size_t>(slice.start));
-			bound.second = std::max(bound.second, static_cast<size_t>(slice.stop));
+			bound.lo = std::min(bound.lo, static_cast<size_t>(slice.start));
+			bound.hi = std::max(bound.hi, static_cast<size_t>(slice.stop));
 		}
 	}
 	return bounds;
@@ -344,7 +334,7 @@ std::vector<WrappedTensor> wrap_memory_in_tensors(
   auto TypeOfTensorData = Tensor::getTensorDataTypeTypeFromApproxType(
       (ApproxType)argsRHS->types[0]);
   dbgs() << "Tensor data has type " << TypeOfTensorData << "\n";
-  auto AccessBounds = get_access_bounds((array_info_t **)argsRHS_vpp, nargsRHS);
+  auto accessBounds = get_access_bounds((array_info_t **)argsRHS_vpp, nargsRHS);
 
   TensorType::Device OriginalDevice{TensorType::CPU};
 
@@ -354,7 +344,7 @@ std::vector<WrappedTensor> wrap_memory_in_tensors(
     for (int indirection = 0; indirection < thisArg->n_indirections;
          indirection++) {
       auto ThisTensInst =
-          memory_to_tensor(thisArg, indirection, AccessBounds, LHSShape.size());
+          memory_to_tensor(thisArg, indirection, accessBounds, LHSShape.size());
       ThisTens.add_tensor(ThisTensInst);
     }
 
@@ -556,6 +546,9 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 		  size_t base = 0;
 
 		  base = f_slice.start - t_slice.start;
+       if(f_slice.start + f_slice.step < f_slice.stop) {
+			f_slice.is_windowed = 1;
+	   }
 
 		  f_slice.start = t_slice.start;
 		  f_slice.stop = t_slice.stop;
@@ -569,7 +562,7 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
     	  	// std::cerr << "Step is not 1, this is not supported yet\n";
     	//   }
 
-    	  finfo.shape()[i] *= tinfo.shape()[i];
+
 	    }
 	}
 

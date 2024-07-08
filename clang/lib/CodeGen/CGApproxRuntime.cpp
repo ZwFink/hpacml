@@ -220,11 +220,12 @@ static void getSliceInfoTy(ASTContext &C, QualType &SliceInfoTy) {
     addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, false));
     // Step
     addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, false));
-
-    // the mode of this slice's AIVR, if any. See ApproxSliceExpr::AIVREChildKind
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
     // the program representation of this slice's AIVR, if any
     addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, true));
+    // the mode of this slice's AIVR, if any. See ApproxSliceExpr::AIVREChildKind
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    // whether this slice is overlapping
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
     sliceInfoRD->completeDefinition();
     SliceInfoTy = C.getRecordType(sliceInfoRD);
   }
@@ -1326,6 +1327,10 @@ void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice
 
   FieldAddr = CGF.EmitLValueForField(
       SliceStart, *std::next(SliceInfoRecord->field_begin(), 3));
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0), FieldAddr);
+
+  FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 4));
   int AIVREChildKind = static_cast<int>(SliceExpr->getAIVREChildKind());
     CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), AIVREChildKind), FieldAddr);
 
@@ -1343,7 +1348,7 @@ void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice
   }
 
   FieldAddr = CGF.EmitLValueForField(
-      SliceStart, *std::next(SliceInfoRecord->field_begin(), 4));
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 3));
     CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt64Ty(), SymbolVarRepr), FieldAddr);
   
 

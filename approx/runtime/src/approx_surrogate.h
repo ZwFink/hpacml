@@ -421,6 +421,7 @@ private:
 
       FPEvent.recordStart();
       at::Tensor output = module.forward({ipt_tens}).toTensor();
+      std::cout << output.sizes();
       FPEvent.recordEnd();
 
 
