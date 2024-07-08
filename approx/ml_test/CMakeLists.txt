@@ -19,8 +19,8 @@ enable_testing()
 set(HPAC_LIBRARY_LOCATION $ENV{HPAC_LIBRARY_LOCATION})
 
 # add link directory
-link_directories(/sw/spack/delta-2022-03/apps/gcc/11.2.0-gcc-8.4.1-fxgnsyr/lib64 
-    /sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/hdf5-1.14.3-7b3feas/lib
+link_directories(
+   ${HDF_LIBRARY_LOCATION}
     ${HPAC_LIBRARY_LOCATION}
     )
 
@@ -28,7 +28,9 @@ add_compile_options(-fapprox)
 
 add_executable(
   hpacml_test
-  test.cpp
+  tests/test_input1d_ovlp.cpp
+  tests/test_input1d.cpp
+  tests/test_input2d.cpp
 )
 target_link_libraries(
   hpacml_test
