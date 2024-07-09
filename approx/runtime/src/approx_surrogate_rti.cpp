@@ -148,7 +148,6 @@ std::vector<int64_t>
 get_strides(array_info_t &arg, std::vector<AccessBounds<size_t>> &bounds) {
 	auto num_dims = arg.ndim;
 	std::vector<int64_t> strides(num_dims, std::allocator<int64_t>());
- 
     strides[num_dims - 1] = arg.slices[num_dims - 1].step;
 
 	auto dim_size = arg.slices[num_dims - 1].stop - arg.slices[num_dims - 1].start;
@@ -170,9 +169,9 @@ get_strides(array_info_t &arg, std::vector<AccessBounds<size_t>> &bounds) {
 	  	} else {
 	  		cur_stride *= arg.shape()[i+1];
 	  	}
-		// if(is_windowed_slice(arg.shape()[i], arg.slices[i])) {
-			// cur_stride = 1;
-		// }
+		if(arg.slices[i].is_windowed) {
+			cur_stride = 1;
+		}
 
 	  	strides[i] = cur_stride;
 	  }
@@ -181,7 +180,7 @@ get_strides(array_info_t &arg, std::vector<AccessBounds<size_t>> &bounds) {
 		for(int i = 1; i < num_dims; i++) {
 			int64_t cur_stride = strides[i-1];
 			if(i < arg.ndim_presubstitution) {
-				cur_stride *= arg.slices[i].step; //(bounds[i].second - bounds[i].first);
+				cur_stride *= arg.slices[i].step;
 			} else {
 				cur_stride = arg.slices[i].step;
 			}
@@ -189,11 +188,6 @@ get_strides(array_info_t &arg, std::vector<AccessBounds<size_t>> &bounds) {
 			strides[i] = cur_stride;
 		}
 	} 
-
-	for(auto stride : strides) {
-		std::cout << stride << " ";
-	}
-	std::cout << "\n";
 
 	return strides;
 }
@@ -244,7 +238,7 @@ Tensor::tensor_t memory_to_tensor(array_info_t *memory_descr, int base, std::vec
 			memory_descr->slices[i].step = OriginalSteps[i];
 		}
 	}
-	// std::cout << blob << "\n";
+
 	return blob;
 }
 
@@ -269,6 +263,7 @@ std::vector<AccessBounds<size_t>> get_access_bounds(array_info_t **args, int nar
 			bound.hi = std::max(bound.hi, static_cast<size_t>(slice.stop));
 		}
 	}
+
 	return bounds;
 }
 
@@ -492,10 +487,12 @@ void __approx_runtime_convert_to_higher_order_shapes(int numArgs, void *ipt_memo
 					tensor_info.slices[slice_insert_pt].start = t_slice.start;
 					tensor_info.slices[slice_insert_pt].step = tensor_info.slices[i].step;
 					tensor_info.slices[slice_insert_pt].stop = inner;
+					tensor_info.slices[slice_insert_pt].is_windowed = 0;
 
 					tensor_info.slices[AIVRInsertPoint].step = 1;
 					tensor_info.slices[AIVRInsertPoint].start = t_slice.start;
 					tensor_info.slices[AIVRInsertPoint].stop = t_slice.stop;
+					tensor_info.slices[AIVRInsertPoint].is_windowed = t_slice.is_windowed;
 					++slice_insert_pt;
 				}
 				++AIVRInsertPoint;
@@ -546,9 +543,11 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 		  size_t base = 0;
 
 		  base = f_slice.start - t_slice.start;
-       if(f_slice.start + f_slice.step < f_slice.stop) {
+       	  if(f_slice.start + f_slice.step < f_slice.stop) {
 			f_slice.is_windowed = 1;
-	   }
+	      } else {
+			f_slice.is_windowed = 0;
+	      }
 
 		  f_slice.start = t_slice.start;
 		  f_slice.stop = t_slice.stop;
@@ -562,8 +561,10 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
     	  	// std::cerr << "Step is not 1, this is not supported yet\n";
     	//   }
 
+		finfo.shape()[i] *= tinfo.shape()[i];
 
 	    }
+
 	}
 
 	#ifdef DEBUG

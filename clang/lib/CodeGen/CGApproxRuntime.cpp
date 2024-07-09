@@ -215,17 +215,17 @@ static void getSliceInfoTy(ASTContext &C, QualType &SliceInfoTy) {
     RecordDecl *sliceInfoRD = C.buildImplicitRecord("approx_slice_info_t");
     sliceInfoRD->startDefinition();
     // Start Index
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, false));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, true));
     // Stop Index
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, false));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, true));
     // Step
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, false));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, true));
     // the program representation of this slice's AIVR, if any
     addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(64, true));
     // the mode of this slice's AIVR, if any. See ApproxSliceExpr::AIVREChildKind
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, true));
     // whether this slice is overlapping
-    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, false));
+    addFieldToRecordDecl(C, sliceInfoRD, C.getIntTypeForBitwidth(32, true));
     sliceInfoRD->completeDefinition();
     SliceInfoTy = C.getRecordType(sliceInfoRD);
   }
@@ -1326,13 +1326,13 @@ void CGApproxRuntime::CGApproxRuntimeEmitSlice(CodeGenFunction &CGF, Expr *Slice
     CGF.EmitStoreOfScalar(StepVal, FieldAddr);
 
   FieldAddr = CGF.EmitLValueForField(
-      SliceStart, *std::next(SliceInfoRecord->field_begin(), 3));
-    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0), FieldAddr);
-
-  FieldAddr = CGF.EmitLValueForField(
       SliceStart, *std::next(SliceInfoRecord->field_begin(), 4));
   int AIVREChildKind = static_cast<int>(SliceExpr->getAIVREChildKind());
     CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), AIVREChildKind), FieldAddr);
+
+  FieldAddr = CGF.EmitLValueForField(
+      SliceStart, *std::next(SliceInfoRecord->field_begin(), 5));
+    CGF.EmitStoreOfScalar(llvm::ConstantInt::get(CGF.Builder.getInt32Ty(), 0), FieldAddr);
 
   // this next part is a little non-standard. Our slices may contain symbolic variables, and how and whether 
   // it contains symbolic variables affects the shape representation of the slice. We need to store information
