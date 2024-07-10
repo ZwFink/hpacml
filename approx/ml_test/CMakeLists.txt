@@ -31,6 +31,8 @@ add_executable(
   tests/test_input1d_ovlp.cpp
   tests/test_input1d.cpp
   tests/test_input2d.cpp
+  tests/test_broadcast.cpp
+  tests/input_1d_input_more_than1.cpp
 )
 target_link_libraries(
   hpacml_test

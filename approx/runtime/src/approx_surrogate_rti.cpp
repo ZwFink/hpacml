@@ -152,6 +152,27 @@ get_strides(array_info_t &arg, std::vector<AccessBounds<size_t>> &bounds) {
 
 	auto dim_size = arg.slices[num_dims - 1].stop - arg.slices[num_dims - 1].start;
 
+ 	size_t shp_product = 1;
+ 	size_t accessrange_product = 1;
+	std::cout << "Shape is: ";
+	for(int i = 0; i < num_dims; i++) {
+		auto &shp = arg.shape()[i];
+		std::cout << shp << " ";
+		shp_product *= shp;
+
+		if(i < arg.ndim_presubstitution) {
+			accessrange_product *= bounds[i].hi - bounds[i].lo;
+		}
+	}
+	std::cout << "\n";
+
+ 	bool windowing = false;
+	if(shp_product > accessrange_product) {
+		windowing = true;
+	}
+
+	std::cout << "Total shape is " << shp_product << " and total access range is " << accessrange_product << "\n";
+
 	// if the last dimension has size 1, then we are accessing row major because
 	// C/C++ default to row major
 	bool row_major_case_1 = (dim_size == 1);
@@ -169,8 +190,9 @@ get_strides(array_info_t &arg, std::vector<AccessBounds<size_t>> &bounds) {
 	  	} else {
 	  		cur_stride *= arg.shape()[i+1];
 	  	}
-		if(arg.slices[i].is_windowed) {
-			cur_stride = 1;
+		if(windowing && arg.slices[i].is_windowed) {
+			// std::cout << "Windowed product confirmed\n\n\n";
+			// cur_stride = 1;
 		}
 
 	  	strides[i] = cur_stride;
@@ -189,6 +211,9 @@ get_strides(array_info_t &arg, std::vector<AccessBounds<size_t>> &bounds) {
 		}
 	} 
 
+	for(auto &stride : strides) {
+		std::cout << "Stride is " << stride << "\n";
+	}
 	return strides;
 }
 
@@ -543,8 +568,11 @@ void __approx_runtime_slice_conversion(int numArgs, void *tensor, void *slice) {
 		  size_t base = 0;
 
 		  base = f_slice.start - t_slice.start;
-       	  if(f_slice.start + f_slice.step < f_slice.stop) {
+       	  if(functor_info->shape()[i] > 1 && f_slice.start + f_slice.step < f_slice.stop) {
 			f_slice.is_windowed = 1;
+			std::cout << "Shape is " << functor_info->shape()[i] << "\n";
+			std::cout << "Start is " << f_slice.start << " and stop is " << f_slice.stop << " and step is " << f_slice.step << "\n";
+			std::cout << "Setting slice as windowed\n";
 	      } else {
 			f_slice.is_windowed = 0;
 	      }
