@@ -41,7 +41,7 @@ if [ ! -f $clang_bin ]; then
     -DLLVM_ENABLE_TERMINFO='Off' \
     -DLLVM_OPTIMIZED_TABLEGEN='On' \
     -DBUILD_SHARED_LIBS='On' \
-    -DLLVM_ENABLE_ASSERTIONS='On' \
+    -DLLVM_ENABLE_ASSERTIONS='Off' \
     ../llvm
 
     ninja -j $threads

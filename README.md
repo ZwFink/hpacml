@@ -28,12 +28,12 @@ The installation process can take a considerable amount of time.
 For quick exploration, we recommend 
 
 ## Contributing
-To contribute to this repo please send a [pull
-request](https://help.github.com/articles/using-pull-requests/) on the
-develop branch of this repo.
+To contribute to this repo please open a [pull
+request](https://help.github.com/articles/using-pull-requests/).
 
 ## Authors
-This code was created by Zane Fink (zanef2@illinois.edu), Konstantinos Parasyris (parasyris1@llnl.gov), and Giorgis Georgakoudis
+This code was created by Zane Fink (zanef2@illinois.edu), Konstantinos Parasyris (parasyris1@llnl.gov), 
+Praneet Rathi (prathi3@illinois.edu), and Giorgis Georgakoudis
 (georgakoudis1@llnl.gov), assisted with design input from Harshitha Menon (gopalakrishn1@llnl.gov).
 
 ## License
